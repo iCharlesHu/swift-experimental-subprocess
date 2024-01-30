@@ -140,7 +140,7 @@ extension Subprocess {
         }
 
         @frozen
-        public struct Iterator: AsyncIteratorProtocol, Sendable {
+        public struct Iterator: AsyncIteratorProtocol {
 
             @inline(__always) static var bufferSize: Int {
                 16384

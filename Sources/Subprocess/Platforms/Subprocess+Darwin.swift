@@ -24,7 +24,7 @@ extension Subprocess.Configuration {
         withInput input: Subprocess.ExecutionInput,
         output: Subprocess.ExecutionOutput,
         error: Subprocess.ExecutionOutput
-    ) throws -> Subprocess.Execution {
+    ) throws -> Subprocess {
         // First configure environment so we can lookup PATH
         // This method follows the standard "create" rule: `env` needs to be
         // manually deallocated
@@ -221,7 +221,7 @@ extension Subprocess.Configuration {
             try cleanup()
             throw POSIXError(.init(rawValue: spawnError) ?? .ENODEV)
         }
-        return Subprocess.Execution(
+        return Subprocess(
             processIdentifier: .init(value: pid),
             executionInput: input,
             executionOutput: output,
@@ -229,7 +229,7 @@ extension Subprocess.Configuration {
         )
     }
 
-    private static func resolveExecutablePath(for config: Subprocess.ExecutableConfiguration, withPathValue pathValue: String?) -> String? {
+    private static func resolveExecutablePath(for config: Subprocess.Executable, withPathValue pathValue: String?) -> String? {
 
         switch config.storage {
         case .executable(let executableName):

@@ -29,7 +29,7 @@ extension Subprocess {
         }
 
         // Configurable properties
-        public var executable: ExecutableConfiguration
+        public var executable: Executable
         public var arguments: Arguments
         public var environment: Environment
         public var workingDirectory: FilePath
@@ -40,7 +40,7 @@ extension Subprocess {
 #endif
 
         public init(
-            executable: ExecutableConfiguration,
+            executable: Executable,
             arguments: Arguments = [],
             environment: Environment = .inheritFromLaunchingProcess,
             workingDirectory: FilePath? = nil,
@@ -56,28 +56,37 @@ extension Subprocess {
         public func run<R: Sendable>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
-            _ body: @Sendable @escaping (borrowing Execution, StandardInputWriter) async throws -> R
+            _ body: @Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R
         ) async throws -> Result<R> {
             let (readFd, writeFd) = try FileDescriptor.pipe()
             let executionInput: ExecutionInput = .customWrite(readFd, writeFd)
             let executionOutput: ExecutionOutput = try output.createExecutionOutput()
             let executionError: ExecutionOutput = try error.createExecutionOutput()
-            let execution: Execution = try self.spawn(
+            let process: Subprocess = try self.spawn(
                 withInput: executionInput,
                 output: executionOutput,
                 error: executionError)
             return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
+                @Sendable func cleanup() throws {
+                    // Clean up
+                    try process.executionInput.closeAll()
+                    try process.executionOutput.closeAll()
+                    try process.executionError.closeAll()
+                }
+
                 group.addTask {
-                    let status = await execution.monitorTask.value
+                    let status = await process.monitorTask.value
                     return .monitorChildProcess(status)
                 }
                 group.addTask {
-                    let result = try await body(execution, .init(fileDescriptor: writeFd))
-                    // Clean up
-                    try execution.executionInput.closeAll()
-                    try execution.executionOutput.closeAll()
-                    try execution.executionError.closeAll()
-                    return .workBody(result)
+                    do {
+                        let result = try await body(process, .init(fileDescriptor: writeFd))
+                        try cleanup()
+                        return .workBody(result)
+                    } catch {
+                        try cleanup()
+                        throw error
+                    }
                 }
 
                 var result: R!
@@ -99,27 +108,34 @@ extension Subprocess {
             input: InputMethod,
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
-            _ body: (@Sendable @escaping (borrowing Execution) async throws -> R)
+            _ body: (@Sendable @escaping (Subprocess) async throws -> R)
         ) async throws -> Result<R> {
             let executionInput = try input.createExecutionInput()
             let executionOutput = try output.createExecutionOutput()
             let executionError = try error.createExecutionOutput()
-            let execution = try self.spawn(
+            let process = try self.spawn(
                 withInput: executionInput,
                 output: executionOutput,
                 error: executionError)
             return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
+                @Sendable func cleanup() throws {
+                    try process.executionInput.closeAll()
+                    try process.executionOutput.closeAll()
+                    try process.executionError.closeAll()
+                }
                 group.addTask {
-                    let status = await execution.monitorTask.value
+                    let status = await process.monitorTask.value
                     return .monitorChildProcess(status)
                 }
                 group.addTask {
-                    let result = try await body(execution)
-                    // Clean up
-                    try execution.executionInput.closeAll()
-                    try execution.executionOutput.closeAll()
-                    try execution.executionError.closeAll()
-                    return .workBody(result)
+                    do {
+                        let result = try await body(process)
+                        try cleanup()
+                        return .workBody(result)
+                    } catch {
+                        try cleanup()
+                        throw error
+                    }
                 }
 
                 var result: R!
@@ -138,9 +154,9 @@ extension Subprocess {
     }
 }
 
-// MARK: - ExecutableConfiguration
+// MARK: - Executable
 extension Subprocess {
-    public struct ExecutableConfiguration: Sendable, CustomStringConvertible {
+    public struct Executable: Sendable, CustomStringConvertible {
         internal enum Configuration {
             case executable(String)
             case path(FilePath)
@@ -353,7 +369,7 @@ extension FilePath {
     }
 }
 
-// MARK: - Stubs
+// MARK: - Stubs for the one from Foundation
 public enum QualityOfService: Int, Sendable {
     case userInteractive    = 0x21
     case userInitiated      = 0x19
