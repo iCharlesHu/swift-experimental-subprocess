@@ -22,15 +22,25 @@ public struct Subprocess {
         input: InputMethod = .noInput,
         output: CollectedOutputMethod = .collected,
         error: CollectedOutputMethod = .discarded
-    ) async throws -> ExecutionResult {
-        return try await self.run(
+    ) async throws -> CapturedResult {
+        let result = try await self.run(
             executing: executable,
             input: input,
             output: .init(method: output.method),
             error: .init(method: error.method)
         ) { execution in
-            return try await execution.createExecutionResult()
+            return (
+                processIdentifier: execution.processIdentifier,
+                standardOutput: try execution.captureStandardOutput(),
+                standardError: try execution.captureStandardError()
+            )
         }
+        return CapturedResult(
+            processIdentifier: result.value.processIdentifier,
+            terminationStatus: result.terminationStatus,
+            standardOutput: result.value.standardOutput,
+            standardError: result.value.standardError
+        )
     }
 
     public static func run(
@@ -42,16 +52,26 @@ public struct Subprocess {
         input: some Sequence<UInt8>,
         output: CollectedOutputMethod = .collected,
         error: CollectedOutputMethod = .discarded
-    ) async throws -> ExecutionResult {
-        return try await self.run(
+    ) async throws -> CapturedResult {
+        let result = try await self.run(
             executing: executable,
             output: .init(method: output.method),
             error: .init(method: output.method)
         ) { execution, writer in
             try await writer.write(input)
-            try await writer.finishWriting()
-            return try await execution.createExecutionResult()
+            try await writer.finish()
+            return (
+                processIdentifier: execution.processIdentifier,
+                standardOutput: try execution.captureStandardOutput(),
+                standardError: try execution.captureStandardError()
+            )
         }
+        return CapturedResult(
+            processIdentifier: result.value.processIdentifier,
+            terminationStatus: result.terminationStatus,
+            standardOutput: result.value.standardOutput,
+            standardError: result.value.standardError
+        )
     }
 
     public static func run<S: AsyncSequence>(
@@ -63,16 +83,26 @@ public struct Subprocess {
         input: S,
         output: CollectedOutputMethod = .collected,
         error: CollectedOutputMethod = .discarded
-    ) async throws -> ExecutionResult where S.Element == UInt8 {
-        return try await self.run(
+    ) async throws -> CapturedResult where S.Element == UInt8 {
+        let result =  try await self.run(
             executing: executable,
             output: .init(method: output.method),
             error: .init(method: output.method)
         ) { execution, writer in
             try await writer.write(input)
-            try await writer.finishWriting()
-            return try await execution.createExecutionResult()
+            try await writer.finish()
+            return (
+                processIdentifier: execution.processIdentifier,
+                standardOutput: try execution.captureStandardOutput(),
+                standardError: try execution.captureStandardError()
+            )
         }
+        return CapturedResult(
+            processIdentifier: result.value.processIdentifier,
+            terminationStatus: result.terminationStatus,
+            standardOutput: result.value.standardOutput,
+            standardError: result.value.standardError
+        )
     }
 }
 
@@ -88,7 +118,7 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirected,
         error: RedirectedOutputMethod = .discarded,
         _ body: (@Sendable @escaping (borrowing Execution) async throws -> R)
-    ) async throws -> R {
+    ) async throws -> Result<R> {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -109,7 +139,7 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirected,
         error: RedirectedOutputMethod = .discarded,
         _ body: (@Sendable @escaping (borrowing Execution) async throws -> R)
-    ) async throws -> R {
+    ) async throws -> Result<R> {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -119,7 +149,7 @@ extension Subprocess {
         )
         .run(output: output, error: error) { execution, writer in
             try await writer.write(input)
-            try await writer.finishWriting()
+            try await writer.finish()
             return try await body(execution)
         }
     }
@@ -134,7 +164,7 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirected,
         error: RedirectedOutputMethod = .discarded,
         _ body: (@Sendable @escaping (borrowing Execution) async throws -> R)
-    ) async throws -> R where S.Element == UInt8 {
+    ) async throws -> Result<R> where S.Element == UInt8 {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -144,7 +174,7 @@ extension Subprocess {
         )
         .run(output: output, error: error) { execution, writer in
             try await writer.write(input)
-            try await writer.finishWriting()
+            try await writer.finish()
             return try await body(execution)
         }
     }
@@ -158,7 +188,7 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirected,
         error: RedirectedOutputMethod = .discarded,
         _ body: (@Sendable @escaping (borrowing Execution, StandardInputWriter) async throws -> R)
-    ) async throws -> R {
+    ) async throws -> Result<R> {
         return try await Configuration(
             executable: executable,
             arguments: arguments,

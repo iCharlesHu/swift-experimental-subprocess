@@ -33,12 +33,6 @@ extension Subprocess {
             }
         }
 
-        public var terminationStatus: TerminationStatus {
-            get async {
-                return await self.monitorTask.value
-            }
-        }
-
         public var standardOutput: AsyncBytes? {
             switch self.executionOutput {
             case .discarded(_), .fileDescriptor(_):
@@ -59,36 +53,28 @@ extension Subprocess {
             }
         }
 
-        internal func createExecutionResult() async throws -> ExecutionResult {
-            let terminationStatus = await self.terminationStatus
-            var standardOutput: [UInt8]? = nil
-            var standardError: [UInt8]? = nil
-
-            if case .collected(let limit, let readFd, _) = self.executionOutput {
-                standardOutput = try readFd.read(upToLength: limit)
+        internal func captureStandardOutput() throws -> [UInt8]? {
+            guard case .collected(let limit, let readFd, _) = self.executionOutput else {
+                return nil
             }
+            return try readFd.read(upToLength: limit)
+        }
 
-            if case .collected(let limit, let readFd, _) = self.executionError {
-                standardError = try readFd.read(upToLength: limit)
+        internal func captureStandardError() throws -> [UInt8]? {
+            guard case .collected(let limit, let readFd, _) = self.executionError else {
+                return nil
             }
-
-            return ExecutionResult(
-                processIdentifier: self.processIdentifier,
-                terminationStatus: terminationStatus,
-                standardOutput: standardOutput,
-                standardError: standardError
-            )
+            return try readFd.read(upToLength: limit)
         }
     }
 }
 
 // MARK: - StandardInputWriter
 extension Subprocess {
-    public actor StandardInputWriter {
-
+    internal actor StandardInputWriterActor {
         private let fileDescriptor: FileDescriptor
 
-        init(fileDescriptor: FileDescriptor) {
+        internal init(fileDescriptor: FileDescriptor) {
             self.fileDescriptor = fileDescriptor
         }
 
@@ -98,31 +84,65 @@ extension Subprocess {
         }
 
         @discardableResult
-        public func write<S>(_ sequence: S) async throws -> Int where S : Sequence, S.Element == CChar {
-            return try self.fileDescriptor.writeAll(sequence.map { UInt8($0) })
-        }
-
-        @discardableResult
-        public func write<S: AsyncSequence>(_ asyncSequence: S) async throws -> Int where S.Element == CChar {
-            let sequence = try await Array(asyncSequence).map { UInt8($0) }
-            return try self.fileDescriptor.writeAll(sequence)
-        }
-
-        @discardableResult
         public func write<S: AsyncSequence>(_ asyncSequence: S) async throws -> Int where S.Element == UInt8 {
             let sequence = try await Array(asyncSequence)
             return try self.fileDescriptor.writeAll(sequence)
         }
 
-        public func finishWriting() async throws {
+        public func finish() async throws {
             try self.fileDescriptor.close()
+        }
+    }
+
+    public struct StandardInputWriter {
+
+        private let actor: StandardInputWriterActor
+
+        init(fileDescriptor: FileDescriptor) {
+            self.actor = StandardInputWriterActor(fileDescriptor: fileDescriptor)
+        }
+
+        @discardableResult
+        public func write<S>(_ sequence: S) async throws -> Int where S : Sequence, S.Element == UInt8 {
+            return try await self.actor.write(sequence)
+        }
+
+        @discardableResult
+        public func write<S>(_ sequence: S) async throws -> Int where S : Sequence, S.Element == CChar {
+            return try await self.actor.write(sequence.map { UInt8($0) })
+        }
+
+        @discardableResult
+        public func write<S: AsyncSequence>(_ asyncSequence: S) async throws -> Int where S.Element == CChar {
+            let sequence = try await Array(asyncSequence).map { UInt8($0) }
+            return try await self.actor.write(sequence)
+        }
+
+        @discardableResult
+        public func write<S: AsyncSequence>(_ asyncSequence: S) async throws -> Int where S.Element == UInt8 {
+            let sequence = try await Array(asyncSequence)
+            return try await self.actor.write(sequence)
+        }
+
+        public func finish() async throws {
+            try await self.actor.finish()
         }
     }
 }
 
-// MARK: - ExecutionResult
+// MARK: - Result
 extension Subprocess {
-    public struct ExecutionResult {
+    public struct Result<T> {
+        public let terminationStatus: TerminationStatus
+        public let value: T
+
+        internal init(terminationStatus: TerminationStatus, value: T) {
+            self.terminationStatus = terminationStatus
+            self.value = value
+        }
+    }
+
+    public struct CapturedResult {
         public let processIdentifier: ProcessIdentifier
         public let terminationStatus: TerminationStatus
         public let standardOutput: [UInt8]?

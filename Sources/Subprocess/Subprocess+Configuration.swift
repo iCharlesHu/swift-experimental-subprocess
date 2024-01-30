@@ -57,7 +57,7 @@ extension Subprocess {
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
             _ body: @Sendable @escaping (borrowing Execution, StandardInputWriter) async throws -> R
-        ) async throws -> R {
+        ) async throws -> Result<R> {
             let (readFd, writeFd) = try FileDescriptor.pipe()
             let executionInput: ExecutionInput = .customWrite(readFd, writeFd)
             let executionOutput: ExecutionOutput = try output.createExecutionOutput()
@@ -81,16 +81,17 @@ extension Subprocess {
                 }
 
                 var result: R!
+                var terminationStatus: TerminationStatus!
                 while let state = try await group.next() {
                     switch state {
-                    case .monitorChildProcess(_):
+                    case .monitorChildProcess(let status):
                         // We don't really care about termination status here
-                        break
+                        terminationStatus = status
                     case .workBody(let workResult):
                         result = workResult
                     }
                 }
-                return result
+                return Result(terminationStatus: terminationStatus, value: result)
             }
         }
 
@@ -99,7 +100,7 @@ extension Subprocess {
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
             _ body: (@Sendable @escaping (borrowing Execution) async throws -> R)
-        ) async throws -> R {
+        ) async throws -> Result<R> {
             let executionInput = try input.createExecutionInput()
             let executionOutput = try output.createExecutionOutput()
             let executionError = try error.createExecutionOutput()
@@ -122,16 +123,16 @@ extension Subprocess {
                 }
 
                 var result: R!
+                var terminationStatus: TerminationStatus!
                 while let state = try await group.next() {
                     switch state {
-                    case .monitorChildProcess(_):
-                        // Here we don't care about termination status
-                        break
+                    case .monitorChildProcess(let status):
+                        terminationStatus = status
                     case .workBody(let workResult):
                         result = workResult
                     }
                 }
-                return result
+                return Result(terminationStatus: terminationStatus, value: result)
             }
         }
     }

@@ -33,6 +33,6 @@ final class SubprocessTests: XCTestCase {
             let decoder = FoundationEssentials.JSONDecoder()
             return try decoder.decode(Address.self, from: Data(output))
         }
-        print("Result: \(result)")
+        print("Result: \(result.value)")
     }
 }
