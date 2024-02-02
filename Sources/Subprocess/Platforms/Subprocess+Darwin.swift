@@ -9,6 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(Darwin)
+
 import Darwin
 import _Shims
 import SystemPackage
@@ -25,7 +27,7 @@ extension Subprocess.Configuration {
         output: Subprocess.ExecutionOutput,
         error: Subprocess.ExecutionOutput
     ) throws -> Subprocess {
-        // First configure environment so we can lookup PATH
+        // Configure environment so we can lookup PATH
         // This method follows the standard "create" rule: `env` needs to be
         // manually deallocated
         func createEnvironmentAndLookUpPath() -> (env: [UnsafeMutablePointer<CChar>?], path: String?) {
@@ -46,7 +48,7 @@ extension Subprocess.Configuration {
             var env: [UnsafeMutablePointer<CChar>?] = []
             var pathValue: String?
             switch self.environment.config {
-            case .inheritFromLaunchingProcess(let updates):
+            case .inherit(let updates):
                 var current = ProcessInfo.processInfo.environment
                 pathValue = current[pathEnvironmentVariableName]
                 for (keyContainer, valueContainer) in updates {
@@ -162,15 +164,16 @@ extension Subprocess.Configuration {
         sigfillset(&allSignals)
         posix_spawnattr_setsigmask(&spawnAttributes, &noSignals)
         posix_spawnattr_setsigdefault(&spawnAttributes, &allSignals)
+        // Configure spawnattr
         let flags: Int32 = POSIX_SPAWN_CLOEXEC_DEFAULT |
             POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF
         var spawnAttributeError = posix_spawnattr_setflags(&spawnAttributes, Int16(flags))
         // Set QualityOfService
         // spanattr_qos seems to only accept `QOS_CLASS_UTILITY` or `QOS_CLASS_BACKGROUND`
         // and returns an error of `EINVAL` if anything else is provided
-        if spawnAttributeError == 0 && self.qualityOfService == .utility{
+        if spawnAttributeError == 0 && self.platformOptions.qualityOfService == .utility{
             spawnAttributeError = posix_spawnattr_set_qos_class_np(&spawnAttributes, QOS_CLASS_UTILITY)
-        } else if spawnAttributeError == 0 && self.qualityOfService == .background {
+        } else if spawnAttributeError == 0 && self.platformOptions.qualityOfService == .background {
             spawnAttributeError = posix_spawnattr_set_qos_class_np(&spawnAttributes, QOS_CLASS_BACKGROUND)
         }
 
@@ -205,10 +208,10 @@ extension Subprocess.Configuration {
             }
         }
         // Run additional config
-        if let spawnConfig = self.additionalSpawnAttributeConfiguration {
+        if let spawnConfig = self.platformOptions.additionalSpawnAttributeConfiguration {
             try spawnConfig(&spawnAttributes)
         }
-        if let fileAttributeConfig = self.additionalFileAttributeConfiguration {
+        if let fileAttributeConfig = self.platformOptions.additionalFileAttributeConfiguration {
             try fileAttributeConfig(&fileActions)
         }
         // Spawn
@@ -301,3 +304,63 @@ internal func monitorProcessTermination(
 extension String {
     static let debugDescriptionErrorKey = "NSDebugDescription"
 }
+
+// MARK: - Platform Specific Options
+extension Subprocess {
+    /// The collection of platform-specific configurations
+    public struct PlatformOptions: Sendable {
+        public var qualityOfService: QualityOfService = .default
+        // Set user ID for the subprocess
+        public var userID: Int? = nil
+        // Set group ID for the subprocess
+        public var groupID: Int? = nil
+        // Set list of supplementary group IDs for the subprocess
+        public var supplementaryGroups: [Int]? = nil
+        // Creates a session and sets the process group ID
+        // i.e. Detach from the terminal.
+        public var createSession: Bool = false
+        // Create a new process group
+        public var createProcessGroup: Bool = false
+        public var launchRequirementData: Data? = nil
+        public var additionalSpawnAttributeConfiguration: (@Sendable (inout posix_spawnattr_t?) throws -> Void)?
+        public var additionalFileAttributeConfiguration: (@Sendable (inout posix_spawn_file_actions_t?) throws -> Void)?
+
+        public init(
+            qualityOfService: QualityOfService,
+            userID: Int? = nil,
+            groupID: Int? = nil,
+            supplementaryGroups: [Int]? = nil,
+            createSession: Bool,
+            createProcessGroup: Bool,
+            launchRequirementData: Data? = nil,
+            additionalSpawnAttributeConfiguration: (@Sendable (inout posix_spawnattr_t?) throws -> Void)? = nil,
+            additionalFileAttributeConfiguration: (@Sendable (inout posix_spawn_file_actions_t?) throws -> Void)? = nil
+        ) {
+            self.qualityOfService = qualityOfService
+            self.userID = userID
+            self.groupID = groupID
+            self.supplementaryGroups = supplementaryGroups
+            self.createSession = createSession
+            self.createProcessGroup = createProcessGroup
+            self.launchRequirementData = launchRequirementData
+            self.additionalSpawnAttributeConfiguration = additionalSpawnAttributeConfiguration
+            self.additionalFileAttributeConfiguration = additionalFileAttributeConfiguration
+        }
+
+        public static var `default`: Self {
+            return .init(
+                qualityOfService: .default,
+                userID: nil,
+                groupID: nil,
+                supplementaryGroups: nil,
+                createSession: false,
+                createProcessGroup: false,
+                launchRequirementData: nil,
+                additionalSpawnAttributeConfiguration: nil,
+                additionalFileAttributeConfiguration: nil
+            )
+        }
+    }
+}
+
+#endif // canImport(Darwin)

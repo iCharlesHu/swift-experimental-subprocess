@@ -13,8 +13,8 @@ import SystemPackage
 
 // MARK: - Input
 extension Subprocess {
-    public struct InputMethod {
-        internal enum Storage {
+    public struct InputMethod: Sendable, Hashable {
+        internal enum Storage: Sendable, Hashable {
             case noInput
             case fileDescriptor(FileDescriptor)
         }
@@ -39,15 +39,15 @@ extension Subprocess {
             return .init(method: .noInput)
         }
 
-        public static func readingFrom(_ fd: FileDescriptor) -> Self {
+        public static func readFrom(_ fd: FileDescriptor) -> Self {
             return .init(method: .fileDescriptor(fd))
         }
     }
 }
 
 extension Subprocess {
-    public struct CollectedOutputMethod {
-        internal enum Storage {
+    public struct CollectedOutputMethod: Sendable, Hashable {
+        internal enum Storage: Sendable, Hashable {
             case discarded
             case fileDescriptor(FileDescriptor)
             case collected(Int)
@@ -59,19 +59,19 @@ extension Subprocess {
             self.method = method
         }
 
-        public static var discarded: Self {
+        public static var discard: Self {
             return .init(method: .discarded)
         }
 
-        public static var collected: Self {
+        public static var collect: Self {
             return .init(method: .collected(128 * 1024))
         }
 
-        public static func writingTo(_ fd: FileDescriptor) -> Self {
+        public static func writeTo(_ fd: FileDescriptor) -> Self {
             return .init(method: .fileDescriptor(fd))
         }
 
-        public static func collected(withCollectionByteLimit limit: Int) -> Self {
+        public static func collect(limit: Int) -> Self {
             return .init(method: .collected(limit))
         }
 
@@ -90,7 +90,7 @@ extension Subprocess {
         }
     }
 
-    public struct RedirectedOutputMethod {
+    public struct RedirectedOutputMethod: Sendable, Hashable {
         typealias Storage = CollectedOutputMethod.Storage
 
         internal let method: Storage
@@ -99,15 +99,15 @@ extension Subprocess {
             self.method = method
         }
 
-        public static var discarded: Self {
+        public static var discard: Self {
             return .init(method: .discarded)
         }
 
-        public static var redirected: Self {
+        public static var redirect: Self {
             return .init(method: .collected(128 * 1024))
         }
 
-        public static func writingTo(_ fd: FileDescriptor) -> Self {
+        public static func writeTo(_ fd: FileDescriptor) -> Self {
             return .init(method: .fileDescriptor(fd))
         }
 

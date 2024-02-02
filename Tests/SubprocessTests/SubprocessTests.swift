@@ -15,8 +15,8 @@ import FoundationEssentials
 
 final class SubprocessTests: XCTestCase {
     func testSimple() async throws {
-        let ls = try await Subprocess.run(executing: .named("ls"))
-        let result = String(decoding: ls.standardOutput!, as: UTF8.self)
+        let ls = try await Subprocess.run(executing: .named("ls"), output: .collect, error: .discard)
+        let result = String(data: ls.standardOutput!, encoding: .utf8)!
         print("Result: \(result)")
     }
 

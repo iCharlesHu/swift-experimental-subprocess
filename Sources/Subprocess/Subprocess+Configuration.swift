@@ -33,27 +33,23 @@ extension Subprocess {
         public var arguments: Arguments
         public var environment: Environment
         public var workingDirectory: FilePath
-        public var qualityOfService: QualityOfService
-#if canImport(Darwin)
-        public var additionalSpawnAttributeConfiguration: (@Sendable (inout posix_spawnattr_t?) throws -> Void)?
-        public var additionalFileAttributeConfiguration: (@Sendable (inout posix_spawn_file_actions_t?) throws -> Void)?
-#endif
+        public var platformOptions: PlatformOptions
 
         public init(
             executable: Executable,
             arguments: Arguments = [],
-            environment: Environment = .inheritFromLaunchingProcess,
+            environment: Environment = .inherit,
             workingDirectory: FilePath? = nil,
-            qualityOfService: QualityOfService = .default
+            platformOptions: PlatformOptions = .default
         ) {
             self.executable = executable
             self.arguments = arguments
             self.environment = environment
             self.workingDirectory = workingDirectory ?? .currentWorkingDirectory
-            self.qualityOfService = qualityOfService
+            self.platformOptions = platformOptions
         }
 
-        public func run<R: Sendable>(
+        public func run<R>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
             _ body: @Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R
@@ -75,7 +71,8 @@ extension Subprocess {
                 }
 
                 group.addTask {
-                    let status = await process.monitorTask.value
+                    let status = monitorProcessTermination(
+                        forProcessWithIdentifier: process.processIdentifier)
                     return .monitorChildProcess(status)
                 }
                 group.addTask {
@@ -124,7 +121,8 @@ extension Subprocess {
                     try process.executionError.closeAll()
                 }
                 group.addTask {
-                    let status = await process.monitorTask.value
+                    let status = monitorProcessTermination(
+                        forProcessWithIdentifier: process.processIdentifier)
                     return .monitorChildProcess(status)
                 }
                 group.addTask {
@@ -156,8 +154,8 @@ extension Subprocess {
 
 // MARK: - Executable
 extension Subprocess {
-    public struct Executable: Sendable, CustomStringConvertible {
-        internal enum Configuration {
+    public struct Executable: Sendable, CustomStringConvertible, Hashable {
+        internal enum Configuration: Sendable, Hashable {
             case executable(String)
             case path(FilePath)
         }
@@ -205,10 +203,10 @@ extension Subprocess {
             self.executablePathOverride = .string(executablePathOverride)
         }
 
-        public init<S: Sequence>(_ array: [S], executablePathOverride: S? = nil) where S.Element == CChar {
-            self.storage = array.map { .rawBytes(Array($0)) }
+        public init(_ array: [Data], executablePathOverride: Data? = nil) {
+            self.storage = array.map { .rawBytes($0.toArray()) }
             if let override = executablePathOverride {
-                self.executablePathOverride = .rawBytes(Array(override))
+                self.executablePathOverride = .rawBytes(override.toArray())
             } else {
                 self.executablePathOverride = nil
             }
@@ -220,7 +218,7 @@ extension Subprocess {
 extension Subprocess {
     public struct Environment: Sendable {
         internal enum Configuration {
-            case inheritFromLaunchingProcess([StringOrRawBytes : StringOrRawBytes])
+            case inherit([StringOrRawBytes : StringOrRawBytes])
             case custom([StringOrRawBytes : StringOrRawBytes])
         }
 
@@ -230,23 +228,23 @@ extension Subprocess {
             self.config = config
         }
 
-        public static var inheritFromLaunchingProcess: Self {
-            return .init(config: .inheritFromLaunchingProcess([:]))
+        public static var inherit: Self {
+            return .init(config: .inherit([:]))
         }
 
         public func updating(_ newValue: [String : String]) -> Self {
-            return .init(config: .inheritFromLaunchingProcess(newValue.wrapToStringOrRawBytes()))
+            return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
         }
 
-        public func updating<S: Sequence>(_ newValue: [S : S]) -> Self where S.Element == CChar {
-            return .init(config: .inheritFromLaunchingProcess(newValue.wrapToStringOrRawBytes()))
+        public func updating(_ newValue: [Data : Data]) -> Self {
+            return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
         }
 
         public static func custom(_ newValue: [String : String]) -> Self {
             return .init(config: .custom(newValue.wrapToStringOrRawBytes()))
         }
 
-        public static func custom<S: Sequence>(_ newValue: [S : S]) -> Self where S.Element == CChar {
+        public static func custom(_ newValue: [Data : Data]) -> Self {
             return .init(config: .custom(newValue.wrapToStringOrRawBytes()))
         }
     }
@@ -265,22 +263,30 @@ fileprivate extension Dictionary where Key == String, Value == String {
     }
 }
 
-fileprivate extension Dictionary where Key : Sequence<CChar>, Value : Sequence<CChar> {
+fileprivate extension Dictionary where Key == Data, Value == Data {
     func wrapToStringOrRawBytes() -> [Subprocess.StringOrRawBytes : Subprocess.StringOrRawBytes] {
         var result = Dictionary<
             Subprocess.StringOrRawBytes,
             Subprocess.StringOrRawBytes
         >(minimumCapacity: self.count)
         for (key, value) in self {
-            result[.rawBytes(Array(key))] = .rawBytes(Array(value))
+            result[.rawBytes(key.toArray())] = .rawBytes(value.toArray())
         }
         return result
     }
 }
 
+fileprivate extension Data {
+    func toArray<T>() -> [T] {
+        return self.withUnsafeBytes { ptr in
+            return Array(ptr.bindMemory(to: T.self))
+        }
+    }
+}
+
 // MARK: - ProcessIdentifier
 extension Subprocess {
-    public struct ProcessIdentifier: Sendable {
+    public struct ProcessIdentifier: Sendable, Hashable {
         let value: pid_t
 
         public init(value: pid_t) {
@@ -291,7 +297,7 @@ extension Subprocess {
 
 // MARK: - TerminationStatus
 extension Subprocess {
-    public enum TerminationStatus: Sendable {
+    public enum TerminationStatus: Sendable, Hashable {
         #if canImport(WinSDK)
         public typealias Code = DWORD
         #else
@@ -314,7 +320,7 @@ extension Subprocess {
             }
         }
 
-        public var wasUnhandledException: Bool {
+        public var isUnhandledException: Bool {
             switch self {
             case .exit(_):
                 return false

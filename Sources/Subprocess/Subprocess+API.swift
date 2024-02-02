@@ -16,15 +16,19 @@ extension Subprocess {
     public static func run(
         executing executable: Executable,
         arguments: Arguments = [],
-        environment: Environment = .inheritFromLaunchingProcess,
+        environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
-        qualityOfService: QualityOfService = .default,
+        platformOptions: PlatformOptions = .default,
         input: InputMethod = .noInput,
-        output: CollectedOutputMethod = .collected,
-        error: CollectedOutputMethod = .discarded
-    ) async throws -> CapturedResult {
+        output: CollectedOutputMethod = .collect,
+        error: CollectedOutputMethod = .collect
+    ) async throws -> CollectedResult {
         let result = try await self.run(
             executing: executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions,
             input: input,
             output: .init(method: output.method),
             error: .init(method: error.method)
@@ -35,7 +39,7 @@ extension Subprocess {
                 standardError: try execution.captureStandardError()
             )
         }
-        return CapturedResult(
+        return CollectedResult(
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
             standardOutput: result.value.standardOutput,
@@ -46,15 +50,19 @@ extension Subprocess {
     public static func run(
         executing executable: Executable,
         arguments: Arguments = [],
-        environment: Environment = .inheritFromLaunchingProcess,
+        environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
-        qualityOfService: QualityOfService = .default,
+        platformOptions: PlatformOptions = .default,
         input: some Sequence<UInt8>,
-        output: CollectedOutputMethod = .collected,
-        error: CollectedOutputMethod = .discarded
-    ) async throws -> CapturedResult {
+        output: CollectedOutputMethod = .collect,
+        error: CollectedOutputMethod = .collect
+    ) async throws -> CollectedResult {
         let result = try await self.run(
             executing: executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions,
             output: .init(method: output.method),
             error: .init(method: output.method)
         ) { execution, writer in
@@ -66,7 +74,7 @@ extension Subprocess {
                 standardError: try execution.captureStandardError()
             )
         }
-        return CapturedResult(
+        return CollectedResult(
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
             standardOutput: result.value.standardOutput,
@@ -77,15 +85,19 @@ extension Subprocess {
     public static func run<S: AsyncSequence>(
         executing executable: Executable,
         arguments: Arguments = [],
-        environment: Environment = .inheritFromLaunchingProcess,
+        environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
-        qualityOfService: QualityOfService = .default,
+        platformOptions: PlatformOptions = .default,
         input: S,
-        output: CollectedOutputMethod = .collected,
-        error: CollectedOutputMethod = .discarded
-    ) async throws -> CapturedResult where S.Element == UInt8 {
+        output: CollectedOutputMethod = .collect,
+        error: CollectedOutputMethod = .collect
+    ) async throws -> CollectedResult where S.Element == UInt8 {
         let result =  try await self.run(
             executing: executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions,
             output: .init(method: output.method),
             error: .init(method: output.method)
         ) { execution, writer in
@@ -97,7 +109,7 @@ extension Subprocess {
                 standardError: try execution.captureStandardError()
             )
         }
-        return CapturedResult(
+        return CollectedResult(
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
             standardOutput: result.value.standardOutput,
@@ -111,12 +123,12 @@ extension Subprocess {
     public static func run<R>(
         executing executable: Executable,
         arguments: Arguments = [],
-        environment: Environment = .inheritFromLaunchingProcess,
+        environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
-        qualityOfService: QualityOfService = .default,
+        platformOptions: PlatformOptions = .default,
         input: InputMethod = .noInput,
-        output: RedirectedOutputMethod = .redirected,
-        error: RedirectedOutputMethod = .discarded,
+        output: RedirectedOutputMethod = .redirect,
+        error: RedirectedOutputMethod = .discard,
         _ body: (@Sendable @escaping (Subprocess) async throws -> R)
     ) async throws -> Result<R> {
         return try await Configuration(
@@ -124,7 +136,7 @@ extension Subprocess {
             arguments: arguments,
             environment: environment,
             workingDirectory: workingDirectory,
-            qualityOfService: qualityOfService
+            platformOptions: platformOptions
         )
         .run(input: input, output: output, error: error, body)
     }
@@ -132,12 +144,12 @@ extension Subprocess {
     public static func run<R>(
         executing executable: Executable,
         arguments: Arguments = [],
-        environment: Environment = .inheritFromLaunchingProcess,
+        environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
-        qualityOfService: QualityOfService = .default,
+        platformOptions: PlatformOptions,
         input: some Sequence<UInt8>,
-        output: RedirectedOutputMethod = .redirected,
-        error: RedirectedOutputMethod = .discarded,
+        output: RedirectedOutputMethod = .redirect,
+        error: RedirectedOutputMethod = .discard,
         _ body: (@Sendable @escaping (Subprocess) async throws -> R)
     ) async throws -> Result<R> {
         return try await Configuration(
@@ -145,7 +157,7 @@ extension Subprocess {
             arguments: arguments,
             environment: environment,
             workingDirectory: workingDirectory,
-            qualityOfService: qualityOfService
+            platformOptions: platformOptions
         )
         .run(output: output, error: error) { execution, writer in
             try await writer.write(input)
@@ -157,12 +169,12 @@ extension Subprocess {
     public static func run<R, S: AsyncSequence>(
         executing executable: Executable,
         arguments: Arguments = [],
-        environment: Environment = .inheritFromLaunchingProcess,
+        environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
-        qualityOfService: QualityOfService = .default,
+        platformOptions: PlatformOptions = .default,
         input: S,
-        output: RedirectedOutputMethod = .redirected,
-        error: RedirectedOutputMethod = .discarded,
+        output: RedirectedOutputMethod = .redirect,
+        error: RedirectedOutputMethod = .discard,
         _ body: (@Sendable @escaping (Subprocess) async throws -> R)
     ) async throws -> Result<R> where S.Element == UInt8 {
         return try await Configuration(
@@ -170,7 +182,7 @@ extension Subprocess {
             arguments: arguments,
             environment: environment,
             workingDirectory: workingDirectory,
-            qualityOfService: qualityOfService
+            platformOptions: platformOptions
         )
         .run(output: output, error: error) { execution, writer in
             try await writer.write(input)
@@ -182,11 +194,11 @@ extension Subprocess {
     public static func run<R>(
         executing executable: Executable,
         arguments: Arguments = [],
-        environment: Environment = .inheritFromLaunchingProcess,
+        environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
-        qualityOfService: QualityOfService = .default,
-        output: RedirectedOutputMethod = .redirected,
-        error: RedirectedOutputMethod = .discarded,
+        platformOptions: PlatformOptions = .default,
+        output: RedirectedOutputMethod = .redirect,
+        error: RedirectedOutputMethod = .discard,
         _ body: (@Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> Result<R> {
         return try await Configuration(
@@ -194,7 +206,7 @@ extension Subprocess {
             arguments: arguments,
             environment: environment,
             workingDirectory: workingDirectory,
-            qualityOfService: qualityOfService
+            platformOptions: platformOptions
         )
         .run(output: output, error: error, body)
     }

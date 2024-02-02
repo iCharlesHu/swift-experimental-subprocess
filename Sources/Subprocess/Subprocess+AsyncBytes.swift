@@ -139,7 +139,7 @@ extension Subprocess {
             return Iterator(file: fileDescriptor)
         }
 
-        @frozen
+        @_nonSendable
         public struct Iterator: AsyncIteratorProtocol {
 
             @inline(__always) static var bufferSize: Int {
