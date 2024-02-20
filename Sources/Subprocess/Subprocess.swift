@@ -29,21 +29,21 @@ public struct Subprocess: Sendable {
 
     public var standardOutput: AsyncBytes? {
         switch self.executionOutput {
-        case .discarded(_), .fileDescriptor(_):
+        case .discarded(_), .fileDescriptor(_, _):
             // The output has been written somewhere else
             return nil
         case .collected(_, let readFd, _):
-            return AsyncBytes(file: readFd)
+            return AsyncBytes(fileDescriptor: readFd)
         }
     }
 
     public var standardError: AsyncBytes? {
         switch self.executionError {
-        case .discarded(_), .fileDescriptor(_):
+        case .discarded(_), .fileDescriptor(_, _):
             // The output has been written somewhere else
             return nil
         case .collected(_, let readFd, _):
-            return AsyncBytes(file: readFd)
+            return AsyncBytes(fileDescriptor: readFd)
         }
     }
 
@@ -179,8 +179,9 @@ extension Subprocess {
         public static var windowSizeChange: Self { .init(rawValue: SIGWINCH) }
     }
 
-    public func sendSignal(_ signal: Signal) throws {
-        guard kill(-(self.processIdentifier.value), signal.rawValue) == 0 else {
+    public func sendSignal(_ signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool) throws {
+        let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
+        guard kill(pid, signal.rawValue) == 0 else {
             throw POSIXError(.init(rawValue: errno)!)
         }
     }

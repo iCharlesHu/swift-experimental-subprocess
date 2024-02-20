@@ -16,7 +16,7 @@ extension Subprocess {
     public struct InputMethod: Sendable, Hashable {
         internal enum Storage: Sendable, Hashable {
             case noInput
-            case fileDescriptor(FileDescriptor)
+            case fileDescriptor(FileDescriptor, Bool)
         }
 
         internal let method: Storage
@@ -30,8 +30,8 @@ extension Subprocess {
             case .noInput:
                 let devnull: FileDescriptor = try .open("/dev/null", .readOnly)
                 return .noInput(devnull)
-            case .fileDescriptor(let fileDescriptor):
-                return .fileDescriptor(fileDescriptor)
+            case .fileDescriptor(let fileDescriptor, let closeWhenDone):
+                return .fileDescriptor(fileDescriptor, closeWhenDone)
             }
         }
 
@@ -39,8 +39,8 @@ extension Subprocess {
             return .init(method: .noInput)
         }
 
-        public static func readFrom(_ fd: FileDescriptor) -> Self {
-            return .init(method: .fileDescriptor(fd))
+        public static func readFrom(_ fd: FileDescriptor, closeWhenDone: Bool) -> Self {
+            return .init(method: .fileDescriptor(fd, closeWhenDone))
         }
     }
 }
@@ -49,7 +49,7 @@ extension Subprocess {
     public struct CollectedOutputMethod: Sendable, Hashable {
         internal enum Storage: Sendable, Hashable {
             case discarded
-            case fileDescriptor(FileDescriptor)
+            case fileDescriptor(FileDescriptor, Bool)
             case collected(Int)
         }
 
@@ -67,8 +67,8 @@ extension Subprocess {
             return .init(method: .collected(128 * 1024))
         }
 
-        public static func writeTo(_ fd: FileDescriptor) -> Self {
-            return .init(method: .fileDescriptor(fd))
+        public static func writeTo(_ fd: FileDescriptor, closeWhenDone: Bool) -> Self {
+            return .init(method: .fileDescriptor(fd, closeWhenDone))
         }
 
         public static func collect(limit: Int) -> Self {
@@ -81,8 +81,8 @@ extension Subprocess {
                 // Bind to /dev/null
                 let devnull: FileDescriptor = try .open("/dev/null", .writeOnly)
                 return .discarded(devnull)
-            case .fileDescriptor(let fileDescriptor):
-                return .fileDescriptor(fileDescriptor)
+            case .fileDescriptor(let fileDescriptor, let closeWhenDone):
+                return .fileDescriptor(fileDescriptor, closeWhenDone)
             case .collected(let limit):
                 let (readFd, writeFd) = try FileDescriptor.pipe()
                 return .collected(limit, readFd, writeFd)
@@ -107,8 +107,8 @@ extension Subprocess {
             return .init(method: .collected(128 * 1024))
         }
 
-        public static func writeTo(_ fd: FileDescriptor) -> Self {
-            return .init(method: .fileDescriptor(fd))
+        public static func writeTo(_ fd: FileDescriptor, closeWhenDone: Bool) -> Self {
+            return .init(method: .fileDescriptor(fd, closeWhenDone))
         }
 
         internal func createExecutionOutput() throws -> ExecutionOutput {
@@ -117,8 +117,8 @@ extension Subprocess {
                 // Bind to /dev/null
                 let devnull: FileDescriptor = try .open("/dev/null", .writeOnly)
                 return .discarded(devnull)
-            case .fileDescriptor(let fileDescriptor):
-                return .fileDescriptor(fileDescriptor)
+            case .fileDescriptor(let fileDescriptor, let closeWhenDone):
+                return .fileDescriptor(fileDescriptor, closeWhenDone)
             case .collected(let limit):
                 let (readFd, writeFd) = try FileDescriptor.pipe()
                 return .collected(limit, readFd, writeFd)
@@ -132,7 +132,7 @@ extension Subprocess {
     internal enum ExecutionInput {
         case noInput(FileDescriptor)
         case customWrite(FileDescriptor, FileDescriptor)
-        case fileDescriptor(FileDescriptor)
+        case fileDescriptor(FileDescriptor, Bool)
 
         internal func getReadFileDescriptor() -> FileDescriptor {
             switch self {
@@ -140,17 +140,43 @@ extension Subprocess {
                 return readFd
             case .customWrite(let readFd, _):
                 return readFd
-            case .fileDescriptor(let readFd):
+            case .fileDescriptor(let readFd, _):
                 return readFd
             }
         }
 
         internal func getWriteFileDescriptor() -> FileDescriptor? {
             switch self {
-            case .noInput(_), .fileDescriptor(_):
+            case .noInput(_), .fileDescriptor(_, _):
                 return nil
             case .customWrite(_, let writeFd):
                 return writeFd
+            }
+        }
+
+        internal func closeChildSide() throws {
+            switch self {
+            case .noInput(let devnull):
+                try devnull.close()
+            case .customWrite(let readFd, _):
+                try readFd.close()
+            case .fileDescriptor(let fd, let closeWhenDone):
+                // User passed in fd
+                if closeWhenDone {
+                    try fd.close()
+                }
+                break
+            }
+        }
+
+        internal func closeParentSide() throws {
+            switch self {
+            case .noInput(_), .fileDescriptor(_, _):
+                break
+            case .customWrite(_, _):
+                // The parent fd should have been closed
+                // in the `body` when writer.finish() is called
+                break
             }
         }
 
@@ -161,7 +187,7 @@ extension Subprocess {
             case .customWrite(let readFd, let writeFd):
                 try readFd.close()
                 try writeFd.close()
-            case .fileDescriptor(let fd):
+            case .fileDescriptor(let fd, _):
                 try fd.close()
             }
         }
@@ -169,14 +195,14 @@ extension Subprocess {
 
     internal enum ExecutionOutput {
         case discarded(FileDescriptor)
-        case fileDescriptor(FileDescriptor)
+        case fileDescriptor(FileDescriptor, Bool)
         case collected(Int, FileDescriptor, FileDescriptor)
 
         internal func getWriteFileDescriptor() -> FileDescriptor {
             switch self {
             case .discarded(let writeFd):
                 return writeFd
-            case .fileDescriptor(let writeFd):
+            case .fileDescriptor(let writeFd, _):
                 return writeFd
             case .collected(_, _, let writeFd):
                 return writeFd
@@ -185,10 +211,34 @@ extension Subprocess {
 
         internal func getReadFileDescriptor() -> FileDescriptor? {
             switch self {
-            case .discarded(_), .fileDescriptor(_):
+            case .discarded(_), .fileDescriptor(_, _):
                 return nil
             case .collected(_, let readFd, _):
                 return readFd
+            }
+        }
+
+        internal func closeChildSide() throws {
+            switch self {
+            case .discarded(let writeFd):
+                try writeFd.close()
+            case .fileDescriptor(let fd, let closeWhenDone):
+                // User passed fd
+                if closeWhenDone {
+                    try fd.close()
+                }
+                break
+            case .collected(_, _, let writeFd):
+                try writeFd.close()
+            }
+        }
+
+        internal func closeParentSide() throws {
+            switch self {
+            case .discarded(_), .fileDescriptor(_, _):
+                break
+            case .collected(_, let readFd, _):
+                try readFd.close()
             }
         }
 
@@ -196,7 +246,7 @@ extension Subprocess {
             switch self {
             case .discarded(let writeFd):
                 try writeFd.close()
-            case .fileDescriptor(let fd):
+            case .fileDescriptor(let fd, _):
                 try fd.close()
             case .collected(_, let readFd, let writeFd):
                 try readFd.close()

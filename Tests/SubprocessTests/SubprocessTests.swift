@@ -11,7 +11,11 @@
 
 import XCTest
 import FoundationEssentials
+import CryptoKit
 @testable import SwiftExperimentalSubprocess
+
+import Dispatch
+import SystemPackage
 
 final class SubprocessTests: XCTestCase {
     func testSimple() async throws {
@@ -29,10 +33,34 @@ final class SubprocessTests: XCTestCase {
             executing: .named("curl"),
             arguments: ["http://ip.jsontest.com/"]
         ) { execution in
-            let output = try await Array(execution.standardOutput!)
+            let output: [UInt8] = try await Array(execution.standardOutput!)
             let decoder = FoundationEssentials.JSONDecoder()
             return try decoder.decode(Address.self, from: Data(output))
         }
         print("Result: \(result.value)")
+    }
+
+    func testShell() async throws {
+        let result = try await Subprocess.run(executing: .named("sh")) { subprocess, writer in
+            // Stream all outputs
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    // Stream output line by line
+                    guard let stream = subprocess.standardOutput else {
+                        return
+                    }
+                    let lineSequence = AsyncLineSequence(underlyingSequence: stream)
+                    for try await line in lineSequence {
+                        print("> \(line)")
+                    }
+                }
+                group.addTask {
+                    try await writer.write("ls\n".utf8)
+                    try await writer.finish()
+                }
+                try await group.waitForAll()
+            }
+        }
+        XCTAssert(result.terminationStatus.isSuccess)
     }
 }

@@ -16,8 +16,6 @@ import _Shims
 import SystemPackage
 import FoundationEssentials
 
-let pathEnvironmentVariableName = "PATH"
-
 // Darwin specific implementation
 extension Subprocess.Configuration {
     internal typealias StringOrRawBytes = Subprocess.StringOrRawBytes
@@ -27,84 +25,19 @@ extension Subprocess.Configuration {
         output: Subprocess.ExecutionOutput,
         error: Subprocess.ExecutionOutput
     ) throws -> Subprocess {
-        // Configure environment so we can lookup PATH
-        // This method follows the standard "create" rule: `env` needs to be
-        // manually deallocated
-        func createEnvironmentAndLookUpPath() -> (env: [UnsafeMutablePointer<CChar>?], path: String?) {
-            func createFullCString(fromKey keyContainer: StringOrRawBytes, value valueContainer: StringOrRawBytes) -> UnsafeMutablePointer<CChar> {
-                let rawByteKey: UnsafeMutablePointer<CChar> = keyContainer.createRawBytes()
-                let rawByteValue: UnsafeMutablePointer<CChar> = valueContainer.createRawBytes()
-                defer {
-                    rawByteKey.deallocate()
-                    rawByteValue.deallocate()
-                }
-                /// length = `key` + `=` + `value` + `\null`
-                let totalLength = keyContainer.count + 1 + valueContainer.count + 1
-                let fullString: UnsafeMutablePointer<CChar> = .allocate(capacity: totalLength)
-                _ = snprintf(ptr: fullString, totalLength, "%s=%s", rawByteKey, rawByteValue)
-                return fullString
-            }
 
-            var env: [UnsafeMutablePointer<CChar>?] = []
-            var pathValue: String?
-            switch self.environment.config {
-            case .inherit(let updates):
-                var current = ProcessInfo.processInfo.environment
-                pathValue = current[pathEnvironmentVariableName]
-                for (keyContainer, valueContainer) in updates {
-                    if let stringKey = keyContainer.stringValue {
-                        // Remove the value from current to override it
-                        current.removeValue(forKey: stringKey)
-                        if stringKey == pathEnvironmentVariableName {
-                            pathValue = valueContainer.stringValue
-                        }
-                    }
-                    // Convert to C String
-                    if case .string(let stringKey) = keyContainer,
-                       case .string(let stringValue) = valueContainer {
-                        let fullString = "\(stringKey)=\(stringValue)"
-                        env.append(strdup(fullString))
-                        continue
-                    }
-
-                    env.append(createFullCString(fromKey: keyContainer, value: valueContainer))
-                }
-                // Add the rest of `current` to env
-                for (key, value) in current {
-                    let fullString = "\(key)=\(value)"
-                    env.append(strdup(fullString))
-                }
-            case .custom(let customValues):
-                for (keyContainer, valueContainer) in customValues {
-                    if keyContainer.stringValue == pathEnvironmentVariableName {
-                        pathValue = valueContainer.stringValue
-                    }
-                    // Fast path
-                    if case .string(let stringKey) = keyContainer,
-                       case .string(let stringValue) = valueContainer {
-                        let fullString = "\(stringKey)=\(stringValue)"
-                        env.append(strdup(fullString))
-                        continue
-                    }
-                    env.append(createFullCString(fromKey: keyContainer, value: valueContainer))
-                }
-            }
-            env.append(nil)
-            return (env: env, path: pathValue)
-        }
-        let (env, pathValue) = createEnvironmentAndLookUpPath()
+        let env = self.environment.createEnv()
         defer {
             for ptr in env { ptr?.deallocate() }
         }
-        guard let executablePath = Self.resolveExecutablePath(
-            for: self.executable,
-            withPathValue: pathValue) else {
+        guard let executablePath = self.executable.resolveExecutablePath(
+            withPathValue: self.environment.pathValue()) else {
             throw CocoaError(.executableNotLoadable, userInfo: [
                 .debugDescriptionErrorKey : "\(self.executable.description) is not an executable"
             ])
         }
         let intendedWorkingDir = self.workingDirectory
-        guard Self.pathAccessible(intendedWorkingDir, mode: F_OK) else {
+        guard Self.pathAccessible(intendedWorkingDir.string, mode: F_OK) else {
             throw CocoaError(.fileNoSuchFile, userInfo: [
                 .debugDescriptionErrorKey : "Failed to set working directory to \(intendedWorkingDir)"
             ])
@@ -127,9 +60,37 @@ extension Subprocess.Configuration {
         // Cleanup function. Not defer because on success these file
         // handles do not need to be closed
         func cleanup() throws {
-            try input.closeAll()
-            try output.closeAll()
-            try error.closeAll()
+            var inputError: Error?
+            var outputError: Error?
+            var errorError: Error?
+
+            do {
+                try input.closeAll()
+            } catch {
+                inputError = error
+            }
+
+            do {
+                try output.closeAll()
+            } catch {
+                outputError = error
+            }
+
+            do {
+                try error.closeAll()
+            } catch {
+                errorError = error
+            }
+
+            if let inputError = inputError {
+                throw inputError
+            }
+            if let outputError = outputError {
+                throw outputError
+            }
+            if let errorError = errorError {
+                throw errorError
+            }
         }
 
         // Setup stdin, stdout, and stderr
@@ -232,55 +193,10 @@ extension Subprocess.Configuration {
         )
     }
 
-    private static func resolveExecutablePath(for config: Subprocess.Executable, withPathValue pathValue: String?) -> String? {
-
-        switch config.storage {
-        case .executable(let executableName):
-            // If the executableName in is already a full path, return it directly
-            if self.pathAccessible(executableName, mode: X_OK) {
-                return executableName
-            }
-            // Get $PATH from environment
-            let searchPaths: Set<String>
-            if let pathValue = pathValue {
-                let localSearchPaths = pathValue.split(separator: ":").map { String($0) }
-                searchPaths = Set(localSearchPaths).union(Self.defaultSearchPath)
-            } else {
-                searchPaths = Self.defaultSearchPath
-            }
-
-            for path in searchPaths {
-                let fullPath = "\(path)/\(executableName)"
-                let fileExists = Self.pathAccessible(fullPath)
-                if fileExists {
-                    return fullPath
-                }
-            }
-        case .path(let executablePath):
-            // Use path directly
-            return executablePath.string
-        }
-        return nil
-    }
-
-    private static var defaultSearchPath: Set<String> {
-        return Set([
-            "/usr/bin",
-            "/bin",
-            "/usr/sbin",
-            "/sbin",
-            "/usr/local/bin"
-        ])
-    }
-
-    private static func pathAccessible(_ path: String, mode: Int32 = X_OK) -> Bool {
+    internal static func pathAccessible(_ path: String, mode: Int32) -> Bool {
         return path.withCString {
             return access($0, mode) == 0
         }
-    }
-
-    private static func pathAccessible(_ path: FilePath, mode: Int32 = X_OK) -> Bool {
-        return pathAccessible(path.string, mode: mode)
     }
 }
 
@@ -360,6 +276,131 @@ extension Subprocess {
                 additionalFileAttributeConfiguration: nil
             )
         }
+    }
+}
+
+// MARK: -  Executable Searching
+extension Subprocess.Executable {
+    internal static var defaultSearchPaths: Set<String> {
+        return Set([
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+            "/usr/local/bin"
+        ])
+    }
+
+    internal func resolveExecutablePath(withPathValue pathValue: String?) -> String? {
+        switch self.storage {
+        case .executable(let executableName):
+            // If the executableName in is already a full path, return it directly
+            if Subprocess.Configuration.pathAccessible(executableName, mode: X_OK) {
+                return executableName
+            }
+            // Get $PATH from environment
+            let searchPaths: Set<String>
+            if let pathValue = pathValue {
+                let localSearchPaths = pathValue.split(separator: ":").map { String($0) }
+                searchPaths = Set(localSearchPaths).union(Self.defaultSearchPaths)
+            } else {
+                searchPaths = Self.defaultSearchPaths
+            }
+
+            for path in searchPaths {
+                let fullPath = "\(path)/\(executableName)"
+                let fileExists = Subprocess.Configuration.pathAccessible(fullPath, mode: X_OK)
+                if fileExists {
+                    return fullPath
+                }
+            }
+        case .path(let executablePath):
+            // Use path directly
+            return executablePath.string
+        }
+        return nil
+    }
+}
+
+// MARK: Environment Resolution
+extension Subprocess.Environment {
+    internal static let pathEnvironmentVariableName = "PATH"
+
+    internal func pathValue() -> String? {
+        switch self.config {
+        case .inherit(let overrides):
+            // If PATH value exists in overrides, use it
+            if let value = overrides[.string(Self.pathEnvironmentVariableName)] {
+                return value.stringValue
+            }
+            // Fall back to current process
+            return ProcessInfo.processInfo.environment[Self.pathEnvironmentVariableName]
+        case .custom(let fullEnvironment):
+            if let value = fullEnvironment[.string(Self.pathEnvironmentVariableName)] {
+                return value.stringValue
+            }
+            return nil
+        }
+    }
+
+    // This method follows the standard "create" rule: `env` needs to be
+    // manually deallocated
+    internal func createEnv() -> [UnsafeMutablePointer<CChar>?] {
+        func createFullCString(
+            fromKey keyContainer: Subprocess.StringOrRawBytes,
+            value valueContainer: Subprocess.StringOrRawBytes
+        ) -> UnsafeMutablePointer<CChar> {
+            let rawByteKey: UnsafeMutablePointer<CChar> = keyContainer.createRawBytes()
+            let rawByteValue: UnsafeMutablePointer<CChar> = valueContainer.createRawBytes()
+            defer {
+                rawByteKey.deallocate()
+                rawByteValue.deallocate()
+            }
+            /// length = `key` + `=` + `value` + `\null`
+            let totalLength = keyContainer.count + 1 + valueContainer.count + 1
+            let fullString: UnsafeMutablePointer<CChar> = .allocate(capacity: totalLength)
+            _ = snprintf(ptr: fullString, totalLength, "%s=%s", rawByteKey, rawByteValue)
+            return fullString
+        }
+
+        var env: [UnsafeMutablePointer<CChar>?] = []
+        switch self.config {
+        case .inherit(let updates):
+            var current = ProcessInfo.processInfo.environment
+            for (keyContainer, valueContainer) in updates {
+                if let stringKey = keyContainer.stringValue {
+                    // Remove the value from current to override it
+                    current.removeValue(forKey: stringKey)
+                }
+                // Fast path
+                if case .string(let stringKey) = keyContainer,
+                   case .string(let stringValue) = valueContainer {
+                    let fullString = "\(stringKey)=\(stringValue)"
+                    env.append(strdup(fullString))
+                    continue
+                }
+
+                env.append(createFullCString(fromKey: keyContainer, value: valueContainer))
+            }
+            // Add the rest of `current` to env
+            for (key, value) in current {
+                let fullString = "\(key)=\(value)"
+                env.append(strdup(fullString))
+            }
+        case .custom(let customValues):
+            for (keyContainer, valueContainer) in customValues {
+                // Fast path
+                if case .string(let stringKey) = keyContainer,
+                   case .string(let stringValue) = valueContainer {
+                    let fullString = "\(stringKey)=\(stringValue)"
+                    env.append(strdup(fullString))
+                    continue
+                }
+                env.append(createFullCString(fromKey: keyContainer, value: valueContainer))
+            }
+        }
+        env.append(nil)
+        return env
     }
 }
 
