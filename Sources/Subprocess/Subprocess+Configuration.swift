@@ -51,8 +51,12 @@ extension Subprocess {
 
         /// Close each input individually, and throw the first error if there's multiple errors thrown
         @Sendable
-        private func cleanup(process: Subprocess, childSide: Bool, parentSide: Bool) throws {
-            guard childSide || parentSide else {
+        private func cleanup(
+            process: Subprocess,
+            childSide: Bool, parentSide: Bool,
+            attemptToTerminateSubProcess: Bool
+        ) throws {
+            guard childSide || parentSide || attemptToTerminateSubProcess else {
                 return
             }
 
@@ -97,6 +101,23 @@ extension Subprocess {
                 errorError = error // lolol
             }
 
+            // Attempt to kill the subprocess
+            var killError: Error?
+            if attemptToTerminateSubProcess {
+                do {
+                    try process.sendSignal(.kill, toProcessGroup: true)
+                } catch {
+                    guard let posixError: POSIXError = error as? POSIXError else {
+                        killError = error
+                        return
+                    }
+                    // Ignore ESRCH (no such process)
+                    if posixError.code != .ESRCH {
+                        killError = error
+                    }
+                }
+            }
+
             if let inputError = inputError {
                 throw inputError
             }
@@ -107,6 +128,10 @@ extension Subprocess {
 
             if let errorError = errorError {
                 throw errorError
+            }
+
+            if let killError = killError {
+                throw killError
             }
         }
 
@@ -123,38 +148,65 @@ extension Subprocess {
                 withInput: executionInput,
                 output: executionOutput,
                 error: executionError)
-            return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
-                group.addTask {
-                    let status = monitorProcessTermination(
-                        forProcessWithIdentifier: process.processIdentifier)
-                    // After the process exits, cleanup child side fds
-                    try self.cleanup(process: process, childSide: true, parentSide: false)
-                    return .monitorChildProcess(status)
-                }
-                group.addTask {
-                    do {
-                        let result = try await body(process, .init(fileDescriptor: writeFd))
-                        try self.cleanup(process: process, childSide: false, parentSide: true)
-                        return .workBody(result)
-                    } catch {
-                        // Cleanup everything
-                        try self.cleanup(process: process, childSide: true, parentSide: true)
-                        throw error
+            return try await withTaskCancellationHandler {
+                return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
+                    group.addTask {
+                        let status = monitorProcessTermination(
+                            forProcessWithIdentifier: process.processIdentifier)
+                        // After the process exits, cleanup child side fds
+                        try self.cleanup(
+                            process: process,
+                            childSide: true,
+                            parentSide: false,
+                            attemptToTerminateSubProcess: false
+                        )
+                        return .monitorChildProcess(status)
                     }
-                }
+                    group.addTask {
+                        do {
+                            let result = try await body(process, .init(fileDescriptor: writeFd))
+                            try self.cleanup(
+                                process: process,
+                                childSide: false,
+                                parentSide: true,
+                                attemptToTerminateSubProcess: false
+                            )
+                            return .workBody(result)
+                        } catch {
+                            // Cleanup everything
+                            try self.cleanup(
+                                process: process,
+                                childSide: true,
+                                parentSide: true,
+                                attemptToTerminateSubProcess: true
+                            )
+                            throw error
+                        }
+                    }
 
-                var result: R!
-                var terminationStatus: TerminationStatus!
-                while let state = try await group.next() {
-                    switch state {
-                    case .monitorChildProcess(let status):
-                        // We don't really care about termination status here
-                        terminationStatus = status
-                    case .workBody(let workResult):
-                        result = workResult
+                    var result: R!
+                    var terminationStatus: TerminationStatus!
+                    while let state = try await group.next() {
+                        switch state {
+                        case .monitorChildProcess(let status):
+                            // We don't really care about termination status here
+                            terminationStatus = status
+                        case .workBody(let workResult):
+                            result = workResult
+                        }
                     }
+                    return Result(terminationStatus: terminationStatus, value: result)
                 }
-                return Result(terminationStatus: terminationStatus, value: result)
+            } onCancel: {
+                // Attempt to terminate the child process
+                // Since the task has already been cancelled,
+                // this is the best we can do
+                try? self.cleanup(
+                    process: process,
+                    childSide: true,
+                    parentSide: true,
+                    attemptToTerminateSubProcess: true
+                )
             }
         }
 
@@ -171,36 +223,63 @@ extension Subprocess {
                 withInput: executionInput,
                 output: executionOutput,
                 error: executionError)
-            return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
-                group.addTask {
-                    let status = monitorProcessTermination(
-                        forProcessWithIdentifier: process.processIdentifier)
-                    // After the process exits clean up child side
-                    try self.cleanup(process: process, childSide: true, parentSide: false)
-                    return .monitorChildProcess(status)
-                }
-                group.addTask {
-                    do {
-                        let result = try await body(process)
-                        try self.cleanup(process: process, childSide: false, parentSide: true)
-                        return .workBody(result)
-                    } catch {
-                        try self.cleanup(process: process, childSide: true, parentSide: true)
-                        throw error
+            return try await withTaskCancellationHandler {
+                return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
+                    group.addTask {
+                        let status = monitorProcessTermination(
+                            forProcessWithIdentifier: process.processIdentifier)
+                        // After the process exits clean up child side
+                        try self.cleanup(
+                            process: process,
+                            childSide: true,
+                            parentSide: false,
+                            attemptToTerminateSubProcess: false
+                        )
+                        return .monitorChildProcess(status)
                     }
-                }
+                    group.addTask {
+                        do {
+                            let result = try await body(process)
+                            try self.cleanup(
+                                process: process,
+                                childSide: false,
+                                parentSide: true,
+                                attemptToTerminateSubProcess: false
+                            )
+                            return .workBody(result)
+                        } catch {
+                            try self.cleanup(
+                                process: process,
+                                childSide: true,
+                                parentSide: true,
+                                attemptToTerminateSubProcess: true
+                            )
+                            throw error
+                        }
+                    }
 
-                var result: R!
-                var terminationStatus: TerminationStatus!
-                while let state = try await group.next() {
-                    switch state {
-                    case .monitorChildProcess(let status):
-                        terminationStatus = status
-                    case .workBody(let workResult):
-                        result = workResult
+                    var result: R!
+                    var terminationStatus: TerminationStatus!
+                    while let state = try await group.next() {
+                        switch state {
+                        case .monitorChildProcess(let status):
+                            terminationStatus = status
+                        case .workBody(let workResult):
+                            result = workResult
+                        }
                     }
+                    return Result(terminationStatus: terminationStatus, value: result)
                 }
-                return Result(terminationStatus: terminationStatus, value: result)
+            } onCancel: {
+                // Attempt to terminate the child process
+                // Since the task has already been cancelled,
+                // this is the best we can do
+                try? self.cleanup(
+                    process: process,
+                    childSide: true,
+                    parentSide: true,
+                    attemptToTerminateSubProcess: true
+                )
             }
         }
     }
@@ -237,7 +316,7 @@ extension Subprocess {
             return .init(_config: .path(filePath))
         }
 
-        public func resolveExecutablePath(withEnvironment environment: Environment) -> FilePath? {
+        public func resolveExecutablePath(in environment: Environment) -> FilePath? {
             if let path = self.resolveExecutablePath(withPathValue: environment.pathValue()) {
                 return FilePath(path)
             }
