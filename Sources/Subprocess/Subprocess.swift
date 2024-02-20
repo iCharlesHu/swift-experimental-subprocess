@@ -20,7 +20,12 @@ public struct Subprocess: Sendable {
     internal let executionOutput: ExecutionOutput
     internal let executionError: ExecutionOutput
 
-    internal init(processIdentifier: ProcessIdentifier, executionInput: ExecutionInput, executionOutput: ExecutionOutput, executionError: ExecutionOutput) {
+    internal init(
+        processIdentifier: ProcessIdentifier,
+        executionInput: ExecutionInput,
+        executionOutput: ExecutionOutput,
+        executionError: ExecutionOutput
+    ) {
         self.processIdentifier = processIdentifier
         self.executionInput = executionInput
         self.executionOutput = executionOutput
