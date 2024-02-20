@@ -49,6 +49,67 @@ extension Subprocess {
             self.platformOptions = platformOptions
         }
 
+        /// Close each input individually, and throw the first error if there's multiple errors thrown
+        @Sendable
+        private func cleanup(process: Subprocess, childSide: Bool, parentSide: Bool) throws {
+            guard childSide || parentSide else {
+                return
+            }
+
+            let inputCloseFunc: () throws -> Void
+            let outputCloseFunc: () throws -> Void
+            let errorCloseFunc: () throws -> Void
+            if childSide && parentSide {
+                // Close all
+                inputCloseFunc = process.executionInput.closeAll
+                outputCloseFunc = process.executionOutput.closeAll
+                errorCloseFunc = process.executionError.closeAll
+            } else if childSide {
+                // Close child only
+                inputCloseFunc = process.executionInput.closeChildSide
+                outputCloseFunc = process.executionOutput.closeChildSide
+                errorCloseFunc = process.executionError.closeChildSide
+            } else {
+                // Close parent only
+                inputCloseFunc = process.executionInput.closeParentSide
+                outputCloseFunc = process.executionOutput.closeParentSide
+                errorCloseFunc = process.executionError.closeParentSide
+            }
+
+            var inputError: Error?
+            var outputError: Error?
+            var errorError: Error? // lol
+            do {
+                try inputCloseFunc()
+            } catch {
+                inputError = error
+            }
+
+            do {
+                try outputCloseFunc()
+            } catch {
+                outputError = error
+            }
+
+            do {
+                try errorCloseFunc()
+            } catch {
+                errorError = error // lolol
+            }
+
+            if let inputError = inputError {
+                throw inputError
+            }
+
+            if let outputError = outputError {
+                throw outputError
+            }
+
+            if let errorError = errorError {
+                throw errorError
+            }
+        }
+
         public func run<R>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
@@ -63,25 +124,21 @@ extension Subprocess {
                 output: executionOutput,
                 error: executionError)
             return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
-                @Sendable func cleanup() throws {
-                    // Clean up
-                    try process.executionInput.closeAll()
-                    try process.executionOutput.closeAll()
-                    try process.executionError.closeAll()
-                }
-
                 group.addTask {
                     let status = monitorProcessTermination(
                         forProcessWithIdentifier: process.processIdentifier)
+                    // After the process exits, cleanup child side fds
+                    try self.cleanup(process: process, childSide: true, parentSide: false)
                     return .monitorChildProcess(status)
                 }
                 group.addTask {
                     do {
                         let result = try await body(process, .init(fileDescriptor: writeFd))
-                        try cleanup()
+                        try self.cleanup(process: process, childSide: false, parentSide: true)
                         return .workBody(result)
                     } catch {
-                        try cleanup()
+                        // Cleanup everything
+                        try self.cleanup(process: process, childSide: true, parentSide: true)
                         throw error
                     }
                 }
@@ -115,23 +172,20 @@ extension Subprocess {
                 output: executionOutput,
                 error: executionError)
             return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
-                @Sendable func cleanup() throws {
-                    try process.executionInput.closeAll()
-                    try process.executionOutput.closeAll()
-                    try process.executionError.closeAll()
-                }
                 group.addTask {
                     let status = monitorProcessTermination(
                         forProcessWithIdentifier: process.processIdentifier)
+                    // After the process exits clean up child side
+                    try self.cleanup(process: process, childSide: true, parentSide: false)
                     return .monitorChildProcess(status)
                 }
                 group.addTask {
                     do {
                         let result = try await body(process)
-                        try cleanup()
+                        try self.cleanup(process: process, childSide: false, parentSide: true)
                         return .workBody(result)
                     } catch {
-                        try cleanup()
+                        try self.cleanup(process: process, childSide: true, parentSide: true)
                         throw error
                     }
                 }
@@ -181,6 +235,13 @@ extension Subprocess {
 
         public static func at(_ filePath: FilePath) -> Self {
             return .init(_config: .path(filePath))
+        }
+
+        public func resolveExecutablePath(withEnvironment environment: Environment) -> FilePath? {
+            if let path = self.resolveExecutablePath(withPathValue: environment.pathValue()) {
+                return FilePath(path)
+            }
+            return nil
         }
     }
 }
@@ -362,6 +423,20 @@ extension Subprocess {
                 return string.count
             case .rawBytes(let rawBytes):
                 return strnlen(rawBytes, Int.max)
+            }
+        }
+
+        func hash(into hasher: inout Hasher) {
+            // If Raw bytes is valid UTF8, hash it as so
+            switch self {
+            case .string(let string):
+                hasher.combine(string)
+            case .rawBytes(let bytes):
+                if let stringValue = self.stringValue {
+                    hasher.combine(stringValue)
+                } else {
+                    hasher.combine(bytes)
+                }
             }
         }
     }
