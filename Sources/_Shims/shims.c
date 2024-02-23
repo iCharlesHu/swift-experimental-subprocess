@@ -27,3 +27,17 @@ int _was_process_signaled(int status) {
 int _get_signal_code(int status) {
     return WTERMSIG(status);
 }
+
+#if TARGET_OS_LINUX
+#include <stdio.h>
+
+int _shims_snprintf(
+    char * _Nonnull str,
+    int len,
+    const char * _Nonnull format,
+    char * _Nonnull str1,
+    char * _Nonnull str2
+) {
+    return snprintf(str, len, format, str1, str2);
+}
+#endif

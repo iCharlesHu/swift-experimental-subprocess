@@ -10,7 +10,6 @@
 //===----------------------------------------------------------------------===//
 
 import SystemPackage
-import Darwin
 import FoundationEssentials
 
 public struct Subprocess: Sendable {
@@ -161,35 +160,5 @@ extension Subprocess {
 extension Subprocess.Result: Equatable where T : Equatable {}
 
 extension Subprocess.Result: Hashable where T : Hashable {}
-
-// MARK: - Signals
-extension Subprocess {
-    public struct Signal : Hashable, Sendable {
-        public let rawValue: Int32
-
-        private init(rawValue: Int32) {
-            self.rawValue = rawValue
-        }
-
-        public static var interrupt: Self { .init(rawValue: SIGINT) }
-        public static var terminate: Self { .init(rawValue: SIGTERM) }
-        public static var suspend: Self { .init(rawValue: SIGSTOP) }
-        public static var resume: Self { .init(rawValue: SIGCONT) }
-        public static var kill: Self { .init(rawValue: SIGKILL) }
-        public static var terminalClosed: Self { .init(rawValue: SIGHUP) }
-        public static var quit: Self { .init(rawValue: SIGQUIT) }
-        public static var userDefinedOne: Self { .init(rawValue: SIGUSR1) }
-        public static var userDefinedTwo: Self { .init(rawValue: SIGUSR2) }
-        public static var alarm: Self { .init(rawValue: SIGALRM) }
-        public static var windowSizeChange: Self { .init(rawValue: SIGWINCH) }
-    }
-
-    public func sendSignal(_ signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool) throws {
-        let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
-        guard kill(pid, signal.rawValue) == 0 else {
-            throw POSIXError(.init(rawValue: errno)!)
-        }
-    }
-}
 
 extension POSIXError : Swift.Error {}
