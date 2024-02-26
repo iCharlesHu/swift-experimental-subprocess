@@ -175,7 +175,7 @@ extension Subprocess {
             }
         }
 
-        public func run<R>(
+        internal func run<R>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
             _ body: @Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R
@@ -250,7 +250,7 @@ extension Subprocess {
             }
         }
 
-        public func run<R>(
+        internal func run<R>(
             input: InputMethod,
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
@@ -378,13 +378,17 @@ extension Subprocess {
             self.executablePathOverride = nil
         }
 
-        public init(_ array: [String], executablePathOverride: String) {
-            self.storage = array.map { .string($0) }
-            self.executablePathOverride = .string(executablePathOverride)
+        public init(executablePathOverride: String?, remainingValues: [String]) {
+            self.storage = remainingValues.map { .string($0) }
+            if let executablePathOverride = executablePathOverride {
+                self.executablePathOverride = .string(executablePathOverride)
+            } else {
+                self.executablePathOverride = nil
+            }
         }
 
-        public init(_ array: [Data], executablePathOverride: Data? = nil) {
-            self.storage = array.map { .rawBytes($0.toArray()) }
+        public init(executablePathOverride: Data?, remainingValues: [Data]) {
+            self.storage = remainingValues.map { .rawBytes($0.toArray()) }
             if let override = executablePathOverride {
                 self.executablePathOverride = .rawBytes(override.toArray())
             } else {

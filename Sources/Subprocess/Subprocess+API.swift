@@ -32,11 +32,11 @@ extension Subprocess {
             input: input,
             output: .init(method: output.method),
             error: .init(method: error.method)
-        ) { execution in
+        ) { subprocess in
             return (
-                processIdentifier: execution.processIdentifier,
-                standardOutput: try execution.captureStandardOutput(),
-                standardError: try execution.captureStandardError()
+                processIdentifier: subprocess.processIdentifier,
+                standardOutput: try subprocess.captureStandardOutput(),
+                standardError: try subprocess.captureStandardError()
             )
         }
         return CollectedResult(
@@ -209,6 +209,18 @@ extension Subprocess {
             platformOptions: platformOptions
         )
         .run(output: output, error: error, body)
+    }
+}
+
+// MARK: - Configuration Based
+extension Subprocess {
+    public static func run<R>(
+        withConfiguration configuration: Configuration,
+        output: RedirectedOutputMethod = .redirect,
+        error: RedirectedOutputMethod = .redirect,
+        _ body: (@Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R)
+    ) async throws -> Result<R> {
+        return try await configuration.run(output: output, error: error, body)
     }
 }
 

@@ -134,10 +134,10 @@ extension Subprocess.Configuration {
             }
         }
         // Run additional config
-        if let spawnConfig = self.platformOptions.additionalSpawnAttributeConfiguration {
+        if let spawnConfig = self.platformOptions.additionalSpawnAttributeConfigurator {
             try spawnConfig(&spawnAttributes)
         }
-        if let fileAttributeConfig = self.platformOptions.additionalFileAttributeConfiguration {
+        if let fileAttributeConfig = self.platformOptions.additionalFileAttributeConfigurator {
             try fileAttributeConfig(&fileActions)
         }
         // Spawn
@@ -190,8 +190,8 @@ extension Subprocess {
         // Create a new process group
         public var createProcessGroup: Bool = false
         public var launchRequirementData: Data? = nil
-        public var additionalSpawnAttributeConfiguration: (@Sendable (inout posix_spawnattr_t?) throws -> Void)?
-        public var additionalFileAttributeConfiguration: (@Sendable (inout posix_spawn_file_actions_t?) throws -> Void)?
+        public var additionalSpawnAttributeConfigurator: (@Sendable (inout posix_spawnattr_t?) throws -> Void)?
+        public var additionalFileAttributeConfigurator: (@Sendable (inout posix_spawn_file_actions_t?) throws -> Void)?
 
         public init(
             qualityOfService: QualityOfService,
