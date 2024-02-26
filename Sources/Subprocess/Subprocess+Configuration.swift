@@ -188,18 +188,18 @@ extension Subprocess {
                 withInput: executionInput,
                 output: executionOutput,
                 error: executionError)
+            // After spawn, cleanup child side fds
+            try self.cleanup(
+                process: process,
+                childSide: true,
+                parentSide: false,
+                attemptToTerminateSubProcess: false
+            )
             return try await withTaskCancellationHandler {
                 return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
                     group.addTask {
                         let status = monitorProcessTermination(
                             forProcessWithIdentifier: process.processIdentifier)
-                        // After the process exits, cleanup child side fds
-                        try self.cleanup(
-                            process: process,
-                            childSide: true,
-                            parentSide: false,
-                            attemptToTerminateSubProcess: false
-                        )
                         return .monitorChildProcess(status)
                     }
                     group.addTask {
@@ -263,18 +263,18 @@ extension Subprocess {
                 withInput: executionInput,
                 output: executionOutput,
                 error: executionError)
+            // After spawn, clean up child side
+            try self.cleanup(
+                process: process,
+                childSide: true,
+                parentSide: false,
+                attemptToTerminateSubProcess: false
+            )
             return try await withTaskCancellationHandler {
                 return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
                     group.addTask {
                         let status = monitorProcessTermination(
                             forProcessWithIdentifier: process.processIdentifier)
-                        // After the process exits clean up child side
-                        try self.cleanup(
-                            process: process,
-                            childSide: true,
-                            parentSide: false,
-                            attemptToTerminateSubProcess: false
-                        )
                         return .monitorChildProcess(status)
                     }
                     group.addTask {
