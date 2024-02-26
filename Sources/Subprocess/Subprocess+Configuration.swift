@@ -135,6 +135,46 @@ extension Subprocess {
             }
         }
 
+        /// Close each input individually, and throw the first error if there's multiple errors thrown
+        @Sendable
+        internal func cleanupAll(
+            input: ExecutionInput,
+            output: ExecutionOutput,
+            error: ExecutionOutput
+        ) throws {
+            var inputError: Error?
+            var outputError: Error?
+            var errorError: Error?
+
+            do {
+                try input.closeAll()
+            } catch {
+                inputError = error
+            }
+
+            do {
+                try output.closeAll()
+            } catch {
+                outputError = error
+            }
+
+            do {
+                try error.closeAll()
+            } catch {
+                errorError = error
+            }
+
+            if let inputError = inputError {
+                throw inputError
+            }
+            if let outputError = outputError {
+                throw outputError
+            }
+            if let errorError = errorError {
+                throw errorError
+            }
+        }
+
         public func run<R>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
@@ -526,6 +566,35 @@ extension FilePath {
         let path = getcwd(nil, 0)!
         defer { free(path) }
         return .init(String(cString: path))
+    }
+}
+
+extension Optional where Wrapped : Collection {
+    func withOptionalUnsafeBufferPointer<R>(_ body: ((UnsafeBufferPointer<Wrapped.Element>)?) throws -> R) rethrows -> R {
+        switch self {
+        case .some(let wrapped):
+            guard let array: Array<Wrapped.Element> = wrapped as? Array else {
+                return try body(nil)
+            }
+            return try array.withUnsafeBufferPointer { ptr in
+                return try body(ptr)
+            }
+        case .none:
+            return try body(nil)
+        }
+    }
+}
+
+extension Optional where Wrapped == String {
+    func withOptionalCString<R>(_ body: ((UnsafePointer<Int8>)?) throws -> R) rethrows -> R {
+        switch self {
+        case .none:
+            return try body(nil)
+        case .some(let wrapped):
+            return try wrapped.withCString {
+                return try body($0)
+            }
+        }
     }
 }
 
