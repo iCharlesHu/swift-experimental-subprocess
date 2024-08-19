@@ -9,11 +9,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef shims_h
-#define shims_h
+#ifndef process_shims_h
+#define process_shims_h
 
 #include <unistd.h>
-#include "conditionals.h"
+#include "_CShimsTargetConditionals.h"
 
 #if TARGET_OS_MAC
 #include <spawn.h>
@@ -61,4 +61,4 @@ int _shims_snprintf(
 );
 #endif
 
-#endif /* shims_h */
+#endif /* process_shims_h */

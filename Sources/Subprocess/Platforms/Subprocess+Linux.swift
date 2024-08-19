@@ -12,9 +12,9 @@
 #if canImport(Glibc)
 
 import Glibc
-import _Shims
 import SystemPackage
 import FoundationEssentials
+package import _CShims
 
 // Linux specific implementations
 extension Subprocess.Configuration {

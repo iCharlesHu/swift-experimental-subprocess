@@ -11,10 +11,20 @@
 
 #if canImport(Darwin)
 
-import Darwin
-import _Shims
-import SystemPackage
+#if canImport(FoundationEssentials)
 import FoundationEssentials
+#elseif canImport(Foundation)
+import Foundation
+#endif
+
+import Darwin
+import SystemPackage
+
+#if FOUNDATION_FRAMEWORK
+@_implementationOnly import _FoundationCShims
+#else
+internal import _CShims
+#endif
 
 // Darwin specific implementation
 extension Subprocess.Configuration {
@@ -45,11 +55,14 @@ extension Subprocess.Configuration {
         defer {
             posix_spawn_file_actions_destroy(&fileActions)
         }
-
-        var result = posix_spawn_file_actions_adddup2(&fileActions, input.getReadFileDescriptor().rawValue, 0)
-        guard result == 0 else {
-            try self.cleanupAll(input: input, output: output, error: error)
-            throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+        // Input
+        var result: Int32 = -1
+        if let inputRead = input.getReadFileDescriptor() {
+            result = posix_spawn_file_actions_adddup2(&fileActions, inputRead.rawValue, 0)
+            guard result == 0 else {
+                try self.cleanupAll(input: input, output: output, error: error)
+                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+            }
         }
         if let inputWrite = input.getWriteFileDescriptor() {
             // Close parent side
@@ -59,10 +72,13 @@ extension Subprocess.Configuration {
                 throw POSIXError(.init(rawValue: result) ?? .ENODEV)
             }
         }
-        result = posix_spawn_file_actions_adddup2(&fileActions, output.getWriteFileDescriptor().rawValue, 1)
-        guard result == 0 else {
-            try self.cleanupAll(input: input, output: output, error: error)
-            throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+        // Output
+        if let outputWrite = output.getWriteFileDescriptor() {
+            result = posix_spawn_file_actions_adddup2(&fileActions, outputWrite.rawValue, 1)
+            guard result == 0 else {
+                try self.cleanupAll(input: input, output: output, error: error)
+                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+            }
         }
         if let outputRead = output.getReadFileDescriptor() {
             // Close parent side
@@ -72,10 +88,13 @@ extension Subprocess.Configuration {
                 throw POSIXError(.init(rawValue: result) ?? .ENODEV)
             }
         }
-        result = posix_spawn_file_actions_adddup2(&fileActions, error.getWriteFileDescriptor().rawValue, 2)
-        guard result == 0 else {
-            try self.cleanupAll(input: input, output: output, error: error)
-            throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+        // Error
+        if let errorWrite = error.getWriteFileDescriptor() {
+            result = posix_spawn_file_actions_adddup2(&fileActions, errorWrite.rawValue, 2)
+            guard result == 0 else {
+                try self.cleanupAll(input: input, output: output, error: error)
+                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+            }
         }
         if let errorRead = error.getReadFileDescriptor() {
             // Close parent side
@@ -97,12 +116,14 @@ extension Subprocess.Configuration {
         posix_spawnattr_setsigmask(&spawnAttributes, &noSignals)
         posix_spawnattr_setsigdefault(&spawnAttributes, &allSignals)
         // Configure spawnattr
+        var spawnAttributeError: Int32 = 0
         var flags: Int32 = POSIX_SPAWN_CLOEXEC_DEFAULT |
             POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF
-        if self.platformOptions.createProcessGroup {
+        if let pgid = self.platformOptions.processGroupID {
             flags |= POSIX_SPAWN_SETPGROUP
+            spawnAttributeError = posix_spawnattr_setpgroup(&spawnAttributes, pid_t(pgid))
         }
-        var spawnAttributeError = posix_spawnattr_setflags(&spawnAttributes, Int16(flags))
+        spawnAttributeError = posix_spawnattr_setflags(&spawnAttributes, Int16(flags))
         // Set QualityOfService
         // spanattr_qos seems to only accept `QOS_CLASS_UTILITY` or `QOS_CLASS_BACKGROUND`
         // and returns an error of `EINVAL` if anything else is provided
@@ -119,7 +140,7 @@ extension Subprocess.Configuration {
                 return posix_spawn_file_actions_addchdir_np(&fileActions, workDir)
             }
         }
-        
+
         // Error handling
         if chdirError != 0 || spawnAttributeError != 0 {
             try self.cleanupAll(input: input, output: output, error: error)
@@ -134,10 +155,10 @@ extension Subprocess.Configuration {
             }
         }
         // Run additional config
-        if let spawnConfig = self.platformOptions.additionalSpawnAttributeConfigurator {
+        if let spawnConfig = self.platformOptions.preSpawnAttributeConfigurator {
             try spawnConfig(&spawnAttributes)
         }
-        if let fileAttributeConfig = self.platformOptions.additionalFileAttributeConfigurator {
+        if let fileAttributeConfig = self.platformOptions.preSpawnFileAttributeConfigurator {
             try fileAttributeConfig(&fileActions)
         }
         // Spawn
@@ -184,22 +205,22 @@ extension Subprocess {
         public var groupID: Int? = nil
         // Set list of supplementary group IDs for the subprocess
         public var supplementaryGroups: [Int]? = nil
+        // Set process group ID for teh subprocess
+        public var processGroupID: Int? = nil
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
         public var createSession: Bool = false
-        // Create a new process group
-        public var createProcessGroup: Bool = false
         public var launchRequirementData: Data? = nil
-        public var additionalSpawnAttributeConfigurator: (@Sendable (inout posix_spawnattr_t?) throws -> Void)?
-        public var additionalFileAttributeConfigurator: (@Sendable (inout posix_spawn_file_actions_t?) throws -> Void)?
+        public var preSpawnAttributeConfigurator: (@Sendable (inout posix_spawnattr_t?) throws -> Void)?
+        public var preSpawnFileAttributeConfigurator: (@Sendable (inout posix_spawn_file_actions_t?) throws -> Void)?
 
         public init(
             qualityOfService: QualityOfService,
             userID: Int?,
             groupID: Int?,
             supplementaryGroups: [Int]?,
+            processGroupID: Int?,
             createSession: Bool,
-            createProcessGroup: Bool,
             launchRequirementData: Data?
         ) {
             self.qualityOfService = qualityOfService
@@ -207,7 +228,7 @@ extension Subprocess {
             self.groupID = groupID
             self.supplementaryGroups = supplementaryGroups
             self.createSession = createSession
-            self.createProcessGroup = createProcessGroup
+            self.processGroupID = processGroupID
             self.launchRequirementData = launchRequirementData
         }
 
@@ -217,8 +238,8 @@ extension Subprocess {
                 userID: nil,
                 groupID: nil,
                 supplementaryGroups: nil,
+                processGroupID: nil,
                 createSession: false,
-                createProcessGroup: false,
                 launchRequirementData: nil
             )
         }

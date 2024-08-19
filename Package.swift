@@ -5,7 +5,7 @@ import PackageDescription
 
 let package = Package(
     name: "SwiftExperimentalSubprocess",
-    platforms: [.macOS("13.3"), .iOS("16.4"), .tvOS("16.4"), .watchOS("9.4")],
+    platforms: [.macOS("15.0"), .iOS("18.0"), .tvOS("18.0"), .watchOS("11.0")],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
@@ -27,7 +27,7 @@ let package = Package(
         .target(
             name: "SwiftExperimentalSubprocess",
             dependencies: [
-                "_Shims",
+                "_CShims",
                 .product(name: "FoundationEssentials", package: "swift-foundation"),
                 .product(name: "SystemPackage", package: "swift-system"),
 
@@ -36,11 +36,19 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftExperimentalSubprocessTests",
-            dependencies: ["SwiftExperimentalSubprocess"]
+            dependencies: [
+                "SwiftExperimentalSubprocess",
+                .product(name: "FoundationEssentials", package: "swift-foundation"),
+                .product(name: "SystemPackage", package: "swift-system"),
+            ],
+            resources: [
+                .copy("SubprocessTests/Resources")
+            ]
         ),
 
         .target(
-            name: "_Shims",
-            path: "Sources/_Shims")
+            name: "_CShims",
+            path: "Sources/_CShims"
+        ),
     ]
 )

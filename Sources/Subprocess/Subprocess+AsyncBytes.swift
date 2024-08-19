@@ -9,15 +9,19 @@
 //
 //===----------------------------------------------------------------------===//
 
-import FoundationEssentials
 import SystemPackage
 import Dispatch
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#elseif canImport(Foundation)
+import Foundation
+#endif
+
 extension Subprocess {
-    public struct AsyncBytes: AsyncSequence, Sendable {
-        @inline(__always) static var bufferSize: Int {
-            16384
-        }
+    public struct AsyncBytes: AsyncSequence, Sendable, _AsyncSequence {
+        public typealias Error = any Swift.Error
+
         public typealias Element = UInt8
 
         @_nonSendable
@@ -42,11 +46,10 @@ extension Subprocess {
                 }
                 try Task.checkCancellation()
                 do {
-                    self.buffer = try await self.read(
-                        from: self.fileDescriptor,
-                        maxLength: AsyncBytes.bufferSize)
+                    self.buffer = try await self.fileDescriptor.read(
+                        upToLength: Subprocess.readBufferSize)
                     self.currentPosition = 0
-                    if self.buffer.count < AsyncBytes.bufferSize {
+                    if self.buffer.count < Subprocess.readBufferSize {
                         self.finished = true
                     }
                 } catch {
@@ -108,4 +111,8 @@ extension RangeReplaceableCollection {
             append(item)
         }
     }
+}
+
+public protocol _AsyncSequence<Element, Error>: AsyncSequence {
+    associatedtype Error
 }

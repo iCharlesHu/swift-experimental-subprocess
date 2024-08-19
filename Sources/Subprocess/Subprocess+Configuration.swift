@@ -11,14 +11,23 @@
 
 @preconcurrency import SystemPackage
 
+#if FOUNDATION_FRAMEWORK
+@_implementationOnly import _FoundationCShims
+#else
+package import _CShims
+#endif
+
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
 #endif
 
-import _Shims
+#if canImport(FoundationEssentials)
 import FoundationEssentials
+#elseif canImport(Foundation)
+import Foundation
+#endif
 
 extension Subprocess {
     public struct Configuration: Sendable {
@@ -179,9 +188,9 @@ extension Subprocess {
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
             _ body: @Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R
-        ) async throws -> Result<R> {
+        ) async throws -> ExecutionResult<R> {
             let (readFd, writeFd) = try FileDescriptor.pipe()
-            let executionInput: ExecutionInput = .customWrite(readFd, writeFd)
+            let executionInput: ExecutionInput = .init(storage: .customWrite(readFd, writeFd))
             let executionOutput: ExecutionOutput = try output.createExecutionOutput()
             let executionError: ExecutionOutput = try error.createExecutionOutput()
             let process: Subprocess = try self.spawn(
@@ -198,13 +207,13 @@ extension Subprocess {
             return try await withTaskCancellationHandler {
                 return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
                     group.addTask {
-                        let status = monitorProcessTermination(
+                        let status = await monitorProcessTermination(
                             forProcessWithIdentifier: process.processIdentifier)
                         return .monitorChildProcess(status)
                     }
                     group.addTask {
                         do {
-                            let result = try await body(process, .init(fileDescriptor: writeFd))
+                            let result = try await body(process, .init(input: executionInput))
                             try self.cleanup(
                                 process: process,
                                 childSide: false,
@@ -235,7 +244,7 @@ extension Subprocess {
                             result = workResult
                         }
                     }
-                    return Result(terminationStatus: terminationStatus, value: result)
+                    return ExecutionResult(terminationStatus: terminationStatus, value: result)
                 }
             } onCancel: {
                 // Attempt to terminate the child process
@@ -255,7 +264,7 @@ extension Subprocess {
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
             _ body: (@Sendable @escaping (Subprocess) async throws -> R)
-        ) async throws -> Result<R> {
+        ) async throws -> ExecutionResult<R> {
             let executionInput = try input.createExecutionInput()
             let executionOutput = try output.createExecutionOutput()
             let executionError = try error.createExecutionOutput()
@@ -273,7 +282,7 @@ extension Subprocess {
             return try await withTaskCancellationHandler {
                 return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
                     group.addTask {
-                        let status = monitorProcessTermination(
+                        let status = await monitorProcessTermination(
                             forProcessWithIdentifier: process.processIdentifier)
                         return .monitorChildProcess(status)
                     }
@@ -308,7 +317,7 @@ extension Subprocess {
                             result = workResult
                         }
                     }
-                    return Result(terminationStatus: terminationStatus, value: result)
+                    return ExecutionResult(terminationStatus: terminationStatus, value: result)
                 }
             } onCancel: {
                 // Attempt to terminate the child process
@@ -473,7 +482,7 @@ extension Subprocess {
     public struct ProcessIdentifier: Sendable, Hashable {
         let value: pid_t
 
-        public init(value: pid_t) {
+        internal init(value: pid_t) {
             self.value = value
         }
     }
@@ -481,7 +490,7 @@ extension Subprocess {
 
 // MARK: - TerminationStatus
 extension Subprocess {
-    public enum TerminationStatus: Sendable, Hashable {
+    public enum TerminationStatus: Sendable, Hashable, Codable {
         #if canImport(WinSDK)
         public typealias Code = DWORD
         #else
@@ -492,12 +501,12 @@ extension Subprocess {
         case stillActive
         #endif
 
-        case exit(Code)
+        case exited(Code)
         case unhandledException(Code)
 
         public var isSuccess: Bool {
             switch self {
-            case .exit(let exitCode):
+            case .exited(let exitCode):
                 return exitCode == 0
             case .unhandledException(_):
                 return false
@@ -506,7 +515,7 @@ extension Subprocess {
 
         public var isUnhandledException: Bool {
             switch self {
-            case .exit(_):
+            case .exited(_):
                 return false
             case .unhandledException(_):
                 return true
