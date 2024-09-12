@@ -366,7 +366,7 @@ extension SubprocessUnixTests {
 #endif
 
     func testCollectedOutput() async throws {
-        let expected = self.randomString(length: 32)
+        let expected = randomString(length: 32)
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
@@ -380,7 +380,7 @@ extension SubprocessUnixTests {
     }
 
     func testCollectedOutputWithLimit() async throws {
-        let expected = self.randomString(length: 32)
+        let expected = randomString(length: 32)
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
@@ -403,7 +403,7 @@ extension SubprocessUnixTests {
             options: .create,
             permissions: [.ownerReadWrite, .groupReadWrite]
         )
-        let expected = self.randomString(length: 32)
+        let expected = randomString(length: 32)
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
@@ -464,7 +464,7 @@ extension SubprocessUnixTests {
             options: .create,
             permissions: [.ownerReadWrite, .groupReadWrite]
         )
-        let expected = self.randomString(length: 32)
+        let expected = randomString(length: 32)
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
@@ -538,12 +538,141 @@ extension SubprocessUnixTests {
     }
 }
 
+// MARK: - PlatformOption Tests
+extension SubprocessUnixTests {
+    // Run this test with sudo
+    func testSubprocessPlatformOptionsUserID() async throws {
+        guard getuid() == 0 else {
+            throw XCTSkip("This test requires root privileges")
+        }
+        let expectedUserID = Int.random(in: 1000 ... 2000)
+        var platformOptions: Subprocess.PlatformOptions = .default
+        platformOptions.userID = expectedUserID
+        try await self.assertID(
+            withArgument: "-u",
+            platformOptions: platformOptions,
+            isEqualTo: expectedUserID
+        )
+    }
+
+    // Run this test with sudo
+    func testSubprocessPlatformOptionsGroupID() async throws {
+        guard getuid() == 0 else {
+            throw XCTSkip("This test requires root privileges")
+        }
+        let expectedGroupID = Int.random(in: 1000 ... 2000)
+        var platformOptions: Subprocess.PlatformOptions = .default
+        platformOptions.groupID = expectedGroupID
+        try await self.assertID(
+            withArgument: "-g",
+            platformOptions: platformOptions,
+            isEqualTo: expectedGroupID
+        )
+    }
+
+    // Run this test with sudo
+    func testSubprocssPlatformOptionsSuplimentaryGroups() async throws {
+        guard getuid() == 0 else {
+            throw XCTSkip("This test requires root privileges")
+        }
+        var expectedGroups: Set<Int> = Set()
+        for _ in 0 ..< Int.random(in: 5 ... 10) {
+            expectedGroups.insert(Int.random(in: 1000 ... 2000))
+        }
+        var platformOptions: Subprocess.PlatformOptions = .default
+        platformOptions.supplementaryGroups = Array(expectedGroups)
+        let idResult = try await Subprocess.run(
+            .named("/usr/bin/swift"),
+            arguments: [getgroupsSwift.string],
+            platformOptions: platformOptions
+        )
+        XCTAssertTrue(idResult.terminationStatus.isSuccess)
+        let ids = try XCTUnwrap(
+            String(data: idResult.standardOutput, encoding: .utf8)
+        ).split(separator: ",")
+            .map { Int($0.trimmingCharacters(in: .whitespacesAndNewlines))! }
+        XCTAssertEqual(Set(ids), expectedGroups)
+    }
+
+    func testSubprocessPlatformOptionsProcessGroupID() async throws {
+        guard getuid() == 0 else {
+            throw XCTSkip("This test requires root privileges")
+        }
+        let expectedPGID = Int.random(in: 1000 ... Int(pid_t.max))
+        var platformOptions: Subprocess.PlatformOptions = .default
+        // Sets the process group ID to 0, which creates a new session
+        platformOptions.processGroupID = 0
+        let psResult = try await Subprocess.run(
+            .named("/bin/bash"),
+            arguments: ["-c", "ps -o pid,pgid -p $$"],
+            platformOptions: platformOptions
+        )
+        XCTAssertTrue(psResult.terminationStatus.isSuccess)
+        let resultValue = try XCTUnwrap(
+            String(data: psResult.standardOutput, encoding: .utf8)
+        ).split { $0.isWhitespace || $0.isNewline }
+        XCTAssertEqual(resultValue.count, 4)
+        XCTAssertEqual(resultValue[0], "PID")
+        XCTAssertEqual(resultValue[1], "PGID")
+        // PGID should == PID
+        XCTAssertEqual(resultValue[2], resultValue[3])
+    }
+
+    func testSubprocessPlatformOptionsCreateSession() async throws {
+        // platformOptions.createSession implies calls to setsid
+        var platformOptions: Subprocess.PlatformOptions = .default
+        platformOptions.createSession = true
+        // Check the proces ID (pid), pross group ID (pgid), and
+        // controling terminal's process group ID (tpgid)
+        let psResult = try await Subprocess.run(
+            .named("/bin/bash"),
+            arguments: ["-c", "ps -o pid,pgid,tpgid -p $$"],
+            platformOptions: platformOptions
+        )
+        try assertNewSessionCreated(with: psResult)
+    }
+}
+
 // MARK: - Utils
 extension SubprocessUnixTests {
-    private func randomString(length: Int) -> String {
-        let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        return String((0..<length).map{ _ in letters.randomElement()! })
+    private func assertID(
+        withArgument argument: String,
+        platformOptions: Subprocess.PlatformOptions,
+        isEqualTo expected: Int
+    ) async throws {
+        let idResult = try await Subprocess.run(
+            .named("/usr/bin/id"),
+            arguments: [argument],
+            platformOptions: platformOptions
+        )
+        XCTAssertTrue(idResult.terminationStatus.isSuccess)
+        let id = try XCTUnwrap(String(data: idResult.standardOutput, encoding: .utf8))
+        XCTAssertEqual(
+            id.trimmingCharacters(in: .whitespacesAndNewlines),
+            "\(expected)"
+        )
     }
+}
+
+internal func assertNewSessionCreated(with result: Subprocess.CollectedResult) throws {
+    XCTAssertTrue(result.terminationStatus.isSuccess)
+    let psValue = try XCTUnwrap(
+        String(data: result.standardOutput, encoding: .utf8)
+    ).split {
+        return $0.isNewline || $0.isWhitespace
+    }
+    XCTAssertEqual(psValue.count, 6)
+    // If setsid() has been called successfully, we shold observe:
+    // - pid == pgid
+    // - tpgid <= 0
+    XCTAssertEqual(psValue[0], "PID")
+    XCTAssertEqual(psValue[1], "PGID")
+    XCTAssertEqual(psValue[2], "TPGID")
+    let pid = try XCTUnwrap(Int(psValue[3]))
+    let pgid = try XCTUnwrap(Int(psValue[4]))
+    let tpgid = try XCTUnwrap(Int(psValue[5]))
+    XCTAssertEqual(pid, pgid)
+    XCTAssertTrue(tpgid <= 0)
 }
 
 #endif // canImport(Darwin) || canImport(Glibc)

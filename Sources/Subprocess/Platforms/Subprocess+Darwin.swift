@@ -18,6 +18,7 @@ import Foundation
 #endif
 
 import Darwin
+import Dispatch
 import SystemPackage
 
 #if FOUNDATION_FRAMEWORK
@@ -205,7 +206,7 @@ extension Subprocess {
         public var groupID: Int? = nil
         // Set list of supplementary group IDs for the subprocess
         public var supplementaryGroups: [Int]? = nil
-        // Set process group ID for teh subprocess
+        // Set process group ID for the subprocess
         public var processGroupID: Int? = nil
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
@@ -243,6 +244,34 @@ extension Subprocess {
                 launchRequirementData: nil
             )
         }
+    }
+}
+
+// MARK: - Process Monitoring
+@Sendable
+internal func monitorProcessTermination(
+    forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
+) async -> Subprocess.TerminationStatus {
+    return await withCheckedContinuation { continuation in
+        let source = DispatchSource.makeProcessSource(
+            identifier: pid.value,
+            eventMask: [.exit, .signal]
+        )
+        source.setEventHandler {
+            source.cancel()
+            var status: Int32 = -1
+            waitpid(pid.value, &status, 0)
+            if _was_process_exited(status) != 0 {
+                continuation.resume(returning: .exited(_get_exit_code(status)))
+                return
+            }
+            if _was_process_signaled(status) != 0 {
+                continuation.resume(returning: .unhandledException(_get_signal_code(status)))
+                return
+            }
+            fatalError("Unexpected exit status type: \(status)")
+        }
+        source.resume()
     }
 }
 
