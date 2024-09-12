@@ -49,7 +49,7 @@ extension Subprocess {
                     self.buffer = try await self.fileDescriptor.read(
                         upToLength: Subprocess.readBufferSize)
                     self.currentPosition = 0
-                    if self.buffer.count < Subprocess.readBufferSize {
+                    if self.buffer.isEmpty {
                         self.finished = true
                     }
                 } catch {
