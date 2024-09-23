@@ -11,6 +11,8 @@
 
 #include "include/_CShimsTargetConditionals.h"
 #include "include/process_shims.h"
+
+#if !TARGET_OS_WINDOWS
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
@@ -326,4 +328,6 @@ int _subprocess_fork_exec(
     // If we got here, something went wrong
     return errno;
 }
+
+#endif // !TARGET_OS_WINDOWS
 

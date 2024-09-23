@@ -36,7 +36,7 @@ extension Subprocess {
         internal func createExecutionInput() throws -> ExecutionInput {
             switch self.method {
             case .noInput:
-                let devnull: FileDescriptor = try .open("/dev/null", .readOnly)
+                let devnull: FileDescriptor = try .openDevNull(withAcessMode: .readOnly)
                 return .init(storage: .noInput(devnull))
             case .fileDescriptor(let fileDescriptor, let closeWhenDone):
                 return .init(storage: .fileDescriptor(fileDescriptor, closeWhenDone))
@@ -87,7 +87,7 @@ extension Subprocess {
             switch self.method {
             case .discarded:
                 // Bind to /dev/null
-                let devnull: FileDescriptor = try .open("/dev/null", .writeOnly)
+                let devnull: FileDescriptor = try .openDevNull(withAcessMode: .writeOnly)
                 return .init(storage: .discarded(devnull))
             case .fileDescriptor(let fileDescriptor, let closeWhenDone):
                 return .init(storage: .fileDescriptor(fileDescriptor, closeWhenDone))
@@ -123,7 +123,7 @@ extension Subprocess {
             switch self.method {
             case .discarded:
                 // Bind to /dev/null
-                let devnull: FileDescriptor = try .open("/dev/null", .writeOnly)
+                let devnull: FileDescriptor = try .openDevNull(withAcessMode: .writeOnly)
                 return .init(storage: .discarded(devnull))
             case .fileDescriptor(let fileDescriptor, let closeWhenDone):
                 return .init(storage: .fileDescriptor(fileDescriptor, closeWhenDone))

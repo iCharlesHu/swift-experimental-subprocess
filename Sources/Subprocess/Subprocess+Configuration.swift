@@ -21,6 +21,8 @@ package import _CShims
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(WinSDK)
+import WinSDK
 #endif
 
 #if canImport(FoundationEssentials)
@@ -113,18 +115,7 @@ extension Subprocess {
             // Attempt to kill the subprocess
             var killError: Error?
             if attemptToTerminateSubProcess {
-                do {
-                    try process.sendSignal(.kill, toProcessGroup: true)
-                } catch {
-                    guard let posixError: POSIXError = error as? POSIXError else {
-                        killError = error
-                        return
-                    }
-                    // Ignore ESRCH (no such process)
-                    if posixError.code != .ESRCH {
-                        killError = error
-                    }
-                }
+                killError = process.tryTerminate()
             }
 
             if let inputError = inputError {
@@ -396,6 +387,8 @@ extension Subprocess {
             }
         }
 
+#if !os(Windows)
+        // Windows Arguments must be valida UTF16 String
         public init(executablePathOverride: Data?, remainingValues: [Data]) {
             self.storage = remainingValues.map { .rawBytes($0.toArray()) }
             if let override = executablePathOverride {
@@ -404,6 +397,7 @@ extension Subprocess {
                 self.executablePathOverride = nil
             }
         }
+#endif
     }
 }
 
@@ -429,17 +423,20 @@ extension Subprocess {
             return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
         }
 
-        public func updating(_ newValue: [Data : Data]) -> Self {
-            return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
-        }
-
         public static func custom(_ newValue: [String : String]) -> Self {
             return .init(config: .custom(newValue.wrapToStringOrRawBytes()))
+        }
+
+#if !os(Windows)
+        // Windows environment must be valida UTF16 String
+        public func updating(_ newValue: [Data : Data]) -> Self {
+            return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
         }
 
         public static func custom(_ newValue: [Data : Data]) -> Self {
             return .init(config: .custom(newValue.wrapToStringOrRawBytes()))
         }
+#endif
     }
 }
 
@@ -477,17 +474,6 @@ fileprivate extension Data {
     }
 }
 
-// MARK: - ProcessIdentifier
-extension Subprocess {
-    public struct ProcessIdentifier: Sendable, Hashable {
-        let value: pid_t
-
-        internal init(value: pid_t) {
-            self.value = value
-        }
-    }
-}
-
 // MARK: - TerminationStatus
 extension Subprocess {
     public enum TerminationStatus: Sendable, Hashable, Codable {
@@ -495,10 +481,6 @@ extension Subprocess {
         public typealias Code = DWORD
         #else
         public typealias Code = CInt
-        #endif
-
-        #if canImport(WinSDK)
-        case stillActive
         #endif
 
         case exited(Code)

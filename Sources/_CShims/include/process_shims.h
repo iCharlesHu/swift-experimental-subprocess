@@ -12,8 +12,10 @@
 #ifndef process_shims_h
 #define process_shims_h
 
-#include <unistd.h>
 #include "_CShimsTargetConditionals.h"
+
+#if !TARGET_OS_WINDOWS
+#include <unistd.h>
 
 #if _POSIX_SPAWN
 #include <spawn.h>
@@ -63,5 +65,7 @@ int _shims_snprintf(
     char * _Nonnull str2
 );
 #endif
+
+#endif // !TARGET_OS_WINDOWS
 
 #endif /* process_shims_h */

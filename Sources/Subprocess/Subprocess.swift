@@ -30,19 +30,9 @@ public struct Subprocess: Sendable {
     internal let executionInput: ExecutionInput
     internal let executionOutput: ExecutionOutput
     internal let executionError: ExecutionOutput
-    internal var extracted: Bool = false
-
-    internal init(
-        processIdentifier: ProcessIdentifier,
-        executionInput: ExecutionInput,
-        executionOutput: ExecutionOutput,
-        executionError: ExecutionOutput
-    ) {
-        self.processIdentifier = processIdentifier
-        self.executionInput = executionInput
-        self.executionOutput = executionOutput
-        self.executionError = executionError
-    }
+#if os(Windows)
+    internal let consoleBehavior: PlatformOptions.ConsoleBehavior
+#endif
 
     /// The standard output of the subprocess.
     /// Accessing this property will **fatalError** if

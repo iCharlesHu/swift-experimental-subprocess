@@ -59,9 +59,24 @@ extension Subprocess {
             throw POSIXError(.init(rawValue: errno)!)
         }
     }
+
+    internal func tryTerminate() -> Error? {
+        do {
+            try self.sendSignal(.kill, toProcessGroup: true)
+        } catch {
+            guard let posixError: POSIXError = error as? POSIXError else {
+                return error
+            }
+            // Ignore ESRCH (no such process)
+            if posixError.code != .ESRCH {
+                return error
+            }
+        }
+        return nil
+    }
 }
 
-// MARK: Environment Resolution
+// MARK: - Environment Resolution
 extension Subprocess.Environment {
     internal static let pathEnvironmentVariableName = "PATH"
 
@@ -161,6 +176,17 @@ extension Subprocess.Arguments {
         }
         argv.append(nil)
         return argv
+    }
+}
+
+// MARK: - ProcessIdentifier
+extension Subprocess {
+    public struct ProcessIdentifier: Sendable, Hashable {
+        let value: pid_t
+
+        internal init(value: pid_t) {
+            self.value = value
+        }
     }
 }
 
@@ -268,6 +294,24 @@ extension Subprocess.Configuration {
             return access($0, mode) == 0
         }
     }
+}
+
+// MARK: - FileDescriptor extensions
+extension FileDescriptor {
+    internal static func openDevNull(
+        withAcessMode mode: FileDescriptor.AccessMode
+    ) throws -> FileDescriptor {
+        let devnull: FileDescriptor = try .open("/dev/null", mode)
+        return devnull
+    }
+
+    internal var platformDescriptor: Subprocess.PlatformFileDescriptor {
+        return self
+    }
+}
+
+extension Subprocess {
+    internal typealias PlatformFileDescriptor = FileDescriptor
 }
 
 // MARK: - Read Buffer Size
