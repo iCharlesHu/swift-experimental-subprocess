@@ -40,6 +40,10 @@ int _get_signal_code(int status) {
     return WTERMSIG(status);
 }
 
+int _was_process_suspended(int status) {
+    return WIFSTOPPED(status);
+}
+
 #if TARGET_OS_LINUX
 #include <stdio.h>
 

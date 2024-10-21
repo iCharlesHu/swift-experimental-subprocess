@@ -163,7 +163,7 @@ extension Subprocess {
 
     internal typealias CapturedIOs = (standardOutput: Data?, standardError: Data?)
 
-    private func capture(fileDescriptor: FileDescriptor, maxLength: Int) async throws -> Data{
+    private func capture(fileDescriptor: FileDescriptor, maxLength: Int) async throws -> Data {
         let chunkSize: Int = min(Subprocess.readBufferSize, maxLength)
         var buffer: [UInt8] = []
         while buffer.count <= maxLength {

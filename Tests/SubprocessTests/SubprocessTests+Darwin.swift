@@ -17,14 +17,14 @@ import SystemPackage
 
 // MARK: PlatformOptions Tests
 final class SubprocessDarwinTests : XCTestCase {
-    func testSubprocessPlatformOptionsAttributeConfigurator() async throws {
+    func testSubprocessPlatformOptionsProcessConfiguratorUpdateSpawnAttr() async throws {
         var platformOptions: Subprocess.PlatformOptions = .default
-        platformOptions.preSpawnAttributeConfigurator = {
+        platformOptions.preSpawnProcessConfigurator = { spawnAttr, _ in
             // Set POSIX_SPAWN_SETSID flag, which implies calls
             // to setsid
             var flags: Int16 = 0
-            posix_spawnattr_getflags(&$0, &flags)
-            posix_spawnattr_setflags(&$0, flags | Int16(POSIX_SPAWN_SETSID))
+            posix_spawnattr_getflags(&spawnAttr, &flags)
+            posix_spawnattr_setflags(&spawnAttr, flags | Int16(POSIX_SPAWN_SETSID))
         }
         // Check the proces ID (pid), pross group ID (pgid), and
         // controling terminal's process group ID (tpgid)
@@ -36,10 +36,10 @@ final class SubprocessDarwinTests : XCTestCase {
         try assertNewSessionCreated(with: psResult)
     }
 
-    func testSubprocessPlatformOptionsFileAttributeConfigurator() async throws {
+    func testSubprocessPlatformOptionsProcessConfiguratorUpdateFileAction() async throws {
         let intendedWorkingDir = FileManager.default.temporaryDirectory.path()
         var platformOptions: Subprocess.PlatformOptions = .default
-        platformOptions.preSpawnFileAttributeConfigurator = { fileAttr in
+        platformOptions.preSpawnProcessConfigurator = { _, fileAttr in
             // Change the working directory
             intendedWorkingDir.withCString { path in
                 _ = posix_spawn_file_actions_addchdir_np(&fileAttr, path)

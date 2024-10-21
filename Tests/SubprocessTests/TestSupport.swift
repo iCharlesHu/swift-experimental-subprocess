@@ -9,10 +9,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(WinSDK)
+import WinSDK
+#endif
 
 import SystemPackage
-import FoundationEssentials
+@testable import FoundationEssentials
 import class Foundation.Bundle
+import struct Foundation.URL
 
 typealias Data = FoundationEssentials.Data
 typealias URL = FoundationEssentials.URL
@@ -25,7 +29,7 @@ internal var prideAndPrejudice: FilePath {
         forResource: "PrideAndPrejudice",
         withExtension: "txt",
         subdirectory: "Resources"
-    )!.path()
+    )!._fileSystemPath
     return FilePath(path)
 }
 
@@ -34,12 +38,45 @@ internal var getgroupsSwift: FilePath {
         forResource: "getgroups",
         withExtension: "swift",
         subdirectory: "Resources"
-    )!.path()
+    )!._fileSystemPath
     return FilePath(path)
 }
 
-internal func randomString(length: Int) -> String {
-    let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+internal var windowsTester: FilePath {
+    var path = Bundle.module.url(
+        forResource: "windows-tester",
+        withExtension: "ps1",
+        subdirectory: "Resources"
+    )!._fileSystemPath
+    return FilePath(path)
+}
+
+extension Foundation.URL {
+    var _fileSystemPath: String {
+#if canImport(WinSDK)
+        // Hack to remove leading slash
+        var path = FoundationEssentials.URL(
+            string: self.absoluteString
+        )!.fileSystemPath
+        if path.hasPrefix("/") {
+            path.removeFirst()
+        }
+        return path
+#else
+        return FoundationEssentials.URL(
+            string: self.absoluteString
+        )!.fileSystemPath
+#endif
+    }
+}
+
+internal func randomString(length: Int, lettersOnly: Bool = false) -> String {
+    let letters: String
+    if lettersOnly {
+        letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    } else {
+        letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    }
     return String((0..<length).map{ _ in letters.randomElement()! })
 }
 

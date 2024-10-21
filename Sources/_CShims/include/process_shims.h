@@ -55,6 +55,7 @@ int _was_process_exited(int status);
 int _get_exit_code(int status);
 int _was_process_signaled(int status);
 int _get_signal_code(int status);
+int _was_process_suspended(int status);
 
 #if TARGET_OS_LINUX
 int _shims_snprintf(

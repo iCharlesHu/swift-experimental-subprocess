@@ -11,6 +11,7 @@
 
 #if canImport(Darwin) || canImport(Glibc)
 
+import _CShims
 import XCTest
 import FoundationEssentials
 @testable import SwiftExperimentalSubprocess
@@ -630,6 +631,64 @@ extension SubprocessUnixTests {
             platformOptions: platformOptions
         )
         try assertNewSessionCreated(with: psResult)
+    }
+}
+
+// MARK: - Misc
+extension SubprocessUnixTests {
+    func testRunDetached() async throws {
+        let (readFd, writeFd) = try FileDescriptor.pipe()
+        let pid = try Subprocess.runDetached(
+            .at("/bin/bash"),
+            arguments: ["-c", "echo $$"],
+            output: writeFd
+        )
+        var status: Int32 = 0
+        waitpid(pid.value, &status, 0)
+        XCTAssertTrue(_was_process_exited(status) > 0)
+        let data = try await readFd.read(upToLength: 1024)
+        let resultPID = try XCTUnwrap(
+            String(data: Data(data), encoding: .utf8)
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual("\(pid.value)", resultPID)
+        try readFd.close()
+        try writeFd.close()
+    }
+
+    func testTerminateProcess() async throws {
+        let stuckResult = try await Subprocess.run(
+            // This will intentionally hang
+            .at("/bin/cat")
+        ) { subprocess in
+            // Make sure we can send signals to terminate the process
+            try subprocess.sendSignal(.terminate, toProcessGroup: false)
+        }
+        guard case .unhandledException(let exception) = stuckResult.terminationStatus else {
+            XCTFail("Wrong termination status repored")
+            return
+        }
+        XCTAssertEqual(exception, Subprocess.Signal.terminate.rawValue)
+    }
+
+    func testSuspendResumeProcess() async throws {
+        _ = try await Subprocess.run(
+            // This will intentionally hang
+            .at("/bin/cat")
+        ) { subprocess in
+            // First suspend the procss
+            try subprocess.sendSignal(.suspend, toProcessGroup: false)
+            var suspendedStatus: Int32 = 0
+            waitpid(subprocess.processIdentifier.value, &suspendedStatus, WNOHANG | WUNTRACED)
+            XCTAssertTrue(_was_process_suspended(suspendedStatus) > 0)
+            // Now resume the process
+            try subprocess.sendSignal(.resume, toProcessGroup: false)
+            var resumedStatus: Int32 = 0
+            let rc = waitpid(subprocess.processIdentifier.value, &resumedStatus, WNOHANG | WUNTRACED)
+            XCTAssertTrue(_was_process_suspended(resumedStatus) == 0)
+
+            // Now kill the process
+            try subprocess.sendSignal(.terminate, toProcessGroup: false)
+        }
     }
 }
 

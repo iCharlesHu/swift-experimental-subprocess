@@ -156,11 +156,8 @@ extension Subprocess.Configuration {
             }
         }
         // Run additional config
-        if let spawnConfig = self.platformOptions.preSpawnAttributeConfigurator {
-            try spawnConfig(&spawnAttributes)
-        }
-        if let fileAttributeConfig = self.platformOptions.preSpawnFileAttributeConfigurator {
-            try fileAttributeConfig(&fileActions)
+        if let spawnConfig = self.platformOptions.preSpawnProcessConfigurator {
+            try spawnConfig(&spawnAttributes, &fileActions)
         }
         // Spawn
         var pid: pid_t = 0
@@ -212,8 +209,12 @@ extension Subprocess {
         // i.e. Detach from the terminal.
         public var createSession: Bool = false
         public var launchRequirementData: Data? = nil
-        public var preSpawnAttributeConfigurator: (@Sendable (inout posix_spawnattr_t?) throws -> Void)?
-        public var preSpawnFileAttributeConfigurator: (@Sendable (inout posix_spawn_file_actions_t?) throws -> Void)?
+        public var preSpawnProcessConfigurator: (
+            @Sendable (
+                inout posix_spawnattr_t?,
+                inout posix_spawn_file_actions_t?
+            ) throws -> Void
+        )? = nil
 
         public init(
             qualityOfService: QualityOfService,

@@ -37,6 +37,7 @@ let package = Package(
         .testTarget(
             name: "SwiftExperimentalSubprocessTests",
             dependencies: [
+                "_CShims",
                 "SwiftExperimentalSubprocess",
                 .product(name: "FoundationEssentials", package: "swift-foundation"),
                 .product(name: "SystemPackage", package: "swift-system"),

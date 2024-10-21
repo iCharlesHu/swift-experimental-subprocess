@@ -29,6 +29,7 @@ import Glibc
 internal import _CShims
 #endif
 
+import Dispatch
 import SystemPackage
 
 // MARK: - Signals
@@ -307,6 +308,47 @@ extension FileDescriptor {
 
     internal var platformDescriptor: Subprocess.PlatformFileDescriptor {
         return self
+    }
+
+    internal func read(upToLength maxLength: Int) async throws -> [UInt8] {
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchIO.read(
+                fromFileDescriptor: self.rawValue,
+                maxLength: maxLength,
+                runningHandlerOn: .main
+            ) { data, error in
+                guard error == 0 else {
+                    continuation.resume(
+                        throwing: POSIXError(
+                            .init(rawValue: error) ?? .ENODEV)
+                    )
+                    return
+                }
+                continuation.resume(returning: Array(data))
+            }
+        }
+    }
+
+    internal func write<S: Sequence>(_ data: S) async throws where S.Element == UInt8 {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) -> Void in
+            let dispatchData: DispatchData = Array(data).withUnsafeBytes {
+                return DispatchData(bytes: $0)
+            }
+            DispatchIO.write(
+                toFileDescriptor: self.rawValue,
+                data: dispatchData,
+                runningHandlerOn: .main
+            ) { _, error in
+                guard error == 0 else {
+                    continuation.resume(
+                        throwing: POSIXError(
+                            .init(rawValue: error) ?? .ENODEV)
+                    )
+                    return
+                }
+                continuation.resume()
+            }
+        }
     }
 }
 

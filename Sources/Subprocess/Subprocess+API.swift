@@ -82,7 +82,9 @@ extension Subprocess {
                 }
                 var capturedIOs: CapturedIOs!
                 while let result = try await group.next() {
-                    capturedIOs = result
+                    if result != nil {
+                        capturedIOs = result
+                    }
                 }
                 return (
                     processIdentifier: subprocess.processIdentifier,
@@ -274,6 +276,58 @@ extension Subprocess {
         _ body: (@Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await configuration.run(output: output, error: error, body)
+    }
+}
+
+// MARK: - Detached
+extension Subprocess {
+    public static func runDetached(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = .default,
+        input: FileDescriptor? = nil,
+        output: FileDescriptor? = nil,
+        error: FileDescriptor? = nil
+    ) throws -> ProcessIdentifier {
+        // Create input
+        let executionInput: ExecutionInput
+        let executionOutput: ExecutionOutput
+        let executionError: ExecutionOutput
+        if let inputFd = input {
+            executionInput = .init(storage: .fileDescriptor(inputFd, false))
+        } else {
+            let devnull: FileDescriptor = try .openDevNull(withAcessMode: .readOnly)
+            executionInput = .init(storage: .noInput(devnull))
+        }
+        if let outputFd = output {
+            executionOutput = .init(storage: .fileDescriptor(outputFd, false))
+        } else {
+            let devnull: FileDescriptor = try .openDevNull(withAcessMode: .writeOnly)
+            executionOutput = .init(storage: .discarded(devnull))
+        }
+        if let errorFd = error {
+            executionError = .init(
+                storage: .fileDescriptor(errorFd, false)
+            )
+        } else {
+            let devnull: FileDescriptor = try .openDevNull(withAcessMode: .writeOnly)
+            executionError = .init(storage: .discarded(devnull))
+        }
+        // Spawn!
+        let config: Configuration = Configuration(
+            executable: executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions
+        )
+        return try config.spawn(
+            withInput: executionInput,
+            output: executionOutput,
+            error: executionError
+        ).processIdentifier
     }
 }
 

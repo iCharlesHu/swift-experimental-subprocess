@@ -11,11 +11,6 @@
 
 @preconcurrency import SystemPackage
 
-#if FOUNDATION_FRAMEWORK
-@_implementationOnly import _FoundationCShims
-#else
-package import _CShims
-#endif
 
 #if canImport(Darwin)
 import Darwin
@@ -378,6 +373,12 @@ extension Subprocess {
             self.executablePathOverride = nil
         }
 
+        public init(_ array: [String]) {
+            self.storage = array.map { .string($0) }
+            self.executablePathOverride = nil
+        }
+
+#if !os(Windows) // Windows does NOT support arg0 override
         public init(executablePathOverride: String?, remainingValues: [String]) {
             self.storage = remainingValues.map { .string($0) }
             if let executablePathOverride = executablePathOverride {
@@ -387,7 +388,6 @@ extension Subprocess {
             }
         }
 
-#if !os(Windows)
         // Windows Arguments must be valida UTF16 String
         public init(executablePathOverride: Data?, remainingValues: [Data]) {
             self.storage = remainingValues.map { .rawBytes($0.toArray()) }
@@ -396,6 +396,11 @@ extension Subprocess {
             } else {
                 self.executablePathOverride = nil
             }
+        }
+
+        public init(_ array: [Data]) {
+            self.storage = array.map { .rawBytes($0.toArray()) }
+            self.executablePathOverride = nil
         }
 #endif
     }
