@@ -79,7 +79,7 @@ extension Subprocess {
             return .init(method: .fileDescriptor(fd, closeAfterProcessSpawned))
         }
 
-        public static func collect(limit: Int) -> Self {
+        public static func collect(upTo limit: Int) -> Self {
             return .init(method: .collected(limit))
         }
 

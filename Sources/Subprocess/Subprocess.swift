@@ -69,7 +69,6 @@ public struct Subprocess: Sendable {
 
 // MARK: - StandardInputWriter
 extension Subprocess {
-    @_nonSendable
     public struct StandardInputWriter {
 
         private let input: ExecutionInput
@@ -104,6 +103,13 @@ extension Subprocess {
         }
     }
 }
+
+@available(macOS, unavailable)
+@available(iOS, unavailable)
+@available(tvOS, unavailable)
+@available(watchOS, unavailable)
+@available(*, unavailable)
+extension Subprocess.StandardInputWriter : Sendable {}
 
 // MARK: - Result
 extension Subprocess {

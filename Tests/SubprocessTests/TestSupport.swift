@@ -33,6 +33,15 @@ internal var prideAndPrejudice: FilePath {
     return FilePath(path)
 }
 
+internal var theMysteriousIsland: FilePath {
+    let path = Bundle.module.url(
+        forResource: "TheMysteriousIsland",
+        withExtension: "txt",
+        subdirectory: "Resources"
+    )!._fileSystemPath
+    return FilePath(path)
+}
+
 internal var getgroupsSwift: FilePath {
     let path = Bundle.module.url(
         forResource: "getgroups",

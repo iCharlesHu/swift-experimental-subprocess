@@ -173,7 +173,7 @@ extension Subprocess {
         internal func run<R>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
-            _ body: @Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R
+            _ body: sending @escaping (Subprocess, StandardInputWriter) async throws -> R
         ) async throws -> ExecutionResult<R> {
             let (readFd, writeFd) = try FileDescriptor.pipe()
             let executionInput: ExecutionInput = .init(storage: .customWrite(readFd, writeFd))
@@ -249,7 +249,7 @@ extension Subprocess {
             input: InputMethod,
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
-            _ body: (@Sendable @escaping (Subprocess) async throws -> R)
+            _ body: (sending @escaping (Subprocess) async throws -> R)
         ) async throws -> ExecutionResult<R> {
             let executionInput = try input.createExecutionInput()
             let executionOutput = try output.createExecutionOutput()
@@ -497,15 +497,6 @@ extension Subprocess {
                 return exitCode == 0
             case .unhandledException(_):
                 return false
-            }
-        }
-
-        public var isUnhandledException: Bool {
-            switch self {
-            case .exited(_):
-                return false
-            case .unhandledException(_):
-                return true
             }
         }
     }

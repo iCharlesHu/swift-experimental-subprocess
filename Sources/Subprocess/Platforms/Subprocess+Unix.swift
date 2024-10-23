@@ -54,7 +54,7 @@ extension Subprocess {
         public static var windowSizeChange: Self { .init(rawValue: SIGWINCH) }
     }
 
-    public func sendSignal(_ signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool) throws {
+    public func send(_ signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool) throws {
         let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
         guard kill(pid, signal.rawValue) == 0 else {
             throw POSIXError(.init(rawValue: errno)!)
@@ -63,7 +63,7 @@ extension Subprocess {
 
     internal func tryTerminate() -> Error? {
         do {
-            try self.sendSignal(.kill, toProcessGroup: true)
+            try self.send(.kill, toProcessGroup: true)
         } catch {
             guard let posixError: POSIXError = error as? POSIXError else {
                 return error
@@ -183,9 +183,9 @@ extension Subprocess.Arguments {
 // MARK: - ProcessIdentifier
 extension Subprocess {
     public struct ProcessIdentifier: Sendable, Hashable {
-        let value: pid_t
+        public let value: pid_t
 
-        internal init(value: pid_t) {
+        public init(value: pid_t) {
             self.value = value
         }
     }

@@ -14,7 +14,7 @@
     - Switched `AsyncBytes` to be backed by `DispatchIO`.
     - Introduced `resolveExecutablePath(withEnvironment:)` to enable explicit lookup of the executable path.
     - Added a new option, `closeWhenDone`, to automatically close the file descriptors passed in via `.readFrom` and friends.
-    - Introduced a new parameter, `shouldSendToProcessGroup`, in the `sendSignal` function to control whether the signal should be sent to the process or the process group.
+    - Introduced a new parameter, `shouldSendToProcessGroup`, in the `send()` function to control whether the signal should be sent to the process or the process group.
     - Introduced a section on "Future Directions."
 * **v3**: Minor updates:
     - Added a section describing `Task Cancellation`
@@ -58,7 +58,7 @@
     - Windows Changes:
         - Removed `Arguments` first argument override and non-string support from Windows because Windows does not support either.
         - Introduced `PlatformOptions` for Windows.
-        - Replaced `Subprocess.sendSignal` with
+        - Replaced `Subprocess.send()` with
             - `Subprocess.terminate(withExitCode:)`
             - `Subprocess.suspend()`
             - `Subprocess.resume()`
@@ -67,7 +67,7 @@
 
 ## Introduction
 
-As Swift establishes itself as a general-purpose language for both compiled and scripting use cases, one persistent pain point for developers is process creation. The existing Foundation API for spawning a process, `NSTask`, originated in Objective-C. It was subsequently renamed to `Process` in Swift. As the language has continued to evolve, `Process` has not kept up. It lacks support for `async/await`, makes extensive use of completion handlers, and uses Objective-C exceptions to indicate developer error. This proposal introduces a new type called `Subprocess`, which addresses the ergonomic shortcomings of `Process` and enhances the experience of using Swift for scripting.
+As Swift establishes itself as a general-purpose language for both compiled and scripting use cases, one persistent pain point for developers is process creation. The existing Foundation API for spawning a process, `NSTask`, originated in Objective-C. It was subsequently renamed to `Process` in Swift. As the language has continued to evolve, `Process` has not kept up. It lacks support for `async/await`, makes extensive use of completion handlers, and uses Objective-C exceptions to indicate developer error. This proposal introduces a new type called `Subprocess`, which addresses the ergonomic shortcomings of `Process` and enhances the experience of using Swift for scripting and other areas such as server-side development.
 
 ## Motivation
 
@@ -361,32 +361,32 @@ public struct Subprocess: Sendable {
     public var standardError: some AsyncSequence<UInt8, any Error> { get }
 }
 
-#if canImport(Glibc) || canImport(Dawrin)
+#if canImport(Glibc) || canImport(Darwin)
 extension Subprocess {
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct ProcessIdentifier: Sendable, Hashable {
-        let value: pid_t
+        public let value: pid_t
 
         public init(value: pid_t)
     }
 }
-#elseif canImport(Windows)
+#elseif canImport(WinSDK)
 extension Subprocess {
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct ProcessIdentifier: Sendable, Hashable {
-        let processID: DWORD
-        let threadID: DWORD
+        public let processID: DWORD
+        public let threadID: DWORD
 
         public init(processID: DWORD, threadID: DWORD)
     }
 }
-#endif // canImport(Windows)
+#endif // canImport(WinSDK)
 ```
 
 In addition to the managed `run` family of methods, `Subprocess` also supports an unmanaged `runDetached` method that simply spawns the executable and returns its process identifier without awaiting for it to complete. This mode is particularly useful in scripting scenarios where the subprocess being launched requires outlasting the parent process. This setup is essential for programs that function as “trampolines” (e.g., JVM Launcher) to spawn other processes.
@@ -416,7 +416,7 @@ extension Subprocess {
 
 ### Signals (macOS and Linux)
 
-`Subprocess` uses `struct Subprocess.Signal` to represent the signal that could be sent via `sendSignal()` on Unix systems (macOS and Linux). Developers could either initialize `Signal` directly using the raw signal value or use one of the common values defined as static property.
+`Subprocess` uses `struct Subprocess.Signal` to represent the signal that could be sent via `send()` on Unix systems (macOS and Linux). Developers could either initialize `Signal` directly using the raw signal value or use one of the common values defined as static property.
 
 ```swift
 #if canImport(Glibc) || canImport(Darwin)
@@ -449,7 +449,7 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public func sendSignal(_ signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool) throws
+    public func send(_ signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool) throws
 }
 #endif // canImport(Glibc) || canImport(Darwin)
 ```
@@ -490,7 +490,6 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    @_nonSendable
     public struct StandardInputWriter {
         public func write<S>(_ sequence: S) async throws where S : Sequence, S.Element == UInt8
         public func write<S>(_ sequence: S) async throws where S : Sequence, S.Element == CChar
@@ -501,6 +500,13 @@ extension Subprocess {
         public func finish() async throws
     }
 }
+
+@available(macOS, unavailable)
+@available(iOS, unavailable)
+@available(tvOS, unavailable)
+@available(watchOS, unavailable)
+@available(*, unavailable)
+extension Subprocess.StandardInputWriter : Sendable {}
 ```
 
 
@@ -545,7 +551,7 @@ Beyond the configurable parameters exposed by these static run methods, `Subproc
 For Darwin, we propose the following `PlatformOptions`:
 
 ```swift
-#if canImport(Dawrin)
+#if canImport(Darwin)
 extension Subprocess {
     /// The collection of Darwin specific configurations
     @available(FoundationPreview 0.4, *)
@@ -701,17 +707,17 @@ extension Subprocess {
             public var domain: String?
         }
 
-        public enum ConsoleBehavior: Sendable {
-            case createNew
-            case detatch
-            case inherit
+        public struct ConsoleBehavior: Sendable {
+            public static let createNew: Self
+            public static let detatch: Self
+            public static let inherit: Self
         }
 
-        public enum WindowStyle: Sendable {
-            case normal
-            case hidden
-            case maximized
-            case minimized
+        public struct WindowStyle: Sendable {
+            public static let normal: Self
+            public static let hidden: Self
+            public static let maximized: Self
+            public static let minimized: Self
         }
 
         // Sets user info when starting the process. If this
@@ -807,7 +813,7 @@ let exe = try await Subprocess.run(.at("/some/executable"), input: sequence)
 - `.discard`: Specifies that the child process's output should be discarded, effectively written to `/dev/null`.
 - `.writeTo`: Specifies that the child process should write its output to a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterProcessSpawned` is set to `true`.
 
-`CollectedOutMethod` adds one more option to non-closure-based `run` methods that return a `CollectedResult`: `.collect` and its variation `.collect(limit:)`. This option specifies that `Subprocess` should collect the output as `Data`. Since the output of a child process could be arbitrarily large, `Subprocess` imposes a limit on how many bytes it will collect. By default, this limit is 16kb (when specifying `.collect`). Developers can override this limit by specifying `.collect(limit: newLimit)`:
+`CollectedOutMethod` adds one more option to non-closure-based `run` methods that return a `CollectedResult`: `.collect` and its variation `.collect(upTo:)`. This option specifies that `Subprocess` should collect the output as `Data`. Since the output of a child process could be arbitrarily large, `Subprocess` imposes a limit on how many bytes it will collect. By default, this limit is 16kb (when specifying `.collect`). Developers can override this limit by specifying `.collect(upTo: newLimit)`:
 
 ```swift
 extension Subprocess {
@@ -857,7 +863,7 @@ print("ls output: \(String(data: ls.standardOutput, encoding: .utf8)!)")
 // Increase the default buffer limit to 256kb
 let curl = try await Subprocess.run(
     .named("curl"),
-    output: .collect(limit: 256 * 1024)
+    output: .collect(upTo: 256 * 1024)
 )
 print("curl output: \(String(data: curl.standardOutput, encoding: .utf8)!)")
 
@@ -1098,7 +1104,6 @@ extension Subprocess {
 
         // A process is terminated successfully when it exited 0
         public var isSuccess: Bool
-        public var isUnhandledException: Bool
     }
 }
 ```

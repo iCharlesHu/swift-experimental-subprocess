@@ -245,14 +245,14 @@ extension SubprocessUnixTests {
     func testInputFileDescriptor() async throws {
         // Make sure we can read long text from standard input
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let text: FileDescriptor = try .open(
-            prideAndPrejudice, .readOnly)
+            theMysteriousIsland, .readOnly)
         let cat = try await Subprocess.run(
             .named("cat"),
             input: .readFrom(text, closeAfterProcessSpawned: true),
-            output: .collect(limit: 1024 * 1024)
+            output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(cat.terminationStatus.isSuccess)
         // Make sure we read all bytes
@@ -262,12 +262,12 @@ extension SubprocessUnixTests {
     func testInputSequence() async throws {
         // Make sure we can read long text as Sequence
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
             input: expected,
-            output: .collect(limit: 1024 * 1024)
+            output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.standardOutput, expected)
@@ -275,9 +275,9 @@ extension SubprocessUnixTests {
 
     func testInputAsyncSequence() async throws {
         // Maeks ure we can read long text as AsyncSequence
-        let fd: FileDescriptor = try .open(prideAndPrejudice, .readOnly)
+        let fd: FileDescriptor = try .open(theMysteriousIsland, .readOnly)
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let channel = DispatchIO(type: .stream, fileDescriptor: fd.rawValue, queue: .main) { error in
             try? fd.close()
@@ -298,7 +298,7 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
             input: stream,
-            output: .collect(limit: 1024 * 1024)
+            output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.standardOutput, expected)
@@ -306,7 +306,7 @@ extension SubprocessUnixTests {
 
     func testInputSequenceCustomExecutionBody() async throws {
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let result = try await Subprocess.run(
             .at("/bin/cat"),
@@ -321,9 +321,9 @@ extension SubprocessUnixTests {
 
     func testInputAsyncSequenceCustomExecutionBody() async throws {
         // Maeks ure we can read long text as AsyncSequence
-        let fd: FileDescriptor = try .open(prideAndPrejudice, .readOnly)
+        let fd: FileDescriptor = try .open(theMysteriousIsland, .readOnly)
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let channel = DispatchIO(type: .stream, fileDescriptor: fd.rawValue, queue: .main) { error in
             try? fd.close()
@@ -385,7 +385,7 @@ extension SubprocessUnixTests {
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
-            output: .collect(limit: 2)
+            output: .collect(upTo: 2)
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
@@ -524,11 +524,11 @@ extension SubprocessUnixTests {
     func testRedirectedOutputRedirectToSequence() async throws {
         // Maeks ure we can read long text redirected to AsyncSequence
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            arguments: [prideAndPrejudice.string],
+            arguments: [theMysteriousIsland.string],
             output: .redirectToSequence
         ) { subprocess in
             let collected = try await Array(subprocess.standardOutput)
@@ -661,7 +661,7 @@ extension SubprocessUnixTests {
             .at("/bin/cat")
         ) { subprocess in
             // Make sure we can send signals to terminate the process
-            try subprocess.sendSignal(.terminate, toProcessGroup: false)
+            try subprocess.send(.terminate, toProcessGroup: false)
         }
         guard case .unhandledException(let exception) = stuckResult.terminationStatus else {
             XCTFail("Wrong termination status repored")
@@ -676,18 +676,18 @@ extension SubprocessUnixTests {
             .at("/bin/cat")
         ) { subprocess in
             // First suspend the procss
-            try subprocess.sendSignal(.suspend, toProcessGroup: false)
+            try subprocess.send(.suspend, toProcessGroup: false)
             var suspendedStatus: Int32 = 0
             waitpid(subprocess.processIdentifier.value, &suspendedStatus, WNOHANG | WUNTRACED)
             XCTAssertTrue(_was_process_suspended(suspendedStatus) > 0)
             // Now resume the process
-            try subprocess.sendSignal(.resume, toProcessGroup: false)
+            try subprocess.send(.resume, toProcessGroup: false)
             var resumedStatus: Int32 = 0
             let rc = waitpid(subprocess.processIdentifier.value, &resumedStatus, WNOHANG | WUNTRACED)
             XCTAssertTrue(_was_process_suspended(resumedStatus) == 0)
 
             // Now kill the process
-            try subprocess.sendSignal(.terminate, toProcessGroup: false)
+            try subprocess.send(.terminate, toProcessGroup: false)
         }
     }
 }

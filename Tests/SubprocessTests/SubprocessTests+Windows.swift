@@ -221,10 +221,10 @@ extension SubprocessWindowsTests {
     func testInputFileDescriptor() async throws {
         // Make sure we can read long text from standard input
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let text: FileDescriptor = try .open(
-            prideAndPrejudice, .readOnly
+            theMysteriousIsland, .readOnly
         )
 
         let catResult = try await Subprocess.run(
@@ -234,17 +234,13 @@ extension SubprocessWindowsTests {
                 "findstr x*"
             ],
             input: .readFrom(text, closeAfterProcessSpawned: true),
-            output: .collect(limit: 1024 * 1024)
+            output: .collect(upTo: 2048 * 1024)
         )
 
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // Make sure we read all bytes
-        // Here instead of calling
-        // `String(data:encoding:).trimmingCharacters` on the
-        // entirety of Pride and Prejudice, let's just manually
-        // drop the last 2 character which are `\r\n`
         XCTAssertEqual(
-            catResult.standardOutput[0 ..< catResult.standardOutput.count - 2],
+            catResult.standardOutput,
             expected
         )
     }
@@ -261,15 +257,11 @@ extension SubprocessWindowsTests {
                 "findstr x*"
             ],
             input: expected,
-            output: .collect(limit: 1024 * 1024),
+            output: .collect(upTo: 2048 * 1024),
             error: .discard
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // Make sure we read all bytes
-        // Here instead of calling
-        // `String(data:encoding:).trimmingCharacters` on the
-        // entirety of Pride and Prejudice, let's just manually
-        // drop the last 3 character which are `\r\n`
         XCTAssertEqual(
             catResult.standardOutput,
             expected
@@ -279,9 +271,9 @@ extension SubprocessWindowsTests {
     func testInputAsyncSequence() async throws {
         let chunkSize = 4096
         // Maeks ure we can read long text as AsyncSequence
-        let fd: FileDescriptor = try .open(prideAndPrejudice, .readOnly)
+        let fd: FileDescriptor = try .open(theMysteriousIsland, .readOnly)
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let stream: AsyncStream<UInt8> = AsyncStream { continuation in
             DispatchQueue.global().async {
@@ -295,18 +287,18 @@ extension SubprocessWindowsTests {
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
             input: stream,
-            output: .collect(limit: 1024 * 1024)
+            output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(
-            catResult.standardOutput[0 ..< catResult.standardOutput.count - 2],
+            catResult.standardOutput,
             expected
         )
     }
 
     func testInputSequenceCustomExecutionBody() async throws {
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let result = try await Subprocess.run(
             self.cmdExe,
@@ -314,10 +306,7 @@ extension SubprocessWindowsTests {
             input: expected,
             output: .redirectToSequence
         ) { execution in
-            var output = try await Array(execution.standardOutput)
-            // Remove `\n\r`
-            output.removeLast(2)
-            return output
+            return try await Array(execution.standardOutput)
         }
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(result.value, [UInt8](expected))
@@ -325,9 +314,9 @@ extension SubprocessWindowsTests {
 
     func testInputAsyncSequenceCustomExecutionBody() async throws {
         // Maeks ure we can read long text as AsyncSequence
-        let fd: FileDescriptor = try .open(prideAndPrejudice, .readOnly)
+        let fd: FileDescriptor = try .open(theMysteriousIsland, .readOnly)
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let stream: AsyncStream<UInt8> = AsyncStream { continuation in
             DispatchQueue.global().async {
@@ -342,10 +331,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "findstr x*"],
             input: stream
         ) { execution in
-            var output = try await Array(execution.standardOutput)
-            // Remove `\n\r`
-            output.removeLast(2)
-            return output
+            return try await Array(execution.standardOutput)
         }
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(result.value, [UInt8](expected))
@@ -373,7 +359,7 @@ extension SubprocessWindowsTests {
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo \(expected)"],
-            output: .collect(limit: 2)
+            output: .collect(upTo: 2)
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
@@ -522,11 +508,11 @@ extension SubprocessWindowsTests {
     func testRedirectedOutputRedirectToSequence() async throws {
         // Maeks ure we can read long text redirected to AsyncSequence
         let expected: Data = try Data(
-            contentsOf: URL(filePath: prideAndPrejudice.string)
+            contentsOf: URL(filePath: theMysteriousIsland.string)
         )
         let catResult = try await Subprocess.run(
             self.cmdExe,
-            arguments: ["/c", "type \(prideAndPrejudice.string)"],
+            arguments: ["/c", "type \(theMysteriousIsland.string)"],
             output: .redirectToSequence
         ) { subprocess in
             let collected = try await Array(subprocess.standardOutput)

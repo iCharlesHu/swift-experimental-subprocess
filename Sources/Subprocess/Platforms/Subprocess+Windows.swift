@@ -259,26 +259,51 @@ extension Subprocess {
             public var domain: String?
         }
 
-        public enum ConsoleBehavior: Sendable {
-            case createNew
-            case detatch
-            case inherit
+        public struct ConsoleBehavior: Sendable {
+            internal enum Storage: Sendable {
+                case createNew
+                case detatch
+                case inherit
+            }
+
+            internal let storage: Storage
+
+            private init(_ storage: Storage) {
+                self.storage = storage
+            }
+
+            public static let createNew: Self = .init(.createNew)
+            public static let detatch: Self = .init(.detatch)
+            public static let inherit: Self = .init(.inherit)
         }
 
-        public enum WindowStyle: Sendable {
-            case normal
-            case hidden
-            case maximized
-            case minimized
+        public struct WindowStyle: Sendable {
+            internal enum Storage: Sendable {
+                case normal
+                case hidden
+                case maximized
+                case minimized
+            }
 
-            var platformStyle: WORD {
-                switch self {
+            internal let storage: Storage
+
+            internal var platformStyle: WORD {
+                switch self.storage {
                 case .hidden: return WORD(SW_HIDE)
                 case .maximized: return WORD(SW_SHOWMAXIMIZED)
                 case .minimized: return WORD(SW_SHOWMINIMIZED)
                 default: return WORD(SW_SHOWNORMAL)
                 }
             }
+
+            private init(_ storage: Storage) {
+                self.storage = storage
+            }
+
+            public static let normal: Self = .init(.normal)
+            public static let hidden: Self = .init(.hidden)
+            public static let maximized: Self = .init(.maximized)
+            public static let minimized: Self = .init(.minimized)
         }
 
         // Sets user info when starting the process
@@ -538,8 +563,8 @@ extension Subprocess.Environment {
 // MARK: - ProcessIdentifier
 extension Subprocess {
     public struct ProcessIdentifier: Sendable, Hashable {
-        let processID: DWORD
-        let threadID: DWORD
+        public let processID: DWORD
+        public let threadID: DWORD
 
         internal init(
             processID: DWORD,
@@ -620,7 +645,7 @@ extension Subprocess.Configuration {
 
     private func generateCreateProcessFlag() -> DWORD {
         var flags = CREATE_UNICODE_ENVIRONMENT
-        switch self.platformOptions.consoleBehavior {
+        switch self.platformOptions.consoleBehavior.storage {
         case .createNew:
             flags |= CREATE_NEW_CONSOLE
         case .detatch:
@@ -643,7 +668,7 @@ extension Subprocess.Configuration {
         info.cb = DWORD(MemoryLayout<STARTUPINFOW>.size)
         info.dwFlags |= DWORD(STARTF_USESTDHANDLES)
 
-        if self.platformOptions.windowStyle != .normal {
+        if self.platformOptions.windowStyle.storage != .normal {
             info.wShowWindow = self.platformOptions.windowStyle.platformStyle
             info.dwFlags |= DWORD(STARTF_USESHOWWINDOW)
         }

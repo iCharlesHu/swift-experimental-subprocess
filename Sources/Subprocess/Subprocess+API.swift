@@ -160,7 +160,7 @@ extension Subprocess {
         input: InputMethod = .noInput,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess) async throws -> R)
+        _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await Configuration(
             executable: executable,
@@ -181,7 +181,7 @@ extension Subprocess {
         input: some Sequence<UInt8>,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess) async throws -> R)
+        _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await Configuration(
             executable: executable,
@@ -218,7 +218,7 @@ extension Subprocess {
         input: S,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess) async throws -> R)
+        _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> where S.Element == UInt8 {
         return try await Configuration(
             executable: executable,
@@ -254,7 +254,7 @@ extension Subprocess {
         platformOptions: PlatformOptions = .default,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R)
+        _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await Configuration(
             executable: executable,
@@ -273,7 +273,7 @@ extension Subprocess {
         using configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R)
+        _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await configuration.run(output: output, error: error, body)
     }
