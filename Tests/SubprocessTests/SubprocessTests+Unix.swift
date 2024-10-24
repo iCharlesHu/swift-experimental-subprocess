@@ -546,8 +546,8 @@ extension SubprocessUnixTests {
         guard getuid() == 0 else {
             throw XCTSkip("This test requires root privileges")
         }
-        let expectedUserID = Int.random(in: 1000 ... 2000)
-        var platformOptions: Subprocess.PlatformOptions = .default
+        let expectedUserID = uid_t(Int.random(in: 1000 ... 2000))
+        var platformOptions = Subprocess.PlatformOptions()
         platformOptions.userID = expectedUserID
         try await self.assertID(
             withArgument: "-u",
@@ -561,8 +561,8 @@ extension SubprocessUnixTests {
         guard getuid() == 0 else {
             throw XCTSkip("This test requires root privileges")
         }
-        let expectedGroupID = Int.random(in: 1000 ... 2000)
-        var platformOptions: Subprocess.PlatformOptions = .default
+        let expectedGroupID = gid_t(Int.random(in: 1000 ... 2000))
+        var platformOptions = Subprocess.PlatformOptions()
         platformOptions.groupID = expectedGroupID
         try await self.assertID(
             withArgument: "-g",
@@ -576,11 +576,11 @@ extension SubprocessUnixTests {
         guard getuid() == 0 else {
             throw XCTSkip("This test requires root privileges")
         }
-        var expectedGroups: Set<Int> = Set()
+        var expectedGroups: Set<gid_t> = Set()
         for _ in 0 ..< Int.random(in: 5 ... 10) {
-            expectedGroups.insert(Int.random(in: 1000 ... 2000))
+            expectedGroups.insert(gid_t(Int.random(in: 1000 ... 2000)))
         }
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions = Subprocess.PlatformOptions()
         platformOptions.supplementaryGroups = Array(expectedGroups)
         let idResult = try await Subprocess.run(
             .named("/usr/bin/swift"),
@@ -591,7 +591,7 @@ extension SubprocessUnixTests {
         let ids = try XCTUnwrap(
             String(data: idResult.standardOutput, encoding: .utf8)
         ).split(separator: ",")
-            .map { Int($0.trimmingCharacters(in: .whitespacesAndNewlines))! }
+            .map { gid_t($0.trimmingCharacters(in: .whitespacesAndNewlines))! }
         XCTAssertEqual(Set(ids), expectedGroups)
     }
 
@@ -600,7 +600,7 @@ extension SubprocessUnixTests {
             throw XCTSkip("This test requires root privileges")
         }
         let expectedPGID = Int.random(in: 1000 ... Int(pid_t.max))
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions = Subprocess.PlatformOptions()
         // Sets the process group ID to 0, which creates a new session
         platformOptions.processGroupID = 0
         let psResult = try await Subprocess.run(
@@ -621,7 +621,7 @@ extension SubprocessUnixTests {
 
     func testSubprocessPlatformOptionsCreateSession() async throws {
         // platformOptions.createSession implies calls to setsid
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions = Subprocess.PlatformOptions()
         platformOptions.createSession = true
         // Check the proces ID (pid), pross group ID (pgid), and
         // controling terminal's process group ID (tpgid)
@@ -669,27 +669,6 @@ extension SubprocessUnixTests {
         }
         XCTAssertEqual(exception, Subprocess.Signal.terminate.rawValue)
     }
-
-    func testSuspendResumeProcess() async throws {
-        _ = try await Subprocess.run(
-            // This will intentionally hang
-            .at("/bin/cat")
-        ) { subprocess in
-            // First suspend the procss
-            try subprocess.send(.suspend, toProcessGroup: false)
-            var suspendedStatus: Int32 = 0
-            waitpid(subprocess.processIdentifier.value, &suspendedStatus, WNOHANG | WUNTRACED)
-            XCTAssertTrue(_was_process_suspended(suspendedStatus) > 0)
-            // Now resume the process
-            try subprocess.send(.resume, toProcessGroup: false)
-            var resumedStatus: Int32 = 0
-            let rc = waitpid(subprocess.processIdentifier.value, &resumedStatus, WNOHANG | WUNTRACED)
-            XCTAssertTrue(_was_process_suspended(resumedStatus) == 0)
-
-            // Now kill the process
-            try subprocess.send(.terminate, toProcessGroup: false)
-        }
-    }
 }
 
 // MARK: - Utils
@@ -697,7 +676,7 @@ extension SubprocessUnixTests {
     private func assertID(
         withArgument argument: String,
         platformOptions: Subprocess.PlatformOptions,
-        isEqualTo expected: Int
+        isEqualTo expected: gid_t
     ) async throws {
         let idResult = try await Subprocess.run(
             .named("/usr/bin/id"),

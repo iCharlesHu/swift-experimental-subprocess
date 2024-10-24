@@ -46,7 +46,7 @@ extension Subprocess {
             arguments: Arguments = [],
             environment: Environment = .inherit,
             workingDirectory: FilePath? = nil,
-            platformOptions: PlatformOptions = .default
+            platformOptions: PlatformOptions = PlatformOptions()
         ) {
             self.executable = executable
             self.arguments = arguments

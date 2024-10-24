@@ -11,6 +11,7 @@
 
 #if canImport(Darwin)
 
+import _CShims
 import XCTest
 import SystemPackage
 @testable import SwiftExperimentalSubprocess
@@ -18,7 +19,7 @@ import SystemPackage
 // MARK: PlatformOptions Tests
 final class SubprocessDarwinTests : XCTestCase {
     func testSubprocessPlatformOptionsProcessConfiguratorUpdateSpawnAttr() async throws {
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions = Subprocess.PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = { spawnAttr, _ in
             // Set POSIX_SPAWN_SETSID flag, which implies calls
             // to setsid
@@ -38,7 +39,7 @@ final class SubprocessDarwinTests : XCTestCase {
 
     func testSubprocessPlatformOptionsProcessConfiguratorUpdateFileAction() async throws {
         let intendedWorkingDir = FileManager.default.temporaryDirectory.path()
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions = Subprocess.PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = { _, fileAttr in
             // Change the working directory
             intendedWorkingDir.withCString { path in
@@ -59,6 +60,27 @@ final class SubprocessDarwinTests : XCTestCase {
             expected = FilePath("/private").appending(expected.components)
         }
         XCTAssertEqual(FilePath(currentDir), expected)
+    }
+
+    func testSuspendResumeProcess() async throws {
+        _ = try await Subprocess.run(
+            // This will intentionally hang
+            .at("/bin/cat")
+        ) { subprocess in
+            // First suspend the procss
+            try subprocess.send(.suspend, toProcessGroup: false)
+            var suspendedStatus: Int32 = 0
+            waitpid(subprocess.processIdentifier.value, &suspendedStatus, WNOHANG | WUNTRACED)
+            XCTAssertTrue(_was_process_suspended(suspendedStatus) > 0)
+            // Now resume the process
+            try subprocess.send(.resume, toProcessGroup: false)
+            var resumedStatus: Int32 = 0
+            let rc = waitpid(subprocess.processIdentifier.value, &resumedStatus, WNOHANG | WUNTRACED)
+            XCTAssertTrue(_was_process_suspended(resumedStatus) == 0)
+
+            // Now kill the process
+            try subprocess.send(.terminate, toProcessGroup: false)
+        }
     }
 }
 

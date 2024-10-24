@@ -14,7 +14,7 @@
 import Glibc
 import SystemPackage
 import FoundationEssentials
-package import _CShims
+import _CShims
 
 // Linux specific implementations
 extension Subprocess.Configuration {
@@ -99,13 +99,13 @@ extension Subprocess.Configuration {
 extension Subprocess {
     public struct PlatformOptions: Sendable {
         // Set user ID for the subprocess
-        public var userID: Int? = nil
+        public var userID: uid_t? = nil
         // Set group ID for the subprocess
-        public var groupID: Int? = nil
+        public var groupID: gid_t? = nil
         // Set list of supplementary group IDs for the subprocess
-        public var supplementaryGroups: [Int]? = nil
+        public var supplementaryGroups: [gid_t]? = nil
         // Set process group ID for the subprocess
-        public var processGroupID: Int? = nil
+        public var processGroupID: pid_t? = nil
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
         public var createSession: Bool = false
@@ -114,29 +114,7 @@ extension Subprocess {
         // This callback *must not* capture any global variables
         public var preSpawnProcessConfigurator: (@convention(c) @Sendable () -> Void)? = nil
 
-        public init(
-            userID: Int?,
-            groupID: Int?,
-            supplementaryGroups: [Int]?,
-            processGroupID: Int?,
-            createSession: Bool
-        ) {
-            self.userID = userID
-            self.groupID = groupID
-            self.supplementaryGroups = supplementaryGroups
-            self.processGroupID = processGroupID
-            self.createSession = createSession
-        }
-
-        public static var `default`: Self {
-            return .init(
-                userID: nil,
-                groupID: nil,
-                supplementaryGroups: nil,
-                processGroupID: nil,
-                createSession: false
-            )
-        }
+        public init() {}
     }
 }
 

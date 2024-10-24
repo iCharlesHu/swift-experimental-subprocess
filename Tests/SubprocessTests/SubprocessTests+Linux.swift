@@ -20,7 +20,7 @@ final class SubprocessLinuxTests: XCTestCase {
         guard getuid() == 0 else {
             throw XCTSkip("This test requires root privileges")
         }
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions = Subprocess.PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = {
             setgid(4321)
         }
@@ -35,6 +35,52 @@ final class SubprocessLinuxTests: XCTestCase {
             id.trimmingCharacters(in: .whitespacesAndNewlines),
             "\(4321)"
         )
+    }
+
+    func testSuspendResumeProcess() async throws {
+        func isProcessSuspended(_ pid: pid_t) throws -> Bool {
+            let status = try Data(
+                contentsOf: URL(filePath: "/proc/\(pid)/status")
+            )
+            let statusString = try XCTUnwrap(
+                String(data: status, encoding: .utf8)
+            )
+            // Parse the status string
+            let stats = statusString.split(separator: "\n")
+            if let index = stats.firstIndex(
+                where: { $0.hasPrefix("State:") }
+            ) {
+                let processState = stats[index].split(
+                    separator: ":"
+                ).map {
+                    $0.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    )
+                }
+
+                return processState[1].hasPrefix("T")
+            }
+            return false
+        }
+
+        _ = try await Subprocess.run(
+            // This will intentionally hang
+            .at("/usr/bin/sleep"),
+            arguments: ["infinity"]
+        ) { subprocess in
+            // First suspend the procss
+            try subprocess.send(.suspend, toProcessGroup: false)
+            XCTAssertTrue(
+                try isProcessSuspended(subprocess.processIdentifier.value)
+            )
+            // Now resume the process
+            try subprocess.send(.resume, toProcessGroup: false)
+            XCTAssertFalse(
+                try isProcessSuspended(subprocess.processIdentifier.value)
+            )
+            // Now kill the process
+            try subprocess.send(.terminate, toProcessGroup: false)
+        }
     }
 }
 

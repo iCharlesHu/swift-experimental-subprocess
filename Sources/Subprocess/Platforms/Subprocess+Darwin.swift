@@ -24,7 +24,7 @@ import SystemPackage
 #if FOUNDATION_FRAMEWORK
 @_implementationOnly import _FoundationCShims
 #else
-internal import _CShims
+import _CShims
 #endif
 
 // Darwin specific implementation
@@ -198,13 +198,13 @@ extension Subprocess {
     public struct PlatformOptions: Sendable {
         public var qualityOfService: QualityOfService = .default
         // Set user ID for the subprocess
-        public var userID: Int? = nil
+        public var userID: uid_t? = nil
         // Set group ID for the subprocess
-        public var groupID: Int? = nil
+        public var groupID: gid_t? = nil
         // Set list of supplementary group IDs for the subprocess
-        public var supplementaryGroups: [Int]? = nil
+        public var supplementaryGroups: [gid_t]? = nil
         // Set process group ID for the subprocess
-        public var processGroupID: Int? = nil
+        public var processGroupID: pid_t? = nil
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
         public var createSession: Bool = false
@@ -216,35 +216,7 @@ extension Subprocess {
             ) throws -> Void
         )? = nil
 
-        public init(
-            qualityOfService: QualityOfService,
-            userID: Int?,
-            groupID: Int?,
-            supplementaryGroups: [Int]?,
-            processGroupID: Int?,
-            createSession: Bool,
-            launchRequirementData: Data?
-        ) {
-            self.qualityOfService = qualityOfService
-            self.userID = userID
-            self.groupID = groupID
-            self.supplementaryGroups = supplementaryGroups
-            self.createSession = createSession
-            self.processGroupID = processGroupID
-            self.launchRequirementData = launchRequirementData
-        }
-
-        public static var `default`: Self {
-            return .init(
-                qualityOfService: .default,
-                userID: nil,
-                groupID: nil,
-                supplementaryGroups: nil,
-                processGroupID: nil,
-                createSession: false,
-                launchRequirementData: nil
-            )
-        }
+        public init() {}
     }
 }
 

@@ -26,7 +26,7 @@ import Glibc
 #if FOUNDATION_FRAMEWORK
 @_implementationOnly import _FoundationCShims
 #else
-internal import _CShims
+import _CShims
 #endif
 
 import Dispatch
@@ -270,16 +270,16 @@ extension Subprocess.Configuration {
         var uidPtr: UnsafeMutablePointer<uid_t>? = nil
         if let userID = self.platformOptions.userID {
             uidPtr = .allocate(capacity: 1)
-            uidPtr?.pointee = uid_t(userID)
+            uidPtr?.pointee = userID
         }
         var gidPtr: UnsafeMutablePointer<gid_t>? = nil
         if let groupID = self.platformOptions.groupID {
             gidPtr = .allocate(capacity: 1)
-            gidPtr?.pointee = gid_t(groupID)
+            gidPtr?.pointee = groupID
         }
         var supplementaryGroups: [gid_t]?
         if let groupsValue = self.platformOptions.supplementaryGroups {
-            supplementaryGroups = groupsValue.map { gid_t($0) }
+            supplementaryGroups = groupsValue
         }
         return (
             executablePath: executablePath,
