@@ -27,7 +27,7 @@ import Foundation
 #endif
 
 extension Subprocess {
-    public struct Configuration: Sendable {
+    public struct Configuration: Sendable, Hashable {
 
         internal enum RunState<Result: Sendable>: Sendable {
             case workBody(Result)
@@ -320,24 +320,41 @@ extension Subprocess {
     }
 }
 
+extension Subprocess.Configuration : CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        return """
+Subprocess.Configuration(
+    executable: \(self.executable.description),
+    arguments: \(self.arguments.description),
+    environment: \(self.environment.description),
+    workingDirectory: \(self.workingDirectory),
+    platformOptions: \(self.platformOptions.description(withIndent: 1))
+)
+"""
+    }
+
+    public var debugDescription: String {
+        return """
+Subprocess.Configuration(
+    executable: \(self.executable.debugDescription),
+    arguments: \(self.arguments.debugDescription),
+    environment: \(self.environment.debugDescription),
+    workingDirectory: \(self.workingDirectory),
+    platformOptions: \(self.platformOptions.description(withIndent: 1))
+)
+"""
+    }
+}
+
 // MARK: - Executable
 extension Subprocess {
-    public struct Executable: Sendable, CustomStringConvertible, Hashable {
+    public struct Executable: Sendable, Hashable {
         internal enum Configuration: Sendable, Hashable {
             case executable(String)
             case path(FilePath)
         }
 
         internal let storage: Configuration
-
-        public var description: String {
-            switch storage {
-            case .executable(let executableName):
-                return executableName
-            case .path(let filePath):
-                return filePath.string
-            }
-        }
 
         private init(_config: Configuration) {
             self.storage = _config
@@ -360,9 +377,29 @@ extension Subprocess {
     }
 }
 
+extension Subprocess.Executable : CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        switch storage {
+        case .executable(let executableName):
+            return executableName
+        case .path(let filePath):
+            return filePath.string
+        }
+    }
+
+    public var debugDescription: String {
+        switch storage {
+        case .executable(let string):
+            return "executable(\(string))"
+        case .path(let filePath):
+            return "path(\(filePath.string))"
+        }
+    }
+}
+
 // MARK: - Arguments
 extension Subprocess {
-    public struct Arguments: Sendable, ExpressibleByArrayLiteral {
+    public struct Arguments: Sendable, ExpressibleByArrayLiteral, Hashable {
         public typealias ArrayLiteralElement = String
 
         internal let storage: [StringOrRawBytes]
@@ -406,10 +443,23 @@ extension Subprocess {
     }
 }
 
+extension Subprocess.Arguments : CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        var result: [String] = self.storage.map(\.description)
+
+        if let override = self.executablePathOverride {
+            result.insert("override\(override.description)", at: 0)
+        }
+        return result.description
+    }
+
+    public var debugDescription: String { return self.description }
+}
+
 // MARK: - Environment
 extension Subprocess {
-    public struct Environment: Sendable {
-        internal enum Configuration {
+    public struct Environment: Sendable, Hashable {
+        internal enum Configuration: Sendable, Hashable {
             case inherit([StringOrRawBytes : StringOrRawBytes])
             case custom([StringOrRawBytes : StringOrRawBytes])
         }
@@ -445,6 +495,21 @@ extension Subprocess {
     }
 }
 
+extension Subprocess.Environment : CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        switch self.config {
+        case .custom(let customDictionary):
+            return customDictionary.dictionaryDescription
+        case .inherit(let updateValue):
+            return "Inherting current environment with updates: \(updateValue.dictionaryDescription)"
+        }
+    }
+
+    public var debugDescription: String {
+        return self.description
+    }
+}
+
 fileprivate extension Dictionary where Key == String, Value == String {
     func wrapToStringOrRawBytes() -> [Subprocess.StringOrRawBytes : Subprocess.StringOrRawBytes] {
         var result = Dictionary<
@@ -471,6 +536,17 @@ fileprivate extension Dictionary where Key == Data, Value == Data {
     }
 }
 
+fileprivate extension Dictionary where Key == Subprocess.StringOrRawBytes, Value == Subprocess.StringOrRawBytes {
+    var dictionaryDescription: String {
+        var result = "[\n"
+        for (key, value) in self {
+            result += "\t\(key.description) : \(value.description),\n"
+        }
+        result += "]"
+        return result
+    }
+}
+
 fileprivate extension Data {
     func toArray<T>() -> [T] {
         return self.withUnsafeBytes { ptr in
@@ -481,6 +557,7 @@ fileprivate extension Data {
 
 // MARK: - TerminationStatus
 extension Subprocess {
+    @frozen
     public enum TerminationStatus: Sendable, Hashable, Codable {
         #if canImport(WinSDK)
         public typealias Code = DWORD
@@ -499,6 +576,21 @@ extension Subprocess {
                 return false
             }
         }
+    }
+}
+
+extension Subprocess.TerminationStatus : CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        switch self {
+        case .exited(let code):
+            return "exited(\(code))"
+        case .unhandledException(let code):
+            return "unhandledException(\(code))"
+        }
+    }
+
+    public var debugDescription: String {
+        return self.description
     }
 }
 
@@ -524,6 +616,15 @@ extension Subprocess {
                 return string
             case .rawBytes(let rawBytes):
                 return String(validatingUTF8: rawBytes)
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .string(let string):
+                return string
+            case .rawBytes(let bytes):
+                return bytes.description
             }
         }
 
@@ -586,6 +687,10 @@ extension Optional where Wrapped == String {
                 return try body($0)
             }
         }
+    }
+
+    var stringValue: String {
+        return self ?? "nil"
     }
 }
 

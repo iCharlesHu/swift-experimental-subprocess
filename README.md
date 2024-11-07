@@ -44,10 +44,14 @@
         - This option attempts to emulate Darwin’s `POSIX_SPAWN_CLOEXEC_DEFAULT` behavior. It is the default value on Darwin.
         - Unfortunately, `posix_spawn` does not support this flag natively, hence on Linux this behavior is opt-in, and we will fall back to a custom implementation of `fork/exec`.
 - **v5**: Platform-specific changes, `Subprocess.runDetached`, and others:
+    - Added `Hashable`, `CustomStringConvertable` and `CustomDebugStringConvertible` conformance to `Subprocess.Configuration` and friends
     - `Subprocess.Arguments`:
         - Add an array initializer to `Subprocess.Arguments`:
             - `public init(_ array: [String])`
             - `public init(_ array: [Data])`.
+    - `Subprocess.PlatformOptions` (all platforms):
+        - Changed from `.default` to using empty initializer `.init()`.
+        - Changed to prefer platform native types such as `gid_t` over `Int`.
     - Darwin Changes:
         - Updated `PlatformOptions.createProcessGroup` to `PlatformOptions.processGroupID`.
             - Also changed the public init.
@@ -226,7 +230,7 @@ extension Subprocess {
         input: InputMethod = .noInput,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess) async throws -> R)
+        _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
     public static func run<R>(
@@ -237,7 +241,7 @@ extension Subprocess {
         input: some Sequence<UInt8>,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess) async throws -> R)
+        _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
     public static func run<R, S: AsyncSequence>(
@@ -249,7 +253,7 @@ extension Subprocess {
         input: S,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess) async throws -> R)
+        _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> where S.Element == UInt8
 
     public static func run<R>(
@@ -260,14 +264,14 @@ extension Subprocess {
         platformOptions: PlatformOptions = .default,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R)
+        _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
     public static func run<R>(
         using configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (@Sendable @escaping (Subprocess, StandardInputWriter) async throws -> R)
+        _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R>
 }
 ```
@@ -367,7 +371,7 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct ProcessIdentifier: Sendable, Hashable {
+    public struct ProcessIdentifier: Sendable, Hashable, Codable {
         public let value: pid_t
 
         public init(value: pid_t)
@@ -379,7 +383,7 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct ProcessIdentifier: Sendable, Hashable {
+    public struct ProcessIdentifier: Sendable, Hashable, Codable {
         public let processID: DWORD
         public let threadID: DWORD
 
@@ -387,6 +391,8 @@ extension Subprocess {
     }
 }
 #endif // canImport(WinSDK)
+
+extension Subprocess.ProcessIdentifier : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
 
 In addition to the managed `run` family of methods, `Subprocess` also supports an unmanaged `runDetached` method that simply spawns the executable and returns its process identifier without awaiting for it to complete. This mode is particularly useful in scripting scenarios where the subprocess being launched requires outlasting the parent process. This setup is essential for programs that function as “trampolines” (e.g., JVM Launcher) to spawn other processes.
@@ -520,7 +526,7 @@ public extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct Configuration : Sendable {
+    public struct Configuration : Sendable, Hashable {
         // Configurable properties
         public var executable: Executable
         public var arguments: Arguments
@@ -537,6 +543,8 @@ public extension Subprocess {
         )
     }
 }
+
+extension Subprocess.Configuration : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
 
 **Note:**
@@ -558,16 +566,16 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct PlatformOptions: Sendable {
+    public struct PlatformOptions: Sendable, Hashable {
         public var qualityOfService: QualityOfService
         // Set user ID for the subprocess
-        public var userID: Int?
+        public var userID: uid_t?
         // Set group ID for the subprocess
-        public var groupID: Int?
+        public var groupID: gid_t?
         // Set list of supplementary group IDs for the subprocess
-        public var supplementaryGroups: [Int]?
+        public var supplementaryGroups: [gid_t]?
         // Set process group ID for the subprocess
-        public var processGroupID: Int? = nil
+        public var processGroupID: pid_t? = nil
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
         public var createSession: Bool
@@ -582,19 +590,11 @@ extension Subprocess {
             ) throws -> Void
         )? = nil
 
-        public init(
-            qualityOfService: QualityOfService,
-            userID: Int? = nil,
-            groupID: Int? = nil,
-            supplementaryGroups: [Int]?,
-            processGroupID: Int?,
-            createSession: Bool,
-            launchRequirementData: Data?
-        )
-
-        public static var `default`: Self
+        public init() {}
     }
 }
+
+extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {}
 #endif // canImport(Darwin)
 ```
 
@@ -637,15 +637,15 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct PlatformOptions: Sendable {
+    public struct PlatformOptions: Sendable, Hashable {
         // Set user ID for the subprocess
-        public var userID: Int?
+        public var userID: uid_t?
         // Set group ID for the subprocess
-        public var groupID: Int?
+        public var groupID: gid_t?
         // Set list of supplementary group IDs for the subprocess
-        public var supplementaryGroups: [Int]?
+        public var supplementaryGroups: [gid_t]?
         // Set process group ID for the subprocess
-        public var processGroupID: Int? = nil
+        public var processGroupID: pid_t? = nil
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
         public var createSession: Bool
@@ -660,21 +660,15 @@ extension Subprocess {
         // This callback is run after `fork` but before `exec`.
         // Use it to perform any custom process setup
         // This callback *must not* capture any global variables
-        public var preSpawnProcessConfigurator: (@convention(c) @Sendable () -> Void)? = nil
+        public var preSpawnProcessConfigurator: (
+            @convention(c) @Sendable () -> Void
+        )? = nil
 
-        public init(
-            qualityOfService: QualityOfService,
-            userID: Int? = nil,
-            groupID: Int? = nil,
-            supplementaryGroups: [Int]?,
-            processGroupID: Int?,
-            createSession: Bool,
-            closeAllUnknownFileDescriptors: Bool = false
-        )
-
-        public static var `default`: Self
+        public init() {}
     }
 }
+
+extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {}
 #endif // canImport(Glibc)
 ```
 
@@ -700,20 +694,20 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct PlatformOptions: Sendable {
-        public struct UserInfo: Sendable {
+    public struct PlatformOptions: Sendable, Hashable {
+        public struct UserCredentials: Sendable, Hashable {
             public var username: String
             public var password: String
             public var domain: String?
         }
 
-        public struct ConsoleBehavior: Sendable {
+        public struct ConsoleBehavior: Sendable, Hashable {
             public static let createNew: Self
             public static let detatch: Self
             public static let inherit: Self
         }
 
-        public struct WindowStyle: Sendable {
+        public struct WindowStyle: Sendable, Hashable {
             public static let normal: Self
             public static let hidden: Self
             public static let maximized: Self
@@ -723,7 +717,7 @@ extension Subprocess {
         // Sets user info when starting the process. If this
         // property is set, the Subprocess will be run
         // as the provided user
-        public var userInfo: UserInfo? = nil
+        public var userCredentials: UserCredentials? = nil
         // What's the console behavior of the new process,
         // default to inheriting the console from parent process
         public var consoleBehavior: ConsoleBehavior = .inherit
@@ -737,19 +731,18 @@ extension Subprocess {
         public var createProcessGroup: Bool = false
         // This callback is called before `CreateProcessW`. Use this callback to customize
         // `dwCreationFlags` and `lpStartupInfo` passsed to `CreateProcessW`.
-        public var preSpawnProcessConfigurator: (@Sendable (inout DWORD, inout STARTUPINFOW) throws -> Void)? = nil
+        public var preSpawnProcessConfigurator: (
+            @Sendable (
+                inout DWORD,
+                inout STARTUPINFOW
+            ) throws -> Void
+        )? = nil
 
-        public static var `default`: Self {
-            return .init(
-                userInfo: nil,
-                consoleBehavior: .inherit,
-                windowStyle: .normal,
-                createProcessGroup: false,
-                preSpawnProcessConfigurator: nil
-            )
-        }
+        public init() {}
     }
 }
+
+extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {}
 #endif // canImport(WinSDK)
 ```
 
@@ -899,13 +892,15 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct CollectedResult: Sendable, Hashable {
+    public struct CollectedResult: Sendable, Hashable, Codable {
         public let processIdentifier: ProcessIdentifier
         public let terminationStatus: TerminationStatus
         public let standardOutput: Data
         public let standardError: Data
     }
 }
+
+extension Subprocess.CollectedResult : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
 
 `Subprocess.ExecutionResult` is a simple wrapper around the generic result returned by the `run` closures with the corresponding `TerminationStatus` of the child process:
@@ -939,6 +934,18 @@ extension Subprocess.ExecutionResult : Hashable where T : Hashable {}
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
 extension Subprocess.ExecutionResult : Codable where T : Codable {}
+
+@available(FoundationPreview 0.4, *)
+@available(iOS, unavailable)
+@available(tvOS, unavailable)
+@available(watchOS, unavailable)
+extension Subprocess.ExecutionResult: CustomStringConvertible where T : CustomStringConvertible {}
+
+@available(FoundationPreview 0.4, *)
+@available(iOS, unavailable)
+@available(tvOS, unavailable)
+@available(watchOS, unavailable)
+extension Subprocess.ExecutionResult: CustomDebugStringConvertible where T : CustomDebugStringConvertible {}
 ```
 
 
@@ -962,6 +969,8 @@ extension Subprocess {
         public func resolveExecutablePath(in environment: Environment) -> FilePath?
     }
 }
+
+extension Subprocess.Executable : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
 
 
@@ -975,7 +984,7 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct Environment: Sendable {
+    public struct Environment: Sendable, Hashable {
         /// A copy of the current environment value of the launching process
         public static var inherit: Self { get }
         /// Update or insert the environment values of self with
@@ -998,6 +1007,8 @@ extension Subprocess {
 #endif // !os(Windows)
     }
 }
+
+extension Subprocess.Environment : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
 
 Developers have the option to:
@@ -1038,7 +1049,7 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct Arguments: Sendable, ExpressibleByArrayLiteral {
+    public struct Arguments: Sendable, ExpressibleByArrayLiteral, Hashable {
         public typealias ArrayLiteralElement = String
         /// Creates an Arguments object using the given literal values
         public init(arrayLiteral elements: ArrayLiteralElement...)
@@ -1060,6 +1071,8 @@ extension Subprocess {
 #endif // !os(Windows)
     }
 }
+
+extension Subprocess.Arguments : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
 
 Similar to `Environment`, `Arguments` also supports raw bytes in addition to `String` *on Unix like systems (macOS and Linux)*. Windows requires argument values passed to `CreateProcessW` to be valid String and therefore only supports the String variant.
@@ -1092,6 +1105,7 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
+    @frozen
     public enum TerminationStatus: Sendable, Hashable, Codable {
     #if canImport(WinSDK)
         public typealias Code = DWORD
@@ -1106,6 +1120,7 @@ extension Subprocess {
         public var isSuccess: Bool
     }
 }
+extension Subprocess.TerminationStatus : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
 
 

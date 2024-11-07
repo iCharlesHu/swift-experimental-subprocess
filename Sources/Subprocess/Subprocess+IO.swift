@@ -137,9 +137,10 @@ extension Subprocess {
 
 // MARK: - Execution IO
 extension Subprocess {
-    internal final class ExecutionInput: Sendable {
+    internal final class ExecutionInput: Sendable, Hashable {
+        
 
-        internal enum Storage: Sendable {
+        internal enum Storage: Sendable, Hashable {
             case noInput(FileDescriptor?)
             case customWrite(FileDescriptor?, FileDescriptor?)
             case fileDescriptor(FileDescriptor?, Bool)
@@ -238,6 +239,23 @@ extension Subprocess {
                 case .fileDescriptor(let fd, let closeWhenDone):
                     try fd?.close()
                     $0 = .fileDescriptor(nil, closeWhenDone)
+                }
+            }
+        }
+
+        public func hash(into hasher: inout Hasher) {
+            self.storage.withLock {
+                hasher.combine($0)
+            }
+        }
+
+        public static func == (
+            lhs: Subprocess.ExecutionInput,
+            rhs: Subprocess.ExecutionInput
+        ) -> Bool {
+            return lhs.storage.withLock { lhsStorage in
+                rhs.storage.withLock { rhsStorage in
+                    return lhsStorage == rhsStorage
                 }
             }
         }

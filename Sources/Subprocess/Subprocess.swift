@@ -111,6 +111,12 @@ extension Subprocess {
 @available(*, unavailable)
 extension Subprocess.StandardInputWriter : Sendable {}
 
+extension Subprocess.StandardInputWriter : TextOutputStream {
+    public mutating func write(_ string: String) {
+        
+    }
+}
+
 // MARK: - Result
 extension Subprocess {
     public struct ExecutionResult<T: Sendable>: Sendable {
@@ -123,7 +129,7 @@ extension Subprocess {
         }
     }
 
-    public struct CollectedResult: Sendable, Hashable {
+    public struct CollectedResult: Sendable, Hashable, Codable {
         public let processIdentifier: ProcessIdentifier
         public let terminationStatus: TerminationStatus
         private let _standardOutput: Data?
@@ -160,7 +166,53 @@ extension Subprocess.ExecutionResult: Hashable where T : Hashable {}
 
 extension Subprocess.ExecutionResult: Codable where T : Codable {}
 
-// MARK: Internal
+extension Subprocess.ExecutionResult: CustomStringConvertible where T : CustomStringConvertible {
+    public var description: String {
+        return """
+Subprocess.ExecutionResult(
+    terminationStatus: \(self.terminationStatus.description),
+    value: \(self.value.description)
+)
+"""
+    }
+}
+
+extension Subprocess.ExecutionResult: CustomDebugStringConvertible where T : CustomDebugStringConvertible {
+    public var debugDescription: String {
+        return """
+Subprocess.ExecutionResult(
+    terminationStatus: \(self.terminationStatus.debugDescription),
+    value: \(self.value.debugDescription)
+)
+"""
+    }
+}
+
+extension Subprocess.CollectedResult : CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        return """
+Subprocess.CollectedResult(
+    processIdentifier: \(self.processIdentifier.description),
+    terminationStatus: \(self.terminationStatus.description),
+    standardOutput: \(self._standardOutput?.description ?? "not captured"),
+    standardError: \(self._standardError?.description ?? "not captured")
+)
+"""
+    }
+
+    public var debugDescription: String {
+        return """
+Subprocess.CollectedResult(
+    processIdentifier: \(self.processIdentifier.debugDescription),
+    terminationStatus: \(self.terminationStatus.debugDescription),
+    standardOutput: \(self._standardOutput?.debugDescription ?? "not captured"),
+    standardError: \(self._standardError?.debugDescription ?? "not captured")
+)
+"""
+    }
+}
+
+// MARK: - Internal
 extension Subprocess {
     internal enum OutputCapturingState {
         case standardOutputCaptured(Data?)

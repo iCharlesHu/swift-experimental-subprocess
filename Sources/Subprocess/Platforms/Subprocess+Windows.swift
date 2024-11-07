@@ -25,12 +25,12 @@ extension Subprocess.Configuration {
     ) throws -> Subprocess {
         // Spawn differently depending on whether
         // we need to spawn as a user
-        if let userInfo = self.platformOptions.userInfo {
+        if let userCredentials = self.platformOptions.userCredentials {
             return try self.spawnAsUser(
                 withInput: input,
                 output: output,
                 error: error,
-                userInfo: userInfo
+                userCredentials: userCredentials
             )
         } else {
             return try self.spawnDirect(
@@ -142,7 +142,7 @@ extension Subprocess.Configuration {
         withInput input: Subprocess.ExecutionInput,
         output: Subprocess.ExecutionOutput,
         error: Subprocess.ExecutionOutput,
-        userInfo: Subprocess.PlatformOptions.UserInfo
+        userCredentials: Subprocess.PlatformOptions.UserCredentials
     ) throws -> Subprocess {
         let (
             applicationName,
@@ -162,13 +162,13 @@ extension Subprocess.Configuration {
             try configurator(&createProcessFlags, &startupInfo)
         }
         // Spawn (featuring pyamid!)
-        try userInfo.username.withCString(
+        try userCredentials.username.withCString(
             encodedAs: UTF16.self
         ) { usernameW in
-            try userInfo.password.withCString(
+            try userCredentials.password.withCString(
                 encodedAs: UTF16.self
             ) { passwordW in
-                try userInfo.domain.withOptionalCString(
+                try userCredentials.domain.withOptionalCString(
                     encodedAs: UTF16.self
                 ) { domainW in
                     try applicationName.withOptionalNTPathRepresentation { applicationNameW in
@@ -253,14 +253,14 @@ extension Subprocess.Configuration {
 // MARK: - Platform Specific Options
 extension Subprocess {
     public struct PlatformOptions: Sendable {
-        public struct UserInfo: Sendable {
+        public struct UserCredentials: Sendable, Hashable {
             public var username: String
             public var password: String
             public var domain: String?
         }
 
-        public struct ConsoleBehavior: Sendable {
-            internal enum Storage: Sendable {
+        public struct ConsoleBehavior: Sendable, Hashable {
+            internal enum Storage: Sendable, Hashable {
                 case createNew
                 case detatch
                 case inherit
@@ -277,8 +277,8 @@ extension Subprocess {
             public static let inherit: Self = .init(.inherit)
         }
 
-        public struct WindowStyle: Sendable {
-            internal enum Storage: Sendable {
+        public struct WindowStyle: Sendable, Hashable {
+            internal enum Storage: Sendable, Hashable {
                 case normal
                 case hidden
                 case maximized
@@ -306,8 +306,8 @@ extension Subprocess {
             public static let minimized: Self = .init(.minimized)
         }
 
-        // Sets user info when starting the process
-        public var userInfo: UserInfo? = nil
+        // Sets user credentials when starting the process as another user
+        public var userCredentials: UserCredentials? = nil
         // What's the console behavior of the new process,
         // default to inheriting the console from parent process
         public var consoleBehavior: ConsoleBehavior = .inherit
@@ -320,16 +320,68 @@ extension Subprocess {
         // is the same as the process identifier.
         public var createProcessGroup: Bool = false
 
-        public var preSpawnProcessConfigurator: (@Sendable (inout DWORD, inout STARTUPINFOW) throws -> Void)? = nil
+        public var preSpawnProcessConfigurator: (
+            @Sendable (
+                inout DWORD,
+                inout STARTUPINFOW
+            ) throws -> Void
+        )? = nil
 
-        public static var `default`: Self {
-            return .init(
-                userInfo: nil,
-                consoleBehavior: .inherit,
-                windowStyle: .normal,
-                createProcessGroup: false
-            )
+        public init() {}
+    }
+}
+
+extension Subprocess.PlatformOptions: Hashable {
+    public static func == (
+        lhs: Subprocess.PlatformOptions,
+        rhs: Subprocess.PlatformOptions
+    ) -> Bool {
+        // Since we can't compare closure equality,
+        // as long as preSpawnProcessConfigurator is set
+        // always returns false so that `PlatformOptions`
+        // with it set will never equal to each other
+        if lhs.preSpawnProcessConfigurator != nil || rhs.preSpawnProcessConfigurator != nil {
+            return false
         }
+        return lhs.userCredentials == rhs.userCredentials && lhs.consoleBehavior == rhs.consoleBehavior && lhs.windowStyle == rhs.windowStyle &&
+            lhs.createProcessGroup == rhs.createProcessGroup
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(userCredentials)
+        hasher.combine(consoleBehavior)
+        hasher.combine(windowStyle)
+        hasher.combine(createProcessGroup)
+        // Since we can't really hash closures,
+        // use an UUID such that as long as
+        // `preSpawnProcessConfigurator` is set, it will
+        // never equal to other PlatformOptions
+        if self.preSpawnProcessConfigurator != nil {
+            hasher.combine(UUID())
+        }
+    }
+}
+
+extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
+    internal func description(withIndent indent: Int) -> String {
+        let indent = String(repeating: " ", count: indent * 4)
+        return """
+PlatformOptions(
+\(indent)    userCredentials: \(String(describing: self.userCredentials)),
+\(indent)    consoleBehavior: \(String(describing: self.consoleBehavior)),
+\(indent)    windowStyle: \(String(describing: self.windowStyle)),
+\(indent)    createProcessGroup: \(self.createProcessGroup),
+\(indent)    preSpawnProcessConfigurator: \(self.preSpawnProcessConfigurator == nil ? "not set" : "set")
+\(indent))
+"""
+    }
+
+    public var description: String {
+        return self.description(withIndent: 0)
+    }
+
+    public var debugDescription: String {
+        return self.description(withIndent: 0)
     }
 }
 
@@ -562,7 +614,7 @@ extension Subprocess.Environment {
 
 // MARK: - ProcessIdentifier
 extension Subprocess {
-    public struct ProcessIdentifier: Sendable, Hashable {
+    public struct ProcessIdentifier: Sendable, Hashable, Codable {
         public let processID: DWORD
         public let threadID: DWORD
 
@@ -573,6 +625,16 @@ extension Subprocess {
             self.processID = processID
             self.threadID = threadID
         }
+    }
+}
+
+extension Subprocess.ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        return "(processID: \(self.processID), threadID: \(self.threadID))"
+    }
+
+    public var debugDescription: String {
+        return description
     }
 }
 

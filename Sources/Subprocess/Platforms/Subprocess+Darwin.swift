@@ -220,6 +220,69 @@ extension Subprocess {
     }
 }
 
+extension Subprocess.PlatformOptions: Hashable {
+    public static func == (lhs: Subprocess.PlatformOptions, rhs: Subprocess.PlatformOptions) -> Bool {
+        // Since we can't compare closure equality,
+        // as long as preSpawnProcessConfigurator is set
+        // always returns false so that `PlatformOptions`
+        // with it set will never equal to each other
+        if lhs.preSpawnProcessConfigurator != nil ||
+            rhs.preSpawnProcessConfigurator != nil {
+            return false
+        }
+        return lhs.qualityOfService == rhs.qualityOfService &&
+            lhs.userID == rhs.userID &&
+            lhs.groupID == rhs.groupID &&
+            lhs.supplementaryGroups == rhs.supplementaryGroups &&
+            lhs.processGroupID == rhs.processGroupID &&
+            lhs.createSession == rhs.createSession &&
+            lhs.launchRequirementData == rhs.launchRequirementData
+    }
+    
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.qualityOfService)
+        hasher.combine(self.userID)
+        hasher.combine(self.groupID)
+        hasher.combine(self.supplementaryGroups)
+        hasher.combine(self.processGroupID)
+        hasher.combine(self.createSession)
+        hasher.combine(self.launchRequirementData)
+        // Since we can't really hash closures,
+        // use an UUID such that as long as
+        // `preSpawnProcessConfigurator` is set, it will
+        // never equal to other PlatformOptions
+        if self.preSpawnProcessConfigurator != nil {
+            hasher.combine(UUID())
+        }
+    }
+}
+
+extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
+    internal func description(withIndent indent: Int) -> String {
+        let indent = String(repeating: " ", count: indent * 4)
+        return """
+PlatformOptions(
+\(indent)    qualityOfService: \(self.qualityOfService),
+\(indent)    userID: \(String(describing: userID)),
+\(indent)    groupID: \(String(describing: groupID)),
+\(indent)    supplementaryGroups: \(String(describing: supplementaryGroups)),
+\(indent)    processGroupID: \(String(describing: processGroupID)),
+\(indent)    createSession: \(createSession),
+\(indent)    launchRequirementData: \(String(describing: launchRequirementData)),
+\(indent)    preSpawnProcessConfigurator: \(self.preSpawnProcessConfigurator == nil ? "not set" : "set")
+\(indent))
+"""
+    }
+
+    public var description: String {
+        return self.description(withIndent: 0)
+    }
+
+    public var debugDescription: String {
+        return self.description(withIndent: 0)
+    }
+}
+
 // MARK: - Process Monitoring
 @Sendable
 internal func monitorProcessTermination(

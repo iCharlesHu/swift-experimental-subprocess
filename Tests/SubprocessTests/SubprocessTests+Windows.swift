@@ -535,8 +535,8 @@ extension SubprocessWindowsTests {
             // has access to it
             let workingDirectory = FilePath("C:\\Users\\Public")
 
-            var platformOptions: Subprocess.PlatformOptions = .default
-            platformOptions.userInfo = .init(
+            var platformOptions: Subprocess.PlatformOptions = .init()
+            platformOptions.userCredentials = .init(
                 username: username,
                 password: password,
                 domain: nil
@@ -583,7 +583,7 @@ extension SubprocessWindowsTests {
             sameConsoleValue
         )
         // Now launch a procss with new console
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions: Subprocess.PlatformOptions = .init()
         platformOptions.consoleBehavior = .createNew
         let differentConsoleResult = try await Subprocess.run(
             .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
@@ -605,7 +605,7 @@ extension SubprocessWindowsTests {
     }
 
     func testPlatformOptionsDetachedProcess() async throws {
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions: Subprocess.PlatformOptions = .init()
         platformOptions.consoleBehavior = .detatch
         let detachConsoleResult = try await Subprocess.run(
             .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
@@ -625,7 +625,7 @@ extension SubprocessWindowsTests {
 
     func testPlatformOptionsPreSpawnConfigurator() async throws {
         // Manually set the create new console flag
-        var platformOptions: Subprocess.PlatformOptions = .default
+        var platformOptions: Subprocess.PlatformOptions = .init()
         platformOptions.preSpawnProcessConfigurator = { creationFlags, _ in
             creationFlags |= DWORD(CREATE_NEW_CONSOLE)
         }

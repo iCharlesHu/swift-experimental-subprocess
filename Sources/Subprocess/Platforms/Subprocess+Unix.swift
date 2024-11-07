@@ -182,13 +182,19 @@ extension Subprocess.Arguments {
 
 // MARK: - ProcessIdentifier
 extension Subprocess {
-    public struct ProcessIdentifier: Sendable, Hashable {
+    public struct ProcessIdentifier: Sendable, Hashable, Codable {
         public let value: pid_t
 
         public init(value: pid_t) {
             self.value = value
         }
     }
+}
+
+extension Subprocess.ProcessIdentifier : CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String { "\(self.value)" }
+
+    public var debugDescription: String { "\(self.value)" }
 }
 
 // MARK: -  Executable Searching
