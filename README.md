@@ -185,6 +185,20 @@ We propose a new `struct Subprocess`. Developers primarily interact with `Subpro
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
 extension Subprocess {
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
     public static func run(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -196,6 +210,20 @@ extension Subprocess {
         error: CollectedOutputMethod = .collect
     ) async throws -> CollectedResult
 
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
     public static func run(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -207,6 +235,20 @@ extension Subprocess {
         error: CollectedOutputMethod = .collect
     ) async throws -> CollectedResult
 
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
     public static func run<S: AsyncSequence>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -221,6 +263,21 @@ extension Subprocess {
 
 // MARK: - Custom Execution Body
 extension Subprocess {
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a `ExecutableResult` type containing the return value
+    ///     of the closure.
     public static func run<R>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -233,6 +290,21 @@ extension Subprocess {
         _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a `ExecutableResult` type containing the return value
+    ///     of the closure.
     public static func run<R>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -244,6 +316,21 @@ extension Subprocess {
         _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a `ExecutableResult` type containing the return value
+    ///     of the closure.
     public static func run<R, S: AsyncSequence>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -256,6 +343,20 @@ extension Subprocess {
         _ body: (sending @escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> where S.Element == UInt8
 
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and write to its
+    /// standard input via `StandardInputWriter`
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns the custom result type returned by the closure
     public static func run<R>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -267,6 +368,16 @@ extension Subprocess {
         _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
+    /// Run a executable with given parameters specified by a
+    /// `Subprocess.Configuration`
+    /// - Parameters:
+    ///   - configuration: The `Subprocess` configuration to run.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom configuration body to manually control
+    ///       the running process and write to its standard input.
+    /// - Returns a ExecutableResult type containing the return value
+    ///     of the closure.
     public static func run<R>(
         using configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
@@ -371,7 +482,9 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
+    /// A platform independent identifier for a subprocess.
     public struct ProcessIdentifier: Sendable, Hashable, Codable {
+        /// The platform specific process identifier value
         public let value: pid_t
 
         public init(value: pid_t)
@@ -379,12 +492,15 @@ extension Subprocess {
 }
 #elseif canImport(WinSDK)
 extension Subprocess {
+    /// A platform independent identifier for a subprocess.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct ProcessIdentifier: Sendable, Hashable, Codable {
+        /// Windows specifc process identifier value
         public let processID: DWORD
+        /// Windows specific thread identifier associated with process
         public let threadID: DWORD
 
         public init(processID: DWORD, threadID: DWORD)
@@ -405,7 +521,23 @@ Since `Subprocess` is unable to monitor the state of the subprocess or capture a
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
 extension Subprocess {
-    // Spawns the specified executable and returns its ProcessIdentifier immediately without monitoring the state of the Subprocess.
+    /// Run a executable with given parameters and return its process
+    /// identifier immediately without monitoring the state of the
+    /// subprocess nor waiting until it exits.
+    ///
+    /// This method is useful for launching subprocesses that outlive their
+    /// parents (for example, daemons and trampolines).
+    ///
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory for the process.
+    ///   - platformOptions: The platform specific options to use for the process.
+    ///   - input: A file descriptor to bind to the subprocess' standard input.
+    ///   - output: A file descriptor to bind to the subprocess' standard output.
+    ///   - error: A file descriptor to bind to the subprocess' standard error.
+    /// - Returns: the process identifier for the subprocess.
     public static func runDetached(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -427,30 +559,70 @@ extension Subprocess {
 ```swift
 #if canImport(Glibc) || canImport(Darwin)
 extension Subprocess {
+    /// Signals are standardized messages sent to a running program
+    /// to trigger specific behavior, such as quitting or error handling.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct Signal : Hashable, Sendable {
+        /// The underlying platform specific value for the signal
         public let rawValue: Int32
 
+        /// The `.interrupt` signal is sent to a process by its
+        /// controlling terminal when a user wishes to interrupt
+        /// the process.
         public static var interrupt: Self { get }
+        /// The `.terminate` signal is sent to a process to request its
+        /// termination. Unlike the `.kill` signal, it can be caught
+        /// and interpreted or ignored by the process. This allows
+        /// the process to perform nice termination releasing resources
+        /// and saving state if appropriate. `.interrupt` is nearly
+        /// identical to `.terminate`.
         public static var terminate: Self { get }
+        /// The `.suspend` signal instructs the operating system
+        /// to stop a process for later resumption.
         public static var suspend: Self { get }
+        /// The `resume` signal instructs the operating system to
+        /// continue (restart) a process previously paused by the
+        /// `.suspend` signal.
         public static var resume: Self { get }
+        /// The `.kill` signal is sent to a process to cause it to
+        /// terminate immediately (kill). In contrast to `.terminate`
+        /// and `.interrupt`, this signal cannot be caught or ignored,
+        /// and the receiving process cannot perform any
+        /// clean-up upon receiving this signal.
         public static var kill: Self { get }
+        /// The `.terminalClosed` signal is sent to a process when
+        /// its controlling terminal is closed. In modern systems,
+        /// this signal usually means that the controlling pseudo
+        /// or virtual terminal has been closed.
         public static var terminalClosed: Self { get }
+        /// The `.quit` signal is sent to a process by its controlling
+        /// terminal when the user requests that the process quit
+        /// and perform a core dump.
         public static var quit: Self { get }
+        /// The `.userDefinedOne` signal is sent to a process to indicate
+        /// user-defined conditions.
         public static var userDefinedOne: Self { get }
+        /// The `.userDefinedTwo` signal is sent to a process to indicate
+        /// user-defined conditions.
         public static var userDefinedTwo: Self { get }
+        /// The `.alarm` signal is sent to a process when the corresponding
+        /// time limit is reached.
         public static var alarm: Self { get }
+        /// The `.windowSizeChange` signal is sent to a process when
+        /// its controlling terminal changes its size (a window change).
         public static var windowSizeChange: Self { get }
 
         public init(rawValue: Int32)
     }
 
-    // If `shouldSendToProcessGroup` is `true`, the signal will be send to the entire process
-    // group instead of the current process.
+    /// Send the given signal to the child process.
+    /// - Parameters:
+    ///   - signal: The signal to send.
+    ///   - shouldSendToProcessGroup: Whether this signal should be sent to
+    ///     the entire process group.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
@@ -473,11 +645,12 @@ The Windows does not have a centralized signaling system similar to Unix. Instea
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
 extension Subprocess {
-    /// Terminates the current Subprocess with a given exit code
+    /// Terminate the current subprocess with the given exit code
+    /// - Parameter exitCode: The exit code to use for the subprocess.
     public func terminate(withExitCode exitCode: DWORD) throws
-    /// Suspend the current Suprocess
+    /// Suspend the current subprocess
     public func suspend() throws
-    /// Resume the current Subprocess after suspend
+    /// Resume the current subprocess after suspension
     public func resume() throws
 }
 #endif
@@ -492,17 +665,26 @@ extension Subprocess {
 
 ```swift
 extension Subprocess {
+    /// A writer that writes to the standard input of the subprocess.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct StandardInputWriter {
+        /// Write a sequence of UInt8 to the standard input of the subprocess.
+        /// - Parameter sequence: The sequence of bytes to write.
         public func write<S>(_ sequence: S) async throws where S : Sequence, S.Element == UInt8
+        /// Write a sequence of CChar to the standard input of the subprocess.
+        /// - Parameter sequence: The sequence of bytes to write.
         public func write<S>(_ sequence: S) async throws where S : Sequence, S.Element == CChar
 
+        /// Write a AsyncSequence of CChar to the standard input of the subprocess.
+        /// - Parameter sequence: The sequence of bytes to write.
         public func write<S: AsyncSequence>(_ asyncSequence: S) async throws where S.Element == CChar
+        /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
+        /// - Parameter sequence: The sequence of bytes to write.
         public func write<S: AsyncSequence>(_ asyncSequence: S) async throws where S.Element == UInt8
-
+        /// Signal all writes are finished
         public func finish() async throws
     }
 }
@@ -522,16 +704,23 @@ In contrast to the monolithic `Process`, `Subprocess` utilizes various types to 
 
 ```swift
 public extension Subprocess {
+    /// A collection of configurations parameters to use when
+    /// spawning a subprocess.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct Configuration : Sendable, Hashable {
-        // Configurable properties
+        /// The executable to run.
         public var executable: Executable
+        /// The arguments to pass to the executable.
         public var arguments: Arguments
+        /// The environment to use when running the executable.
         public var environment: Environment
+        /// The working directory to use when running the executable.
         public var workingDirectory: FilePath
+        /// The platform specifc options to use when
+        /// running the subprocess.
         public var platformOptions: PlatformOptions
 
         public init(
@@ -561,7 +750,8 @@ For Darwin, we propose the following `PlatformOptions`:
 ```swift
 #if canImport(Darwin)
 extension Subprocess {
-    /// The collection of Darwin specific configurations
+    /// The collection of platform-specific settings
+    /// to configure the subprocess when running
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
@@ -580,9 +770,18 @@ extension Subprocess {
         // i.e. Detach from the terminal.
         public var createSession: Bool
         public var launchRequirementData: Data?
-        // A custom closure to configure the underlying `posix_spawnattr_t`
-        // and `posix_spawn_file_actions_t` before they are passed
-        // to `posix_spawn`
+        /// A closure to configure platform-specific
+        /// spawning constructs. This closure enables direct
+        /// configuration or override of underlying platform-specific
+        /// spawn settings that `Subprocess` utilizes internally,
+        /// in cases where Subprocess does not provide higher-level
+        /// APIs for such modifications.
+        ///
+        /// On Darwin, Subprocess uses `posix_spawn()` as the
+        /// underlying spawning mechanism. This closure allows
+        /// modification of the `posix_spawnattr_t` spawn attribute
+        /// and file actions `posix_spawn_file_actions_t` before
+        /// they are sent to `posix_spawn()`.
         public var preSpawnProcessConfigurator: (
             @Sendable (
                 inout posix_spawnattr_t?,
@@ -657,9 +856,17 @@ extension Subprocess {
         // because `POSIX_SPAWN_CLOEXEC_DEFAULT` is a darwin-specific
         // extension and we can only emulate it on Linux.
         public var closeAllUnknownFileDescriptors: Bool
-        // This callback is run after `fork` but before `exec`.
-        // Use it to perform any custom process setup
-        // This callback *must not* capture any global variables
+        /// A closure to configure platform-specific
+        /// spawning constructs. This closure enables direct
+        /// configuration or override of underlying platform-specific
+        /// spawn settings that `Subprocess` utilizes internally,
+        /// in cases where Subprocess does not provide higher-level
+        /// APIs for such modifications.
+        ///
+        /// On Linux, Subprocess uses `fork/exec` as the
+        /// underlying spawning mechanism. This closure is called
+        /// after `fork()` but before `exec()`. You may use it to
+        /// call any necessary process setup functions.
         public var preSpawnProcessConfigurator: (
             @convention(c) @Sendable () -> Void
         )? = nil
@@ -690,47 +897,79 @@ On Windows, we propose the following `PlatformOptions`:
 ```swift
 #if canImport(WinSDK)
 extension Subprocess {
+    /// The collection of platform-specific settings
+    /// to configure the subprocess when running
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct PlatformOptions: Sendable, Hashable {
         public struct UserCredentials: Sendable, Hashable {
+            // The name of the user. This is the name
+            // of the user account to run as.
             public var username: String
+            // The clear-text password for the account.
             public var password: String
+            // The name of the domain or server whose account database
+            // contains the account.
             public var domain: String?
         }
 
+        /// `ConsoleBehavior` defines how should the console appear
+        /// when spawning a new process
         public struct ConsoleBehavior: Sendable, Hashable {
+            /// The subprocess has a new console, instead of
+            /// inheriting its parent's console (the default).
             public static let createNew: Self
+            /// For console processes, the new process does not
+            /// inherit its parent's console (the default).
+            /// The new process can call the `AllocConsole`
+            /// function at a later time to create a console.
             public static let detatch: Self
+            /// The subprocess inherits its parent's console.
             public static let inherit: Self
         }
 
+        /// `ConsoleBehavior` defines how should the window appear
+        /// when spawning a new process
         public struct WindowStyle: Sendable, Hashable {
+            /// Activates and displays a window of normal size
             public static let normal: Self
+            /// Does not activate a new window
             public static let hidden: Self
+            /// Activates the window and displays it as a maximized window.
             public static let maximized: Self
+            /// Activates the window and displays it as a minimized window.
             public static let minimized: Self
         }
 
-        // Sets user info when starting the process. If this
-        // property is set, the Subprocess will be run
-        // as the provided user
+        /// Sets user info when starting the process. If this
+        /// property is set, the Subprocess will be run
+        /// as the provided user
         public var userCredentials: UserCredentials? = nil
-        // What's the console behavior of the new process,
-        // default to inheriting the console from parent process
+        /// What's the console behavior of the new process,
+        /// default to inheriting the console from parent process
         public var consoleBehavior: ConsoleBehavior = .inherit
-        // Window state to use when the process is started
+        /// Window state to use when the process is started
         public var windowStyle: WindowStyle = .normal
-        // Whether to create a new process group for the new
-        // process. The process group includes all processes
-        // that are descendants of this root process.
-        // The process identifier of the new process group
-        // is the same as the process identifier.
+        /// Whether to create a new process group for the new
+        /// process. The process group includes all processes
+        /// that are descendants of this root process.
+        /// The process identifier of the new process group
+        /// is the same as the process identifier.
         public var createProcessGroup: Bool = false
-        // This callback is called before `CreateProcessW`. Use this callback to customize
-        // `dwCreationFlags` and `lpStartupInfo` passsed to `CreateProcessW`.
+        /// A closure to configure platform-specific
+        /// spawning constructs. This closure enables direct
+        /// configuration or override of underlying platform-specific
+        /// spawn settings that `Subprocess` utilizes internally,
+        /// in cases where Subprocess does not provide higher-level
+        /// APIs for such modifications.
+        ///
+        /// On Windows, Subprocess uses `CreateProcessW()` as the
+        /// underlying spawning mechanism. This closure allows
+        /// modification of the `dwCreationFlags` creation flag
+        /// and startup info `STARTUPINFOW` before
+        /// they are sent to `CreateProcessW()`.
         public var preSpawnProcessConfigurator: (
             @Sendable (
                 inout DWORD,
@@ -773,12 +1012,21 @@ In addition to supporting the direct passing of `Sequence<UInt8>` and `AsyncSequ
 
 ```swift
 extension Subprocess {
+    /// `InputMethod` defines how should the standard input
+    /// of the subprocess receive inputs.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct InputMethod: Sendable, Hashable {
+        /// Subprocess should read no input. This option is equivalent
+        /// to bind the stanard input to `/dev/null`.
         public static var noInput: Self
+        /// Subprocess should read input from a given file descriptor.
+        /// - Parameters:
+        ///   - fd: the file descriptor to read from
+        ///   - closeAfterProcessSpawned: whether the file descriptor
+        ///     should be automatically closed after subprocess is spawned.
         public static func readFrom(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self
     }
 }
@@ -810,19 +1058,30 @@ let exe = try await Subprocess.run(.at("/some/executable"), input: sequence)
 
 ```swift
 extension Subprocess {
+    /// `CollectedOutputMethod` defines how should Subprocess collect
+    /// output from child process' standard output and standard error
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct CollectedOutputMethod: Sendable, Hashable {
-        // Discard the output (write to /dev/null)
+        /// Subprocess shold dicard the child process output.
+        /// This option is equivalent to binding the child process
+        /// output to `/dev/null`.
         public static var discard: Self
-        // Collect the output as Data with the default 16kb limit
+        /// Subprocess should collect the child process output
+        /// as `Data` with the default limit of 128kb
         public static var collect: Self
-        // Write the output directly to a FileDescriptor
+        /// Subprocess should collect the child process output
+        /// as `Data` with the given limit.
+        public static func collect(upTo limit: Int) -> Self
+        /// Subprocess should write the child process output
+        /// to the file descriptor specified.
+        /// - Parameters:
+        ///   - fd: the file descriptor to write to
+        ///   - closeAfterProcessSpawned: whether to close the
+        ///     file descriptor once the process is spawned.
         public static func writeTo(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self
-        // Collect the output as Data with modified limit (in bytes).
-        public static func collect(limit: Int) -> Self
     }
 }
 ```
@@ -831,16 +1090,27 @@ On the other hand, `RedirectedOutputMethod` adds one more option, `.redirectToSe
 
 ```swift
 extension Subprocess {
+    /// `CollectedOutputMethod` defines how should Subprocess redirect
+    /// output from child process' standard output and standard error.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct RedirectedOutputMethod: Sendable, Hashable {
-        // Discard the output (write to /dev/null)
+        /// Subprocess shold dicard the child process output.
+        /// This option is equivalent to binding the child process
+        /// output to `/dev/null`.
         public static var discard: Self
-        // Redirect the output as AsyncSequence
+        /// Subprocess should redirect the child process output
+        /// to `Subprocess.standardOutput` or `Subprocess.standardError`
+        /// so they can be consumed as an AsyncSequence
         public static var redirectToSequence: Self
-        // Write the output directly to a FileDescriptor
+        /// Subprocess shold write the child process output
+        /// to the file descriptor specified.
+        /// - Parameters:
+        ///   - fd: the file descriptor to write to
+        ///   - closeAfterProcessSpawned: whether to close the
+        ///     file descriptor once the process is spawned.
         public static func writeTo(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self
     }
 }
@@ -888,14 +1158,26 @@ let result2 = try await Subprocess.run(
 
 ```swift
 extension Subprocess {
+    /// The result of a subprocess execution with its collected
+    /// standard output and standard error.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct CollectedResult: Sendable, Hashable, Codable {
+        /// The process identifier for the executed subprocess
         public let processIdentifier: ProcessIdentifier
+        /// The termination status of the executed subprocess
         public let terminationStatus: TerminationStatus
+        /// The collected standard output value for the subprocess.
+        /// Accessing this property will *fatalError* if the
+        /// corresponding `CollectedOutputMethod` is not set to
+        /// `.collect` or `.collect(upTo:)`
         public let standardOutput: Data
+        /// The collected standard error value for the subprocess.
+        /// Accessing this property will *fatalError* if the
+        /// corresponding `CollectedOutputMethod` is not set to
+        /// `.collect` or `.collect(upTo:)`
         public let standardError: Data
     }
 }
@@ -907,12 +1189,17 @@ extension Subprocess.CollectedResult : CustomStringConvertible, CustomDebugStrin
 
 ```swift
 extension Subprocess {
+    /// A simple wrapper around the generic result returned by the
+    /// `run` closures with the corresponding `TerminationStatus`
+    /// of the child process.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct ExecutionResult<T: Sendable>: Sendable {
+        /// The termination status of the child process
         public let terminationStatus: TerminationStatus
+        /// The result returned by the closure passed to `.run` methods
         public let value: T
     }
 }
@@ -955,17 +1242,21 @@ extension Subprocess.ExecutionResult: CustomDebugStringConvertible where T : Cus
 
 ```swift
 extension Subprocess {
+    /// `Subprocess.Executable` defines how should the executable
+    /// be looked up for execution.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct Executable: Sendable, Hashable {
-        /// Create an `Executable` with an executable name such as `ls`
+        /// Locate the executable by its name.
+        /// `Subprocess` will use `PATH` value to
+        /// determine the full path to the executable.
         public static func named(_ executableName: String) -> Self
-        /// Create an `Executable` with an executable path
-        /// such as `/bin/ls`
+        /// Locate the executable by its full path.
+        /// `Subprocess` will use this  path directly.
         public static func at(_ filePath: FilePath) -> Self
-        // Resolves the executable path with the given `Environment` value
+        /// Returns the full executable path given the environment value.
         public func resolveExecutablePath(in environment: Environment) -> FilePath?
     }
 }
@@ -985,22 +1276,24 @@ extension Subprocess {
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct Environment: Sendable, Hashable {
-        /// A copy of the current environment value of the launching process
+        /// Child process should inherit the same environment
+        /// values from its parent process.
         public static var inherit: Self { get }
-        /// Update or insert the environment values of self with
-        /// the supplied values
+        /// Override the provided `newValue` in the existing `Environment`
         public func updating(
             _ newValue: [String : String]
         ) -> Self
-        /// Use the supplied values directly
+        /// Use custom environment variables
         public static func custom(
             _ newValue: [String : String]
         ) -> Self
 
 #if !os(Windows)
+        /// Override the provided `newValue` in the existing `Environment`
         public func updating(
             _ newValue: [Data : Data]
         ) -> Self
+        /// Use custom environment variables
         public static func custom(
             _ newValue: [Data : Data]
         ) -> Self
@@ -1045,6 +1338,7 @@ let result2 = try await Subprocess.run(
 
 ```swift
 extension Subprocess {
+    /// A collection of arguments to pass to the subprocess.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
@@ -1056,17 +1350,25 @@ extension Subprocess {
         /// Creates an Arguments object using the given array
         public init(_ array: [ArrayLiteralElement])
 #if !os(Windows)
-        /// Overrides the first arguments (aka the executable path)
-        /// with the given value. If `executablePathOverride` is nil,
+        /// Create an `Argument` object using the given values, but
+        /// override the first Argument value to `executablePathOverride`.
+        /// If `executablePathOverride` is nil,
         /// `Arguments` will automatically use the executable path
         /// as the first argument.
+        /// - Parameters:
+        ///   - executablePathOverride: the value to override the first argument.
+        ///   - remainingValues: the rest of the argument value
         public init(executablePathOverride: String?, remainingValues: [String])
         /// Creates an Arguments object using the given array
         public init(_ array: [Data])
-        /// Overrides the first arguments (aka the executable path)
-        /// with the given value. If `executablePathOverride` is nil,
+        /// Create an `Argument` object using the given values, but
+        /// override the first Argument value to `executablePathOverride`.
+        /// If `executablePathOverride` is nil,
         /// `Arguments` will automatically use the executable path
         /// as the first argument.
+        /// - Parameters:
+        ///   - executablePathOverride: the value to override the first argument.
+        ///   - remainingValues: the rest of the argument value
         public init(executablePathOverride: Data?, remainingValues: [Data])
 #endif // !os(Windows)
     }
@@ -1112,11 +1414,12 @@ extension Subprocess {
     #else
         public typealias Code = CInt
     #endif
-
+        /// The subprocess was existed with the given code
         case exited(Code)
+        /// The subprocess was signalled with given exception value
         case unhandledException(Code)
 
-        // A process is terminated successfully when it exited 0
+        /// Whether the current TerminationStatus is successful.
         public var isSuccess: Bool
     }
 }

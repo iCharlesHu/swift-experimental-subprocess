@@ -21,6 +21,8 @@ import Synchronization
 
 // MARK: - Input
 extension Subprocess {
+    /// `InputMethod` defines how should the standard input
+    /// of the subprocess receive inputs.
     public struct InputMethod: Sendable, Hashable {
         internal enum Storage: Sendable, Hashable {
             case noInput
@@ -43,17 +45,29 @@ extension Subprocess {
             }
         }
 
+        /// Subprocess should read no input. This option is equivalent
+        /// to bind the stanard input to `/dev/null`.
         public static var noInput: Self {
             return .init(method: .noInput)
         }
 
-        public static func readFrom(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self {
+        /// Subprocess should read input from a given file descriptor.
+        /// - Parameters:
+        ///   - fd: the file descriptor to read from
+        ///   - closeAfterProcessSpawned: whether the file descriptor
+        ///     should be automatically closed after subprocess is spawned.
+        public static func readFrom(
+            _ fd: FileDescriptor,
+            closeAfterProcessSpawned: Bool
+        ) -> Self {
             return .init(method: .fileDescriptor(fd, closeAfterProcessSpawned))
         }
     }
 }
 
 extension Subprocess {
+    /// `CollectedOutputMethod` defines how should Subprocess collect
+    /// output from child process' standard output and standard error
     public struct CollectedOutputMethod: Sendable, Hashable {
         internal enum Storage: Sendable, Hashable {
             case discarded
@@ -67,18 +81,29 @@ extension Subprocess {
             self.method = method
         }
 
+        /// Subprocess shold dicard the child process output.
+        /// This option is equivalent to binding the child process
+        /// output to `/dev/null`.
         public static var discard: Self {
             return .init(method: .discarded)
         }
-
+        /// Subprocess should collect the child process output
+        /// as `Data` with the default limit of 128kb
         public static var collect: Self {
             return .init(method: .collected(128 * 1024))
         }
-
+        /// Subprocess should write the child process output
+        /// to the file descriptor specified.
+        /// - Parameters:
+        ///   - fd: the file descriptor to write to
+        ///   - closeAfterProcessSpawned: whether to close the
+        ///     file descriptor once the process is spawned.
         public static func writeTo(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self {
             return .init(method: .fileDescriptor(fd, closeAfterProcessSpawned))
         }
 
+        /// Subprocess should collect the child process output
+        /// as `Data` with the given limit.
         public static func collect(upTo limit: Int) -> Self {
             return .init(method: .collected(limit))
         }
@@ -98,6 +123,8 @@ extension Subprocess {
         }
     }
 
+    /// `CollectedOutputMethod` defines how should Subprocess redirect
+    /// output from child process' standard output and standard error.
     public struct RedirectedOutputMethod: Sendable, Hashable {
         typealias Storage = CollectedOutputMethod.Storage
 
@@ -107,15 +134,28 @@ extension Subprocess {
             self.method = method
         }
 
+        /// Subprocess shold dicard the child process output.
+        /// This option is equivalent to binding the child process
+        /// output to `/dev/null`.
         public static var discard: Self {
             return .init(method: .discarded)
         }
-
+        /// Subprocess should redirect the child process output
+        /// to `Subprocess.standardOutput` or `Subprocess.standardError`
+        /// so they can be consumed as an AsyncSequence
         public static var redirectToSequence: Self {
             return .init(method: .collected(128 * 1024))
         }
-
-        public static func writeTo(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self {
+        /// Subprocess shold write the child process output
+        /// to the file descriptor specified.
+        /// - Parameters:
+        ///   - fd: the file descriptor to write to
+        ///   - closeAfterProcessSpawned: whether to close the
+        ///     file descriptor once the process is spawned.
+        public static func writeTo(
+            _ fd: FileDescriptor,
+            closeAfterProcessSpawned: Bool
+        ) -> Self {
             return .init(method: .fileDescriptor(fd, closeAfterProcessSpawned))
         }
 

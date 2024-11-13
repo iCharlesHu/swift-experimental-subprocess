@@ -194,21 +194,36 @@ extension String {
 
 // MARK: - Platform Specific Options
 extension Subprocess {
-    /// The collection of platform-specific configurations
+    /// The collection of platform-specific settings
+    /// to configure the subprocess when running
     public struct PlatformOptions: Sendable {
         public var qualityOfService: QualityOfService = .default
-        // Set user ID for the subprocess
+        /// Set user ID for the subprocess
         public var userID: uid_t? = nil
-        // Set group ID for the subprocess
+        /// Set group ID for the subprocess
         public var groupID: gid_t? = nil
-        // Set list of supplementary group IDs for the subprocess
+        /// Set list of supplementary group IDs for the subprocess
         public var supplementaryGroups: [gid_t]? = nil
-        // Set process group ID for the subprocess
+        /// Set process group ID for the subprocess
         public var processGroupID: pid_t? = nil
-        // Creates a session and sets the process group ID
-        // i.e. Detach from the terminal.
+        /// Creates a session and sets the process group ID
+        /// i.e. Detach from the terminal.
         public var createSession: Bool = false
+        /// A lightweight code requirement that you use to
+        /// evaluate the executable for a launching process.
         public var launchRequirementData: Data? = nil
+        /// A closure to configure platform-specific
+        /// spawning constructs. This closure enables direct
+        /// configuration or override of underlying platform-specific
+        /// spawn settings that `Subprocess` utilizes internally,
+        /// in cases where Subprocess does not provide higher-level
+        /// APIs for such modifications.
+        ///
+        /// On Darwin, Subprocess uses `posix_spawn()` as the
+        /// underlying spawning mechanism. This closure allows
+        /// modification of the `posix_spawnattr_t` spawn attribute
+        /// and file actions `posix_spawn_file_actions_t` before
+        /// they are sent to `posix_spawn()`.
         public var preSpawnProcessConfigurator: (
             @Sendable (
                 inout posix_spawnattr_t?,

@@ -17,6 +17,20 @@ import Foundation
 #endif
 
 extension Subprocess {
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
     public static func run(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -52,6 +66,20 @@ extension Subprocess {
         )
     }
 
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
     public static func run(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -101,6 +129,20 @@ extension Subprocess {
         )
     }
 
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
     public static func run<S: AsyncSequence>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -151,6 +193,21 @@ extension Subprocess {
 
 // MARK: Custom Execution Body
 extension Subprocess {
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a ExecutableResult type containing the return value
+    ///     of the closure.
     public static func run<R>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -172,6 +229,21 @@ extension Subprocess {
         .run(input: input, output: output, error: error, body)
     }
 
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a `ExecutableResult` type containing the return value
+    ///     of the closure.
     public static func run<R>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -209,6 +281,21 @@ extension Subprocess {
         }
     }
 
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a `ExecutableResult` type containing the return value
+    ///     of the closure.
     public static func run<R, S: AsyncSequence>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -246,6 +333,21 @@ extension Subprocess {
         }
     }
 
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and write to its
+    /// standard input via `StandardInputWriter`
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a ExecutableResult type containing the return value
+    ///     of the closure.
     public static func run<R>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -269,6 +371,16 @@ extension Subprocess {
 
 // MARK: - Configuration Based
 extension Subprocess {
+    /// Run a executable with given parameters specified by a
+    /// `Subprocess.Configuration`
+    /// - Parameters:
+    ///   - configuration: The `Subprocess` configuration to run.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom configuration body to manually control
+    ///       the running process and write to its standard input.
+    /// - Returns a ExecutableResult type containing the return value
+    ///     of the closure.
     public static func run<R>(
         using configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
@@ -281,6 +393,23 @@ extension Subprocess {
 
 // MARK: - Detached
 extension Subprocess {
+    /// Run a executable with given parameters and return its process
+    /// identifier immediately without monitoring the state of the
+    /// subprocess nor waiting until it exits.
+    ///
+    /// This method is useful for launching subprocesses that outlive their
+    /// parents (for example, daemons and trampolines).
+    ///
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory for the process.
+    ///   - platformOptions: The platform specific options to use for the process.
+    ///   - input: A file descriptor to bind to the subprocess' standard input.
+    ///   - output: A file descriptor to bind to the subprocess' standard output.
+    ///   - error: A file descriptor to bind to the subprocess' standard error.
+    /// - Returns: the process identifier for the subprocess.
     public static func runDetached(
         _ executable: Executable,
         arguments: Arguments = [],

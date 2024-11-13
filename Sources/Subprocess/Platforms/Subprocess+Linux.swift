@@ -97,6 +97,8 @@ extension Subprocess.Configuration {
 
 // MARK: - Platform Specific Options
 extension Subprocess {
+    /// The collection of platform-specific settings
+    /// to configure the subprocess when running
     public struct PlatformOptions: Sendable {
         // Set user ID for the subprocess
         public var userID: uid_t? = nil
@@ -109,9 +111,17 @@ extension Subprocess {
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
         public var createSession: Bool = false
-        // This callback is run after `fork` but before `exec`.
-        // Use it to perform any custom process setup
-        // This callback *must not* capture any global variables
+        /// A closure to configure platform-specific
+        /// spawning constructs. This closure enables direct
+        /// configuration or override of underlying platform-specific
+        /// spawn settings that `Subprocess` utilizes internally,
+        /// in cases where Subprocess does not provide higher-level
+        /// APIs for such modifications.
+        ///
+        /// On Linux, Subprocess uses `fork/exec` as the
+        /// underlying spawning mechanism. This closure is called
+        /// after `fork()` but before `exec()`. You may use it to
+        /// call any necessary process setup functions.
         public var preSpawnProcessConfigurator: (@convention(c) @Sendable () -> Void)? = nil
 
         public init() {}

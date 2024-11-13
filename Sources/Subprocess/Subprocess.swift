@@ -69,6 +69,7 @@ public struct Subprocess: Sendable {
 
 // MARK: - StandardInputWriter
 extension Subprocess {
+    /// A writer that writes to the standard input of the subprocess.
     public struct StandardInputWriter {
 
         private let input: ExecutionInput
@@ -77,6 +78,8 @@ extension Subprocess {
             self.input = input
         }
 
+        /// Write a sequence of UInt8 to the standard input of the subprocess.
+        /// - Parameter sequence: The sequence of bytes to write.
         public func write<S>(_ sequence: S) async throws where S : Sequence, S.Element == UInt8 {
             guard let fd: FileDescriptor = self.input.getWriteFileDescriptor() else {
                 fatalError("Attempting to write to a file descriptor that's already closed")
@@ -84,20 +87,27 @@ extension Subprocess {
             try await fd.write(sequence)
         }
 
+        /// Write a sequence of CChar to the standard input of the subprocess.
+        /// - Parameter sequence: The sequence of bytes to write.
         public func write<S>(_ sequence: S) async throws where S : Sequence, S.Element == CChar {
             try await self.write(sequence.map { UInt8($0) })
         }
 
+        /// Write a AsyncSequence of CChar to the standard input of the subprocess.
+        /// - Parameter sequence: The sequence of bytes to write.
         public func write<S: AsyncSequence>(_ asyncSequence: S) async throws where S.Element == CChar {
             let sequence = try await Array(asyncSequence).map { UInt8($0) }
             try await self.write(sequence)
         }
 
+        /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
+        /// - Parameter sequence: The sequence of bytes to write.
         public func write<S: AsyncSequence>(_ asyncSequence: S) async throws where S.Element == UInt8 {
             let sequence = try await Array(asyncSequence)
             try await self.write(sequence)
         }
 
+        /// Signal all writes are finished
         public func finish() async throws {
             try self.input.closeParentSide()
         }
@@ -119,8 +129,13 @@ extension Subprocess.StandardInputWriter : TextOutputStream {
 
 // MARK: - Result
 extension Subprocess {
+    /// A simple wrapper around the generic result returned by the
+    /// `run` closures with the corresponding `TerminationStatus`
+    /// of the child process.
     public struct ExecutionResult<T: Sendable>: Sendable {
+        /// The termination status of the child process
         public let terminationStatus: TerminationStatus
+        /// The result returned by the closure passed to `.run` methods
         public let value: T
 
         internal init(terminationStatus: TerminationStatus, value: T) {
@@ -129,17 +144,30 @@ extension Subprocess {
         }
     }
 
+    /// The result of a subprocess execution with its collected
+    /// standard output and standard error.
     public struct CollectedResult: Sendable, Hashable, Codable {
+        /// The process identifier for the executed subprocess
         public let processIdentifier: ProcessIdentifier
+        /// The termination status of the executed subprocess
         public let terminationStatus: TerminationStatus
         private let _standardOutput: Data?
         private let _standardError: Data?
+
+        /// The collected standard output value for the subprocess.
+        /// Accessing this property will *fatalError* if the
+        /// corresponding `CollectedOutputMethod` is not set to
+        /// `.collect` or `.collect(upTo:)`
         public var standardOutput: Data {
             guard let output = self._standardOutput else {
                 fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
             }
             return output
         }
+        /// The collected standard error value for the subprocess.
+        /// Accessing this property will *fatalError* if the
+        /// corresponding `CollectedOutputMethod` is not set to
+        /// `.collect` or `.collect(upTo:)`
         public var standardError: Data {
             guard let output = self._standardError else {
                 fatalError("standardError is only available if the Subprocess was ran with .collect as error ")

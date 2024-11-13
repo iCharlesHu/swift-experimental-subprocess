@@ -252,13 +252,24 @@ extension Subprocess.Configuration {
 
 // MARK: - Platform Specific Options
 extension Subprocess {
+    /// The collection of platform-specific settings
+    /// to configure the subprocess when running
     public struct PlatformOptions: Sendable {
+        /// A `UserCredentials` to use spawning the subprocess
+        /// as a different user
         public struct UserCredentials: Sendable, Hashable {
+            // The name of the user. This is the name
+            // of the user account to run as.
             public var username: String
+            // The clear-text password for the account.
             public var password: String
+            // The name of the domain or server whose account database
+            // contains the account.
             public var domain: String?
         }
 
+        /// `ConsoleBehavior` defines how should the console appear
+        /// when spawning a new process
         public struct ConsoleBehavior: Sendable, Hashable {
             internal enum Storage: Sendable, Hashable {
                 case createNew
@@ -272,11 +283,20 @@ extension Subprocess {
                 self.storage = storage
             }
 
+            /// The subprocess has a new console, instead of
+            /// inheriting its parent's console (the default).
             public static let createNew: Self = .init(.createNew)
+            /// For console processes, the new process does not
+            /// inherit its parent's console (the default).
+            /// The new process can call the `AllocConsole`
+            /// function at a later time to create a console.
             public static let detatch: Self = .init(.detatch)
+            /// The subprocess inherits its parent's console.
             public static let inherit: Self = .init(.inherit)
         }
 
+        /// `ConsoleBehavior` defines how should the window appear
+        /// when spawning a new process
         public struct WindowStyle: Sendable, Hashable {
             internal enum Storage: Sendable, Hashable {
                 case normal
@@ -300,26 +320,41 @@ extension Subprocess {
                 self.storage = storage
             }
 
+            /// Activates and displays a window of normal size
             public static let normal: Self = .init(.normal)
+            /// Does not activate a new window
             public static let hidden: Self = .init(.hidden)
+            /// Activates the window and displays it as a maximized window.
             public static let maximized: Self = .init(.maximized)
+            /// Activates the window and displays it as a minimized window.
             public static let minimized: Self = .init(.minimized)
         }
 
-        // Sets user credentials when starting the process as another user
+        /// Sets user credentials when starting the process as another user
         public var userCredentials: UserCredentials? = nil
-        // What's the console behavior of the new process,
-        // default to inheriting the console from parent process
+        /// What's the console behavior of the new process,
+        /// default to inheriting the console from parent process
         public var consoleBehavior: ConsoleBehavior = .inherit
-        // Window state to use when the process is started
+        /// Window state to use when the process is started
         public var windowStyle: WindowStyle = .normal
-        // Whether to create a new process group for the new
-        // process. The process group includes all processes
-        // that are descendants of this root process.
-        // The process identifier of the new process group
-        // is the same as the process identifier.
+        /// Whether to create a new process group for the new
+        /// process. The process group includes all processes
+        /// that are descendants of this root process.
+        /// The process identifier of the new process group
+        /// is the same as the process identifier.
         public var createProcessGroup: Bool = false
-
+        /// A closure to configure platform-specific
+        /// spawning constructs. This closure enables direct
+        /// configuration or override of underlying platform-specific
+        /// spawn settings that `Subprocess` utilizes internally,
+        /// in cases where Subprocess does not provide higher-level
+        /// APIs for such modifications.
+        ///
+        /// On Windows, Subprocess uses `CreateProcessW()` as the
+        /// underlying spawning mechanism. This closure allows
+        /// modification of the `dwCreationFlags` creation flag
+        /// and startup info `STARTUPINFOW` before
+        /// they are sent to `CreateProcessW()`.
         public var preSpawnProcessConfigurator: (
             @Sendable (
                 inout DWORD,
@@ -445,6 +480,8 @@ internal func monitorProcessTermination(
 
 // MARK: - Subprocess Control
 extension Subprocess {
+    /// Terminate the current subprocess with the given exit code
+    /// - Parameter exitCode: The exit code to use for the subprocess.
     public func terminate(withExitCode exitCode: DWORD) throws {
         guard let processHandle = OpenProcess(
             // PROCESS_ALL_ACCESS
@@ -468,6 +505,7 @@ extension Subprocess {
         }
     }
 
+    /// Suspend the current subprocess
     public func suspend() throws {
         guard let processHandle = OpenProcess(
             // PROCESS_ALL_ACCESS
@@ -503,6 +541,7 @@ extension Subprocess {
         }
     }
 
+    /// Resume the current subprocess after suspension
     public func resume() throws {
         guard let processHandle = OpenProcess(
             // PROCESS_ALL_ACCESS
@@ -614,8 +653,11 @@ extension Subprocess.Environment {
 
 // MARK: - ProcessIdentifier
 extension Subprocess {
+    /// A platform independent identifier for a subprocess.
     public struct ProcessIdentifier: Sendable, Hashable, Codable {
+        /// Windows specifc process identifier value
         public let processID: DWORD
+        /// Windows specific thread identifier associated with process
         public let threadID: DWORD
 
         internal init(

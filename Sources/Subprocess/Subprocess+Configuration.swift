@@ -27,6 +27,8 @@ import Foundation
 #endif
 
 extension Subprocess {
+    /// A collection of configurations parameters to use when
+    /// spawning a subprocess.
     public struct Configuration: Sendable, Hashable {
 
         internal enum RunState<Result: Sendable>: Sendable {
@@ -34,11 +36,16 @@ extension Subprocess {
             case monitorChildProcess(TerminationStatus)
         }
 
-        // Configurable properties
+        /// The executable to run.
         public var executable: Executable
+        /// The arguments to pass to the executable.
         public var arguments: Arguments
+        /// The environment to use when running the executable.
         public var environment: Environment
+        /// The working directory to use when running the executable.
         public var workingDirectory: FilePath
+        /// The platform specifc options to use when
+        /// running the subprocess.
         public var platformOptions: PlatformOptions
 
         public init(
@@ -348,6 +355,8 @@ Subprocess.Configuration(
 
 // MARK: - Executable
 extension Subprocess {
+    /// `Subprocess.Executable` defines how should the executable
+    /// be looked up for execution.
     public struct Executable: Sendable, Hashable {
         internal enum Configuration: Sendable, Hashable {
             case executable(String)
@@ -360,14 +369,18 @@ extension Subprocess {
             self.storage = _config
         }
 
+        /// Locate the executable by its name.
+        /// `Subprocess` will use `PATH` value to
+        /// determine the full path to the executable.
         public static func named(_ executableName: String) -> Self {
             return .init(_config: .executable(executableName))
         }
-
+        /// Locate the executable by its full path.
+        /// `Subprocess` will use this  path directly.
         public static func at(_ filePath: FilePath) -> Self {
             return .init(_config: .path(filePath))
         }
-
+        /// Returns the full executable path given the environment value.
         public func resolveExecutablePath(in environment: Environment) -> FilePath? {
             if let path = self.resolveExecutablePath(withPathValue: environment.pathValue()) {
                 return FilePath(path)
@@ -399,23 +412,33 @@ extension Subprocess.Executable : CustomStringConvertible, CustomDebugStringConv
 
 // MARK: - Arguments
 extension Subprocess {
+    /// A collection of arguments to pass to the subprocess.
     public struct Arguments: Sendable, ExpressibleByArrayLiteral, Hashable {
         public typealias ArrayLiteralElement = String
 
         internal let storage: [StringOrRawBytes]
         internal let executablePathOverride: StringOrRawBytes?
 
+        /// Create an Arguments object using the given literal values
         public init(arrayLiteral elements: String...) {
             self.storage = elements.map { .string($0) }
             self.executablePathOverride = nil
         }
-
+        /// Create an Arguments object using the given array
         public init(_ array: [String]) {
             self.storage = array.map { .string($0) }
             self.executablePathOverride = nil
         }
 
 #if !os(Windows) // Windows does NOT support arg0 override
+        /// Create an `Argument` object using the given values, but
+        /// override the first Argument value to `executablePathOverride`.
+        /// If `executablePathOverride` is nil,
+        /// `Arguments` will automatically use the executable path
+        /// as the first argument.
+        /// - Parameters:
+        ///   - executablePathOverride: the value to override the first argument.
+        ///   - remainingValues: the rest of the argument value
         public init(executablePathOverride: String?, remainingValues: [String]) {
             self.storage = remainingValues.map { .string($0) }
             if let executablePathOverride = executablePathOverride {
@@ -425,7 +448,14 @@ extension Subprocess {
             }
         }
 
-        // Windows Arguments must be valida UTF16 String
+        /// Create an `Argument` object using the given values, but
+        /// override the first Argument value to `executablePathOverride`.
+        /// If `executablePathOverride` is nil,
+        /// `Arguments` will automatically use the executable path
+        /// as the first argument.
+        /// - Parameters:
+        ///   - executablePathOverride: the value to override the first argument.
+        ///   - remainingValues: the rest of the argument value
         public init(executablePathOverride: Data?, remainingValues: [Data]) {
             self.storage = remainingValues.map { .rawBytes($0.toArray()) }
             if let override = executablePathOverride {
@@ -458,6 +488,7 @@ extension Subprocess.Arguments : CustomStringConvertible, CustomDebugStringConve
 
 // MARK: - Environment
 extension Subprocess {
+    /// A set of environment variables to use when executing the subprocess.
     public struct Environment: Sendable, Hashable {
         internal enum Configuration: Sendable, Hashable {
             case inherit([StringOrRawBytes : StringOrRawBytes])
@@ -469,25 +500,26 @@ extension Subprocess {
         init(config: Configuration) {
             self.config = config
         }
-
+        /// Child process should inherit the same environment
+        /// values from its parent process.
         public static var inherit: Self {
             return .init(config: .inherit([:]))
         }
-
+        /// Override the provided `newValue` in the existing `Environment`
         public func updating(_ newValue: [String : String]) -> Self {
             return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
         }
-
+        /// Use custom environment variables
         public static func custom(_ newValue: [String : String]) -> Self {
             return .init(config: .custom(newValue.wrapToStringOrRawBytes()))
         }
 
 #if !os(Windows)
-        // Windows environment must be valida UTF16 String
+        /// Override the provided `newValue` in the existing `Environment`
         public func updating(_ newValue: [Data : Data]) -> Self {
             return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
         }
-
+        /// Use custom environment variables
         public static func custom(_ newValue: [Data : Data]) -> Self {
             return .init(config: .custom(newValue.wrapToStringOrRawBytes()))
         }
@@ -557,6 +589,7 @@ fileprivate extension Data {
 
 // MARK: - TerminationStatus
 extension Subprocess {
+    /// An exit status of a subprocess.
     @frozen
     public enum TerminationStatus: Sendable, Hashable, Codable {
         #if canImport(WinSDK)
@@ -565,9 +598,11 @@ extension Subprocess {
         public typealias Code = CInt
         #endif
 
+        /// The subprocess was existed with the given code
         case exited(Code)
+        /// The subprocess was signalled with given exception value
         case unhandledException(Code)
-
+        /// Whether the current TerminationStatus is successful.
         public var isSuccess: Bool {
             switch self {
             case .exited(let exitCode):

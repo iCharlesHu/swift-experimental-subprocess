@@ -34,26 +34,68 @@ import SystemPackage
 
 // MARK: - Signals
 extension Subprocess {
+    /// Signals are standardized messages sent to a running program
+    /// to trigger specific behavior, such as quitting or error handling.
     public struct Signal : Hashable, Sendable {
+        /// The underlying platform specific value for the signal
         public let rawValue: Int32
 
         private init(rawValue: Int32) {
             self.rawValue = rawValue
         }
 
+        /// The `.interrupt` signal is sent to a process by its
+        /// controlling terminal when a user wishes to interrupt
+        /// the process.
         public static var interrupt: Self { .init(rawValue: SIGINT) }
+        /// The `.terminate` signal is sent to a process to request its
+        /// termination. Unlike the `.kill` signal, it can be caught
+        /// and interpreted or ignored by the process. This allows
+        /// the process to perform nice termination releasing resources
+        /// and saving state if appropriate. `.interrupt` is nearly
+        /// identical to `.terminate`.
         public static var terminate: Self { .init(rawValue: SIGTERM) }
+        /// The `.suspend` signal instructs the operating system
+        /// to stop a process for later resumption.
         public static var suspend: Self { .init(rawValue: SIGSTOP) }
+        /// The `resume` signal instructs the operating system to
+        /// continue (restart) a process previously paused by the
+        /// `.suspend` signal.
         public static var resume: Self { .init(rawValue: SIGCONT) }
+        /// The `.kill` signal is sent to a process to cause it to
+        /// terminate immediately (kill). In contrast to `.terminate`
+        /// and `.interrupt`, this signal cannot be caught or ignored,
+        /// and the receiving process cannot perform any
+        /// clean-up upon receiving this signal.
         public static var kill: Self { .init(rawValue: SIGKILL) }
+        /// The `.terminalClosed` signal is sent to a process when
+        /// its controlling terminal is closed. In modern systems,
+        /// this signal usually means that the controlling pseudo
+        /// or virtual terminal has been closed.
         public static var terminalClosed: Self { .init(rawValue: SIGHUP) }
+        /// The `.quit` signal is sent to a process by its controlling
+        /// terminal when the user requests that the process quit
+        /// and perform a core dump.
         public static var quit: Self { .init(rawValue: SIGQUIT) }
+        /// The `.userDefinedOne` signal is sent to a process to indicate
+        /// user-defined conditions.
         public static var userDefinedOne: Self { .init(rawValue: SIGUSR1) }
+        /// The `.userDefinedTwo` signal is sent to a process to indicate
+        /// user-defined conditions.
         public static var userDefinedTwo: Self { .init(rawValue: SIGUSR2) }
+        /// The `.alarm` signal is sent to a process when the corresponding
+        /// time limit is reached.
         public static var alarm: Self { .init(rawValue: SIGALRM) }
+        /// The `.windowSizeChange` signal is sent to a process when
+        /// its controlling terminal changes its size (a window change).
         public static var windowSizeChange: Self { .init(rawValue: SIGWINCH) }
     }
 
+    /// Send the given signal to the child process.
+    /// - Parameters:
+    ///   - signal: The signal to send.
+    ///   - shouldSendToProcessGroup: Whether this signal should be sent to
+    ///     the entire process group.
     public func send(_ signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool) throws {
         let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
         guard kill(pid, signal.rawValue) == 0 else {
@@ -182,7 +224,9 @@ extension Subprocess.Arguments {
 
 // MARK: - ProcessIdentifier
 extension Subprocess {
+    /// A platform independent identifier for a subprocess.
     public struct ProcessIdentifier: Sendable, Hashable, Codable {
+        /// The platform specific process identifier value
         public let value: pid_t
 
         public init(value: pid_t) {
