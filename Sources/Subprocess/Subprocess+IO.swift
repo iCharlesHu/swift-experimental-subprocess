@@ -87,11 +87,6 @@ extension Subprocess {
         public static var discard: Self {
             return .init(method: .discarded)
         }
-        /// Subprocess should collect the child process output
-        /// as `Data` with the default limit of 128kb
-        public static var collect: Self {
-            return .init(method: .collected(128 * 1024))
-        }
         /// Subprocess should write the child process output
         /// to the file descriptor specified.
         /// - Parameters:
@@ -101,10 +96,10 @@ extension Subprocess {
         public static func writeTo(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self {
             return .init(method: .fileDescriptor(fd, closeAfterProcessSpawned))
         }
-
         /// Subprocess should collect the child process output
-        /// as `Data` with the given limit.
-        public static func collect(upTo limit: Int) -> Self {
+        /// as `Data` with the given limit in bytes. The default
+        /// limit is 128kb.
+        public static func collect(upTo limit: Int = 128 * 1024) -> Self {
             return .init(method: .collected(limit))
         }
 

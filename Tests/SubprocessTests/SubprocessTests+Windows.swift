@@ -345,7 +345,7 @@ extension SubprocessWindowsTests {
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo \(expected)"],
-            output: .collect
+            output: .collect()
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(

@@ -29,7 +29,7 @@ extension SubprocessUnixTests {
         let result = try await Subprocess.run(
             .named("echo"),
             arguments: [message],
-            output: .collect
+            output: .collect()
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -371,7 +371,7 @@ extension SubprocessUnixTests {
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
-            output: .collect
+            output: .collect()
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(

@@ -38,8 +38,8 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: InputMethod = .noInput,
-        output: CollectedOutputMethod = .collect,
-        error: CollectedOutputMethod = .collect
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
     ) async throws -> CollectedResult {
         let result = try await self.run(
             executable,
@@ -87,8 +87,8 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: some Sequence<UInt8>,
-        output: CollectedOutputMethod = .collect,
-        error: CollectedOutputMethod = .collect
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
     ) async throws -> CollectedResult {
         let result = try await self.run(
             executable,
@@ -150,8 +150,8 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: S,
-        output: CollectedOutputMethod = .collect,
-        error: CollectedOutputMethod = .collect
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
     ) async throws -> CollectedResult where S.Element == UInt8 {
         let result =  try await self.run(
             executable,

@@ -49,6 +49,8 @@
         - Add an array initializer to `Subprocess.Arguments`:
             - `public init(_ array: [String])`
             - `public init(_ array: [Data])`.
+    - `Subprocess.CollectedOutputMethod`:
+        - Combined `.collect` and `.collect(upTo:)`
     - `Subprocess.PlatformOptions` (all platforms):
         - Changed from `.default` to using empty initializer `.init()`.
         - Changed to prefer platform native types such as `gid_t` over `Int`.
@@ -206,8 +208,8 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
         input: InputMethod = .noInput,
-        output: CollectedOutputMethod = .collect,
-        error: CollectedOutputMethod = .collect
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
     ) async throws -> CollectedResult
 
     /// Run a executable with given parameters and capture its
@@ -231,8 +233,8 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
         input: some Sequence<UInt8>,
-        output: CollectedOutputMethod = .collect,
-        error: CollectedOutputMethod = .collect
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
     ) async throws -> CollectedResult
 
     /// Run a executable with given parameters and capture its
@@ -256,8 +258,8 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
         input: S,
-        output: CollectedOutputMethod = .collect,
-        error: CollectedOutputMethod = .collect
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
     ) async throws -> CollectedResult where S.Element == UInt8
 }
 
@@ -1054,7 +1056,7 @@ let exe = try await Subprocess.run(.at("/some/executable"), input: sequence)
 - `.discard`: Specifies that the child process's output should be discarded, effectively written to `/dev/null`.
 - `.writeTo`: Specifies that the child process should write its output to a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterProcessSpawned` is set to `true`.
 
-`CollectedOutMethod` adds one more option to non-closure-based `run` methods that return a `CollectedResult`: `.collect` and its variation `.collect(upTo:)`. This option specifies that `Subprocess` should collect the output as `Data`. Since the output of a child process could be arbitrarily large, `Subprocess` imposes a limit on how many bytes it will collect. By default, this limit is 16kb (when specifying `.collect`). Developers can override this limit by specifying `.collect(upTo: newLimit)`:
+`CollectedOutMethod` adds one more option to non-closure-based `run` methods that return a `CollectedResult`: `.collect(upTo:)`. This option specifies that `Subprocess` should collect the output as `Data`. Since the output of a child process could be arbitrarily large, `Subprocess` imposes a limit on how many bytes it will collect. By default, this limit is 128kb.
 
 ```swift
 extension Subprocess {
@@ -1070,11 +1072,9 @@ extension Subprocess {
         /// output to `/dev/null`.
         public static var discard: Self
         /// Subprocess should collect the child process output
-        /// as `Data` with the default limit of 128kb
-        public static var collect: Self
-        /// Subprocess should collect the child process output
-        /// as `Data` with the given limit.
-        public static func collect(upTo limit: Int) -> Self
+        /// as `Data` with the given limit in bytes.
+        /// The default limit is 128kb
+        public static func collect(upTo limit: Int = 128 * 1024) -> Self
         /// Subprocess should write the child process output
         /// to the file descriptor specified.
         /// - Parameters:
@@ -1119,7 +1119,7 @@ extension Subprocess {
 Here are some examples of using both output methods:
 
 ```swift
-let ls = try await Subprocess.run(.named("ls"), output: .collect)
+let ls = try await Subprocess.run(.named("ls"), output: .collect())
 // The output has been collected as `Data`, up to 16kb limit
 print("ls output: \(String(data: ls.standardOutput, encoding: .utf8)!)")
 
