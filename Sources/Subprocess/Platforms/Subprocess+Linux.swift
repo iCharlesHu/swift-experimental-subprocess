@@ -102,11 +102,18 @@ extension Subprocess {
     public struct PlatformOptions: Sendable {
         // Set user ID for the subprocess
         public var userID: uid_t? = nil
-        // Set group ID for the subprocess
+        /// Set the real and effective group ID and the saved
+        /// set-group-ID of the subprocess, equivalent to calling
+        /// `setgid()` on the child process.
+        /// Group ID is used to control permissions, particularly
+        /// for file access.
         public var groupID: gid_t? = nil
         // Set list of supplementary group IDs for the subprocess
         public var supplementaryGroups: [gid_t]? = nil
-        // Set process group ID for the subprocess
+        /// Set the process group for the subprocess, equivalent to
+        /// calling `setpgid()` on the child process.
+        /// Process group ID is used to group related processes for
+        /// controlling signals.
         public var processGroupID: pid_t? = nil
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.

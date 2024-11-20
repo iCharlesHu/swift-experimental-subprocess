@@ -332,10 +332,10 @@ extension Subprocess {
 
         /// Sets user credentials when starting the process as another user
         public var userCredentials: UserCredentials? = nil
-        /// What's the console behavior of the new process,
+        /// The console behavior of the new process,
         /// default to inheriting the console from parent process
         public var consoleBehavior: ConsoleBehavior = .inherit
-        /// Window state to use when the process is started
+        /// Window style to use when the process is started
         public var windowStyle: WindowStyle = .normal
         /// Whether to create a new process group for the new
         /// process. The process group includes all processes

@@ -233,7 +233,7 @@ extension SubprocessWindowsTests {
                 "/c",
                 "findstr x*"
             ],
-            input: .readFrom(text, closeAfterProcessSpawned: true),
+            input: .readFrom(text, closeAfterSpawningProcess: true),
             output: .collect(upTo: 2048 * 1024)
         )
 
@@ -385,7 +385,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "echo \(expected)"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: false
+                closeAfterSpawningProcess: false
             )
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
@@ -417,7 +417,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "echo Hello World"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: true
+                closeAfterSpawningProcess: true
             )
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
@@ -452,7 +452,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "echo \(expected)"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: false
+                closeAfterSpawningProcess: false
             )
         ) { subproces, writer in
             return 0
@@ -486,7 +486,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "echo Hello world"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: true
+                closeAfterSpawningProcess: true
             )
         ) { subproces, writer in
             return 0

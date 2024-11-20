@@ -54,13 +54,13 @@ extension Subprocess {
         /// Subprocess should read input from a given file descriptor.
         /// - Parameters:
         ///   - fd: the file descriptor to read from
-        ///   - closeAfterProcessSpawned: whether the file descriptor
+        ///   - closeAfterSpawningProcess: whether the file descriptor
         ///     should be automatically closed after subprocess is spawned.
         public static func readFrom(
             _ fd: FileDescriptor,
-            closeAfterProcessSpawned: Bool
+            closeAfterSpawningProcess: Bool
         ) -> Self {
-            return .init(method: .fileDescriptor(fd, closeAfterProcessSpawned))
+            return .init(method: .fileDescriptor(fd, closeAfterSpawningProcess))
         }
     }
 }
@@ -91,10 +91,10 @@ extension Subprocess {
         /// to the file descriptor specified.
         /// - Parameters:
         ///   - fd: the file descriptor to write to
-        ///   - closeAfterProcessSpawned: whether to close the
+        ///   - closeAfterSpawningProcess: whether to close the
         ///     file descriptor once the process is spawned.
-        public static func writeTo(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self {
-            return .init(method: .fileDescriptor(fd, closeAfterProcessSpawned))
+        public static func writeTo(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> Self {
+            return .init(method: .fileDescriptor(fd, closeAfterSpawningProcess))
         }
         /// Subprocess should collect the child process output
         /// as `Data` with the given limit in bytes. The default
@@ -145,13 +145,13 @@ extension Subprocess {
         /// to the file descriptor specified.
         /// - Parameters:
         ///   - fd: the file descriptor to write to
-        ///   - closeAfterProcessSpawned: whether to close the
+        ///   - closeAfterSpawningProcess: whether to close the
         ///     file descriptor once the process is spawned.
         public static func writeTo(
             _ fd: FileDescriptor,
-            closeAfterProcessSpawned: Bool
+            closeAfterSpawningProcess: Bool
         ) -> Self {
-            return .init(method: .fileDescriptor(fd, closeAfterProcessSpawned))
+            return .init(method: .fileDescriptor(fd, closeAfterSpawningProcess))
         }
 
         internal func createExecutionOutput() throws -> ExecutionOutput {
