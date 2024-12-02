@@ -313,7 +313,8 @@ internal func monitorProcessTermination(
     return await withCheckedContinuation { continuation in
         let source = DispatchSource.makeProcessSource(
             identifier: pid.value,
-            eventMask: [.exit, .signal]
+            eventMask: [.exit, .signal],
+            queue: .global()
         )
         source.setEventHandler {
             source.cancel()
