@@ -365,7 +365,7 @@ extension FileDescriptor {
             DispatchIO.read(
                 fromFileDescriptor: self.rawValue,
                 maxLength: maxLength,
-                runningHandlerOn: .main
+                runningHandlerOn: .global()
             ) { data, error in
                 guard error == 0 else {
                     continuation.resume(
@@ -387,7 +387,7 @@ extension FileDescriptor {
             DispatchIO.write(
                 toFileDescriptor: self.rawValue,
                 data: dispatchData,
-                runningHandlerOn: .main
+                runningHandlerOn: .global()
             ) { _, error in
                 guard error == 0 else {
                     continuation.resume(
