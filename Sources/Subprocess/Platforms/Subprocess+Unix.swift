@@ -360,7 +360,7 @@ extension FileDescriptor {
         return self
     }
 
-    internal func read(upToLength maxLength: Int) async throws -> [UInt8] {
+    internal func read(upToLength maxLength: Int) async throws -> Data {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchIO.read(
                 fromFileDescriptor: self.rawValue,
@@ -374,7 +374,7 @@ extension FileDescriptor {
                     )
                     return
                 }
-                continuation.resume(returning: Array(data))
+                continuation.resume(returning: Data(data))
             }
         }
     }

@@ -39,7 +39,7 @@ public struct Subprocess: Sendable {
     /// - `.output` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardOutput: some _AsyncSequence<UInt8, any Error> {
+    public var standardOutput: some _AsyncSequence<Data, any Error> {
         guard let (_, fd) = self.executionOutput
             .consumeCollectedFileDescriptor() else {
             fatalError("The standard output was not redirected")
@@ -47,7 +47,7 @@ public struct Subprocess: Sendable {
         guard let fd = fd else {
             fatalError("The standard output has already been closed")
         }
-        return AsyncBytes(fileDescriptor: fd)
+        return AsyncDataSequence(fileDescriptor: fd)
     }
 
     /// The standard error of the subprocess.
@@ -55,7 +55,7 @@ public struct Subprocess: Sendable {
     /// - `.error` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardError: some _AsyncSequence<UInt8, any Error> {
+    public var standardError: some _AsyncSequence<Data, any Error> {
         guard let (_, fd) = self.executionError
             .consumeCollectedFileDescriptor() else {
             fatalError("The standard error was not redirected")
@@ -63,7 +63,7 @@ public struct Subprocess: Sendable {
         guard let fd = fd else {
             fatalError("The standard error has already been closed")
         }
-        return AsyncBytes(fileDescriptor: fd)
+        return AsyncDataSequence(fileDescriptor: fd)
     }
 }
 

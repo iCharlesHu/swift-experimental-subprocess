@@ -19,14 +19,14 @@ import Foundation
 #endif
 
 extension Subprocess {
-    public struct AsyncBytes: AsyncSequence, Sendable, _AsyncSequence {
+    public struct AsyncDataSequence: AsyncSequence, Sendable, _AsyncSequence {
         public typealias Error = any Swift.Error
 
-        public typealias Element = UInt8
+        public typealias Element = Data
 
         @_nonSendable
         public struct Iterator: AsyncIteratorProtocol {
-            public typealias Element = UInt8
+            public typealias Element = Data
 
             private let fileDescriptor: FileDescriptor
             private var buffer: [UInt8]
@@ -40,51 +40,14 @@ extension Subprocess {
                 self.finished = false
             }
 
-            private mutating func reloadBufferAndNext() async throws -> UInt8? {
-                if self.finished {
+            public mutating func next() async throws -> Data? {
+                let data = try await self.fileDescriptor.read(
+                    upToLength: Subprocess.readBufferSize
+                )
+                if data.count == 0 {
                     return nil
                 }
-                try Task.checkCancellation()
-                do {
-                    self.buffer = try await self.fileDescriptor.read(
-                        upToLength: Subprocess.readBufferSize)
-                    self.currentPosition = 0
-                    if self.buffer.isEmpty {
-                        self.finished = true
-                    }
-                } catch {
-                    self.finished = true
-                    throw error
-                }
-                return try await self.next()
-            }
-
-            public mutating func next() async throws -> UInt8? {
-                if currentPosition < buffer.count {
-                    let value = buffer[currentPosition]
-                    self.currentPosition += 1
-                    return value
-                }
-                return try await self.reloadBufferAndNext()
-            }
-
-            private func read(from fileDescriptor: FileDescriptor, maxLength: Int) async throws -> [UInt8] {
-                return try await withCheckedThrowingContinuation { continuation in
-                    DispatchIO.read(
-                        fromFileDescriptor: fileDescriptor.rawValue,
-                        maxLength: maxLength,
-                        runningHandlerOn: .main
-                    ) { data, error in
-                        guard error == 0 else {
-                            continuation.resume(
-                                throwing: POSIXError(
-                                    .init(rawValue: error) ?? .ENODEV)
-                            )
-                            return
-                        }
-                        continuation.resume(returning: Array(data))
-                    }
-                }
+                return data
             }
         }
 

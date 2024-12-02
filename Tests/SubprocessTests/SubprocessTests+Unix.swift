@@ -313,10 +313,14 @@ extension SubprocessUnixTests {
             input: expected,
             output: .redirectToSequence
         ) { execution in
-            return try await Array(execution.standardOutput)
+            var buffer = Data()
+            for try await chunk in execution.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        XCTAssertEqual(result.value, [UInt8](expected))
+        XCTAssertEqual(result.value, expected)
     }
 
     func testInputAsyncSequenceCustomExecutionBody() async throws {
@@ -345,10 +349,14 @@ extension SubprocessUnixTests {
             .at("/bin/cat"),
             input: stream
         ) { execution in
-            return try await Array(execution.standardOutput)
+            var buffer = Data()
+            for try await chunk in execution.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        XCTAssertEqual(result.value, [UInt8](expected))
+        XCTAssertEqual(result.value, expected)
     }
 }
 
@@ -531,8 +539,11 @@ extension SubprocessUnixTests {
             arguments: [theMysteriousIsland.string],
             output: .redirectToSequence
         ) { subprocess in
-            let collected = try await Array(subprocess.standardOutput)
-            return Data(collected)
+            var buffer = Data()
+            for try await chunk in subprocess.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.value, expected)

@@ -1021,7 +1021,7 @@ extension FileDescriptor {
         return HANDLE(bitPattern: _get_osfhandle(self.rawValue))!
     }
 
-    internal func read(upToLength maxLength: Int) async throws -> [UInt8] {
+    internal func read(upToLength maxLength: Int) async throws -> Data {
         // TODO: Figure out a better way to asynchornously read
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -1073,7 +1073,7 @@ extension FileDescriptor {
                         errorCode: .fileReadUnknown)
                     )
                 } else {
-                    continuation.resume(returning: values)
+                    continuation.resume(returning: Data(values))
                 }
             }
         }

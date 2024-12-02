@@ -70,6 +70,8 @@
             - `Subprocess.resume()`
     - `Subprocess.runDetached`:
         - Introduced `Subprocess.runDetached` as a top level API and sibling to all `Subprocess.run` methods. This method allows you to spawn a subprocess **WITHOUT** needing to wait for it to finish.
+    - Updated `.standardOutput` and `.standardError` properties on `Subprocess` to be `AsyncSequence<Data, any Error>` instead of `AsyncSequence<UInt8, any Error>`.
+        - The previous design, while more "traditional", leads to performance problems when the subprocess outputs large amount of data
 
 ## Introduction
 
@@ -429,8 +431,11 @@ let result = try await Subprocess.run(
     arguments: ["/some/rest/api"],
     output: .redirect
 ) {
-    let output = try await Array($0.standardOutput)
-    return try JSONDecoder().decode(MyType.self, from: Data(output))
+    var buffer = Data()
+    for try await chunk in $0.standardOutput {
+        buffer += chunk
+    }
+    return try JSONDecoder().decode(MyType.self, from: buffer)
 }
 // Result will have type `MyType`
 print("Result: \(result)")
@@ -442,7 +447,7 @@ let result = try await Subprocess.run(
 ) { subprocess, writer in
     try await writer.write("Hello World".utf8CString)
     try await writer.finish()
-    return try await Array(subprocess.standardOutput.lines)
+    return try await Array(subprocess.standardOutput)
 }
 ```
 
@@ -469,13 +474,13 @@ public struct Subprocess: Sendable {
     /// - `.output` was NOT set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardOutput: some AsyncSequence<UInt8, any Error> { get }
+    public var standardOutput: some AsyncSequence<Data, any Error> { get }
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.error` was NOT set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardError: some AsyncSequence<UInt8, any Error> { get }
+    public var standardError: some AsyncSequence<Data, any Error> { get }
 }
 
 #if canImport(Glibc) || canImport(Darwin)
@@ -1170,7 +1175,7 @@ let result2 = try await Subprocess.run(
 
 `Subprocess` provides two "Result" types corresponding to the two categories of `run` methods: `Subprocess.CollectedResult` and `Subprocess.ExecutionResult<T>`.
 
-`Subprocess.CollectedResult` is essentially a collection of properties that represent the result of an execution after the child process has exited. It is used by the non-closure-based `run` methods. In many ways, `CollectedResult` can be seen as the "synchronous" version of `Subprocess`—instead of the asynchronous `AsyncSequence<UInt8>`, the standard IOs can be retrieved via synchronous `Data`.
+`Subprocess.CollectedResult` is essentially a collection of properties that represent the result of an execution after the child process has exited. It is used by the non-closure-based `run` methods. In many ways, `CollectedResult` can be seen as the "synchronous" version of `Subprocess`—instead of the asynchronous `AsyncSequence<Data>`, the standard IOs can be retrieved via synchronous `Data`.
 
 ```swift
 extension Subprocess {
