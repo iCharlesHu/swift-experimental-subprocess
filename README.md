@@ -33,7 +33,7 @@
             - Both cases can’t be resolved until the source code is updated; they are therefore considered programming errors.
     - Updated `StandardInputWriter` to be non-sendable.
     - Renamed `PlatformOptions.additionalAttributeConfigurator` to `Platform.preSpawnAttributeConfigurator`; renamed `PlatformOptions.additionalFileAttributeConfigurator` to `Platform.preSpawnFileAttributeConfigurator`.
-    - Updated all `closeWhenDone` parameter labels to `closeAfterProcessSpawned`.
+    - Updated all `closeWhenDone` parameter labels to `closeAfterSpawningProcess`.
     - Renamed `Subprocess.Result` to `Subprocess.ExecutionResult`.
     - Added `Codable` support to `TerminationStatus` and `ExecutionResult`.
     - Renamed `TerminationStatus.exit`:
@@ -70,6 +70,8 @@
             - `Subprocess.resume()`
     - `Subprocess.runDetached`:
         - Introduced `Subprocess.runDetached` as a top level API and sibling to all `Subprocess.run` methods. This method allows you to spawn a subprocess **WITHOUT** needing to wait for it to finish.
+    - Updated `.standardOutput` and `.standardError` properties on `Subprocess` to be `AsyncSequence<Data, any Error>` instead of `AsyncSequence<UInt8, any Error>`.
+        - The previous design, while more "traditional", leads to performance problems when the subprocess outputs large amount of data
 
 ## Introduction
 
@@ -381,7 +383,7 @@ extension Subprocess {
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
     public static func run<R>(
-        using configuration: Configuration,
+        _ configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)
@@ -429,8 +431,11 @@ let result = try await Subprocess.run(
     arguments: ["/some/rest/api"],
     output: .redirect
 ) {
-    let output = try await Array($0.standardOutput)
-    return try JSONDecoder().decode(MyType.self, from: Data(output))
+    var buffer = Data()
+    for try await chunk in $0.standardOutput {
+        buffer += chunk
+    }
+    return try JSONDecoder().decode(MyType.self, from: buffer)
 }
 // Result will have type `MyType`
 print("Result: \(result)")
@@ -442,7 +447,7 @@ let result = try await Subprocess.run(
 ) { subprocess, writer in
     try await writer.write("Hello World".utf8CString)
     try await writer.finish()
-    return try await Array(subprocess.standardOutput.lines)
+    return try await Array(subprocess.standardOutput)
 }
 ```
 
@@ -469,13 +474,13 @@ public struct Subprocess: Sendable {
     /// - `.output` was NOT set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardOutput: some AsyncSequence<UInt8, any Error> { get }
+    public var standardOutput: some AsyncSequence<Data, any Error> { get }
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.error` was NOT set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardError: some AsyncSequence<UInt8, any Error> { get }
+    public var standardError: some AsyncSequence<Data, any Error> { get }
 }
 
 #if canImport(Glibc) || canImport(Darwin)
@@ -512,6 +517,8 @@ extension Subprocess {
 
 extension Subprocess.ProcessIdentifier : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
+
+#### Unmanaged Subprocess
 
 In addition to the managed `run` family of methods, `Subprocess` also supports an unmanaged `runDetached` method that simply spawns the executable and returns its process identifier without awaiting for it to complete. This mode is particularly useful in scripting scenarios where the subprocess being launched requires outlasting the parent process. This setup is essential for programs that function as “trampolines” (e.g., JVM Launcher) to spawn other processes.
 
@@ -762,11 +769,18 @@ extension Subprocess {
         public var qualityOfService: QualityOfService
         // Set user ID for the subprocess
         public var userID: uid_t?
-        // Set group ID for the subprocess
+        /// Set the real and effective group ID and the saved
+        /// set-group-ID of the subprocess, equivalent to calling
+        /// `setgid()` on the child process.
+        /// Group ID is used to control permissions, particularly
+        /// for file access.
         public var groupID: gid_t?
         // Set list of supplementary group IDs for the subprocess
         public var supplementaryGroups: [gid_t]?
-        // Set process group ID for the subprocess
+        /// Set the process group for the subprocess, equivalent to
+        /// calling `setpgid()` on the child process.
+        /// Process group ID is used to group related processes for
+        /// controlling signals.
         public var processGroupID: pid_t? = nil
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
@@ -841,12 +855,19 @@ extension Subprocess {
     public struct PlatformOptions: Sendable, Hashable {
         // Set user ID for the subprocess
         public var userID: uid_t?
-        // Set group ID for the subprocess
+        /// Set the real and effective group ID and the saved
+        /// set-group-ID of the subprocess, equivalent to calling
+        /// `setgid()` on the child process.
+        /// Group ID is used to control permissions, particularly
+        /// for file access.
         public var groupID: gid_t?
         // Set list of supplementary group IDs for the subprocess
         public var supplementaryGroups: [gid_t]?
-        // Set process group ID for the subprocess
-        public var processGroupID: pid_t? = nil
+        /// Set the process group for the subprocess, equivalent to
+        /// calling `setpgid()` on the child process.
+        /// Process group ID is used to group related processes for
+        /// controlling signals.
+        public var processGroupID: pid_t?
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
         public var createSession: Bool
@@ -949,10 +970,10 @@ extension Subprocess {
         /// property is set, the Subprocess will be run
         /// as the provided user
         public var userCredentials: UserCredentials? = nil
-        /// What's the console behavior of the new process,
+        /// The console behavior of the new process,
         /// default to inheriting the console from parent process
         public var consoleBehavior: ConsoleBehavior = .inherit
-        /// Window state to use when the process is started
+        /// Window style to use when the process is started
         public var windowStyle: WindowStyle = .normal
         /// Whether to create a new process group for the new
         /// process. The process group includes all processes
@@ -1010,7 +1031,7 @@ _(For more information on these values, checkout Microsoft's documentation [here
 
 In addition to supporting the direct passing of `Sequence<UInt8>` and `AsyncSequence<UInt8>` as the standard input to the child process, `Subprocess` also provides a `Subprocess.InputMethod` type that includes two additional input options:
 - `.noInput`: Specifies that the subprocess does not require any standard input. This is the default value.
-- `.readFrom`: Specifies that the subprocess should read its standard input from a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterProcessSpawned` is set to `true`.
+- `.readFrom`: Specifies that the subprocess should read its standard input from a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterSpawningProcess` is set to `true`.
 
 ```swift
 extension Subprocess {
@@ -1027,9 +1048,9 @@ extension Subprocess {
         /// Subprocess should read input from a given file descriptor.
         /// - Parameters:
         ///   - fd: the file descriptor to read from
-        ///   - closeAfterProcessSpawned: whether the file descriptor
+        ///   - closeAfterSpawningProcess: whether the file descriptor
         ///     should be automatically closed after subprocess is spawned.
-        public static func readFrom(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self
+        public static func readFrom(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> Self
     }
 }
 ```
@@ -1042,7 +1063,7 @@ let ls = try await Subprocess.run(.named("ls"))
 
 // Alternatively, developers could pass in a file descriptor
 let fd: FileDescriptor = ...
-let cat = try await Subprocess.run(.named("cat"), input: .readFrom(fd, closeAfterProcessSpawned: true))
+let cat = try await Subprocess.run(.named("cat"), input: .readFrom(fd, closeAfterSpawningProcess: true))
 
 // Pass in a async sequence directly
 let sequence: AsyncSequence = ...
@@ -1052,9 +1073,9 @@ let exe = try await Subprocess.run(.at("/some/executable"), input: sequence)
 
 ### `Subprocess` Output Methods
 
-`Subprocess` uses two types to describe where the standard output and standard error of the child process should be redirected. These two types, `Subprocess.collectOutputMethod` and `Subprocess.redirectOutputMethod`, correspond to the two general categories of `run` methods mentioned above. Similar to `InputMethod`, both `OutputMethod`s add two general output destinations:
+`Subprocess` uses two types to describe where the standard output and standard error of the child process should be redirected. These two types, `Subprocess.CollectOutputMethod` and `Subprocess.RedirectOutputMethod`, correspond to the two general categories of `run` methods mentioned above. Similar to `InputMethod`, both `OutputMethod`s add two general output destinations:
 - `.discard`: Specifies that the child process's output should be discarded, effectively written to `/dev/null`.
-- `.writeTo`: Specifies that the child process should write its output to a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterProcessSpawned` is set to `true`.
+- `.writeTo`: Specifies that the child process should write its output to a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterSpawningProcess` is set to `true`.
 
 `CollectedOutMethod` adds one more option to non-closure-based `run` methods that return a `CollectedResult`: `.collect(upTo:)`. This option specifies that `Subprocess` should collect the output as `Data`. Since the output of a child process could be arbitrarily large, `Subprocess` imposes a limit on how many bytes it will collect. By default, this limit is 128kb.
 
@@ -1079,9 +1100,9 @@ extension Subprocess {
         /// to the file descriptor specified.
         /// - Parameters:
         ///   - fd: the file descriptor to write to
-        ///   - closeAfterProcessSpawned: whether to close the
+        ///   - closeAfterSpawningProcess: whether to close the
         ///     file descriptor once the process is spawned.
-        public static func writeTo(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self
+        public static func writeTo(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> Self
     }
 }
 ```
@@ -1109,9 +1130,9 @@ extension Subprocess {
         /// to the file descriptor specified.
         /// - Parameters:
         ///   - fd: the file descriptor to write to
-        ///   - closeAfterProcessSpawned: whether to close the
+        ///   - closeAfterSpawningProcess: whether to close the
         ///     file descriptor once the process is spawned.
-        public static func writeTo(_ fd: FileDescriptor, closeAfterProcessSpawned: Bool) -> Self
+        public static func writeTo(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> Self
     }
 }
 ```
@@ -1133,7 +1154,7 @@ print("curl output: \(String(data: curl.standardOutput, encoding: .utf8)!)")
 // Write to a specific file descriptor
 let fd: FileDescriptor = try .open(...)
 let result = try await Subprocess.run(
-    .at("/some/script"), output: .writeTo(fd, closeAfterProcessSpawned: true))
+    .at("/some/script"), output: .writeTo(fd, closeAfterSpawningProcess: true))
 
 // Redirect the output as AsyncSequence
 let result2 = try await Subprocess.run(
@@ -1154,7 +1175,7 @@ let result2 = try await Subprocess.run(
 
 `Subprocess` provides two "Result" types corresponding to the two categories of `run` methods: `Subprocess.CollectedResult` and `Subprocess.ExecutionResult<T>`.
 
-`Subprocess.CollectedResult` is essentially a collection of properties that represent the result of an execution after the child process has exited. It is used by the non-closure-based `run` methods. In many ways, `CollectedResult` can be seen as the "synchronous" version of `Subprocess`—instead of the asynchronous `AsyncSequence<UInt8>`, the standard IOs can be retrieved via synchronous `Data`.
+`Subprocess.CollectedResult` is essentially a collection of properties that represent the result of an execution after the child process has exited. It is used by the non-closure-based `run` methods. In many ways, `CollectedResult` can be seen as the "synchronous" version of `Subprocess`—instead of the asynchronous `AsyncSequence<Data>`, the standard IOs can be retrieved via synchronous `Data`.
 
 ```swift
 extension Subprocess {
@@ -1461,13 +1482,13 @@ let pipe = try FileDescriptor.pipe()
 
 async let ls = try await Subprocess.run(
     .named("ls"),
-    output: .writeTo(pipe.writeEnd, closeAfterProcessSpawned: true)
+    output: .writeTo(pipe.writeEnd, closeAfterSpawningProcess: true)
 )
 
 async let grep = try await Subprocess.run(
     .named("grep"),
     arguments: ["swift"],
-    input: .readFrom(pipe.readEnd, closeAfterProcessSpawned: true)
+    input: .readFrom(pipe.readEnd, closeAfterSpawningProcess: true)
 )
 
 let result = await String(data: grep.standardOutput, encoding: .utf8)

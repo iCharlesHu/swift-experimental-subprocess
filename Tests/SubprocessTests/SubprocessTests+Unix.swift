@@ -251,7 +251,7 @@ extension SubprocessUnixTests {
             theMysteriousIsland, .readOnly)
         let cat = try await Subprocess.run(
             .named("cat"),
-            input: .readFrom(text, closeAfterProcessSpawned: true),
+            input: .readFrom(text, closeAfterSpawningProcess: true),
             output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(cat.terminationStatus.isSuccess)
@@ -313,10 +313,14 @@ extension SubprocessUnixTests {
             input: expected,
             output: .redirectToSequence
         ) { execution in
-            return try await Array(execution.standardOutput)
+            var buffer = Data()
+            for try await chunk in execution.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        XCTAssertEqual(result.value, [UInt8](expected))
+        XCTAssertEqual(result.value, expected)
     }
 
     func testInputAsyncSequenceCustomExecutionBody() async throws {
@@ -345,10 +349,14 @@ extension SubprocessUnixTests {
             .at("/bin/cat"),
             input: stream
         ) { execution in
-            return try await Array(execution.standardOutput)
+            var buffer = Data()
+            for try await chunk in execution.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        XCTAssertEqual(result.value, [UInt8](expected))
+        XCTAssertEqual(result.value, expected)
     }
 }
 
@@ -410,7 +418,7 @@ extension SubprocessUnixTests {
             arguments: [expected],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: false
+                closeAfterSpawningProcess: false
             )
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
@@ -439,7 +447,7 @@ extension SubprocessUnixTests {
             arguments: ["Hello world"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: true
+                closeAfterSpawningProcess: true
             )
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
@@ -471,7 +479,7 @@ extension SubprocessUnixTests {
             arguments: [expected],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: false
+                closeAfterSpawningProcess: false
             )
         ) { subproces, writer in
             return 0
@@ -502,7 +510,7 @@ extension SubprocessUnixTests {
             arguments: ["Hello world"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: true
+                closeAfterSpawningProcess: true
             )
         ) { subproces, writer in
             return 0
@@ -531,8 +539,11 @@ extension SubprocessUnixTests {
             arguments: [theMysteriousIsland.string],
             output: .redirectToSequence
         ) { subprocess in
-            let collected = try await Array(subprocess.standardOutput)
-            return Data(collected)
+            var buffer = Data()
+            for try await chunk in subprocess.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.value, expected)

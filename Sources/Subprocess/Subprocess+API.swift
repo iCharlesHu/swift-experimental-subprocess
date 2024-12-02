@@ -382,7 +382,7 @@ extension Subprocess {
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
     public static func run<R>(
-        using configuration: Configuration,
+        _ configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)

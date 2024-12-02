@@ -233,7 +233,7 @@ extension SubprocessWindowsTests {
                 "/c",
                 "findstr x*"
             ],
-            input: .readFrom(text, closeAfterProcessSpawned: true),
+            input: .readFrom(text, closeAfterSpawningProcess: true),
             output: .collect(upTo: 2048 * 1024)
         )
 
@@ -306,10 +306,14 @@ extension SubprocessWindowsTests {
             input: expected,
             output: .redirectToSequence
         ) { execution in
-            return try await Array(execution.standardOutput)
+            var buffer = Data()
+            for try await chunk in execution.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        XCTAssertEqual(result.value, [UInt8](expected))
+        XCTAssertEqual(result.value, expected)
     }
 
     func testInputAsyncSequenceCustomExecutionBody() async throws {
@@ -331,10 +335,14 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "findstr x*"],
             input: stream
         ) { execution in
-            return try await Array(execution.standardOutput)
+            var buffer = Data()
+            for try await chunk in execution.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        XCTAssertEqual(result.value, [UInt8](expected))
+        XCTAssertEqual(result.value, expected)
     }
 }
 
@@ -385,7 +393,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "echo \(expected)"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: false
+                closeAfterSpawningProcess: false
             )
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
@@ -417,7 +425,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "echo Hello World"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: true
+                closeAfterSpawningProcess: true
             )
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
@@ -452,7 +460,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "echo \(expected)"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: false
+                closeAfterSpawningProcess: false
             )
         ) { subproces, writer in
             return 0
@@ -486,7 +494,7 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "echo Hello world"],
             output: .writeTo(
                 outputFile,
-                closeAfterProcessSpawned: true
+                closeAfterSpawningProcess: true
             )
         ) { subproces, writer in
             return 0
@@ -515,8 +523,11 @@ extension SubprocessWindowsTests {
             arguments: ["/c", "type \(theMysteriousIsland.string)"],
             output: .redirectToSequence
         ) { subprocess in
-            let collected = try await Array(subprocess.standardOutput)
-            return Data(collected)
+            var buffer = Data()
+            for try await chunk in subprocess.standardOutput {
+                buffer += chunk
+            }
+            return buffer
         }
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.value, expected)

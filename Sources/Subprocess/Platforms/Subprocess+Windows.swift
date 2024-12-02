@@ -332,10 +332,10 @@ extension Subprocess {
 
         /// Sets user credentials when starting the process as another user
         public var userCredentials: UserCredentials? = nil
-        /// What's the console behavior of the new process,
+        /// The console behavior of the new process,
         /// default to inheriting the console from parent process
         public var consoleBehavior: ConsoleBehavior = .inherit
-        /// Window state to use when the process is started
+        /// Window style to use when the process is started
         public var windowStyle: WindowStyle = .normal
         /// Whether to create a new process group for the new
         /// process. The process group includes all processes
@@ -1021,7 +1021,7 @@ extension FileDescriptor {
         return HANDLE(bitPattern: _get_osfhandle(self.rawValue))!
     }
 
-    internal func read(upToLength maxLength: Int) async throws -> [UInt8] {
+    internal func read(upToLength maxLength: Int) async throws -> Data {
         // TODO: Figure out a better way to asynchornously read
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -1073,7 +1073,7 @@ extension FileDescriptor {
                         errorCode: .fileReadUnknown)
                     )
                 } else {
-                    continuation.resume(returning: values)
+                    continuation.resume(returning: Data(values))
                 }
             }
         }
