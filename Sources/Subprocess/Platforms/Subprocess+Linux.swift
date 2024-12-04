@@ -26,6 +26,8 @@ extension Subprocess.Configuration {
         output: Subprocess.ExecutionOutput,
         error: Subprocess.ExecutionOutput
     ) throws -> Subprocess {
+        _setupMonitorSignalHandler()
+
         let (executablePath,
              env, argv,
              intendedWorkingDir,
@@ -204,26 +206,74 @@ internal func monitorProcessTermination(
     forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
 ) async -> Subprocess.TerminationStatus {
     return await withCheckedContinuation { continuation in
-        let source = DispatchSource.makeSignalSource(
-            signal: SIGCHLD,
-            queue: .global()
-        )
-        source.setEventHandler {
-            source.cancel()
+        _childProcessContinuations.withLock { continuations in
+            if let existing = continuations.removeValue(forKey: pid.value),
+               case .status(let existingStatus) = existing {
+                // We already have existing status to report
+                if _was_process_exited(existingStatus) != 0 {
+                    continuation.resume(returning: .exited(_get_exit_code(existingStatus)))
+                    return
+                }
+                if _was_process_signaled(existingStatus) != 0 {
+                    continuation.resume(returning: .unhandledException(_get_signal_code(existingStatus)))
+                    return
+                }
+                fatalError("Unexpected exit status type: \(existingStatus)")
+            } else {
+                // Save the continuation for handler
+                continuations[pid.value] = .continuation(continuation)
+            }
+        }
+    }
+}
+
+private enum ContinuationOrStatus {
+    case continuation(CheckedContinuation<Subprocess.TerminationStatus, Never>)
+    case status(Int32)
+}
+
+private let _childProcessContinuations: LockedState<
+    [pid_t: ContinuationOrStatus]
+> = LockedState(initialState: [:])
+
+private var signalSource: (any DispatchSourceSignal)? = nil
+private let setup: () = {
+    signalSource = DispatchSource.makeSignalSource(
+        signal: SIGCHLD,
+        queue: .global()
+    )
+    signalSource?.setEventHandler {
+        _childProcessContinuations.withLock { continuations in
             var status: Int32 = -1
-            waitpid(pid.value, &status, 0)
-            if _was_process_exited(status) != 0 {
-                continuation.resume(returning: .exited(_get_exit_code(status)))
-                return
+            while true {
+                let childPid = waitpid(-1, &status, WNOHANG)
+                if childPid <= 0 {
+                    break
+                }
+                if let existing = continuations.removeValue(forKey: childPid),
+                   case .continuation(let c) = existing {
+                    // We already have continuations saved
+                    if _was_process_exited(status) != 0 {
+                        c.resume(returning: .exited(_get_exit_code(status)))
+                    } else if _was_process_signaled(status) != 0 {
+                        c.resume(returning: .unhandledException(_get_signal_code(status)))
+                    } else {
+                        fatalError("Unexpected exit status type: \(status)")
+                    }
+                } else {
+                    // We don't have continuation yet, just save the state
+                    continuations[childPid] = .status(status)
+                }
             }
-            if _was_process_signaled(status) != 0 {
-                continuation.resume(returning: .unhandledException(_get_signal_code(status)))
-                return
-            }
-            fatalError("Unexpected exit status type: \(status)")
         }
         source.resume()
     }
+    signalSource?.resume()
+}()
+
+private func _setupMonitorSignalHandler() {
+    // Only executed once
+    setup
 }
 
 #endif // canImport(Glibc)

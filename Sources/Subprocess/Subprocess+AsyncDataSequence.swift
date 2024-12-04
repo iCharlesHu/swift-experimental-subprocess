@@ -45,6 +45,8 @@ extension Subprocess {
                     upToLength: Subprocess.readBufferSize
                 )
                 if data.count == 0 {
+                    // We finished reading. Close the file descriptor now
+                    try self.fileDescriptor.close()
                     return nil
                 }
                 return data
