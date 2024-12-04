@@ -696,6 +696,52 @@ extension SubprocessUnixTests {
     }
 }
 
+// MARK: - Performance Tests
+extension SubprocessUnixTests {
+    func testConcurrentRun() async throws {
+        // Launch as many processes as we can
+        // Figure out the max open file limit
+        let limitResult = try await Subprocess.run(
+            .at("/bin/bash"),
+            arguments: ["-c", "ulimit -n"]
+        )
+        guard let limitString = String(
+            data: limitResult.standardOutput, encoding: .utf8
+        )?.trimmingCharacters(in: .whitespacesAndNewlines),
+            let limit = Int(limitString) else {
+            XCTFail("Failed to run  ulimit -n")
+            return
+        }
+        // Since we open two pipes per `run`, launch
+        // limit / 4 subprocesses should reveal any
+        // file descriptor leaks
+        let maxConcurrent = limit / 4
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            var running = 0
+            let byteCount = 1000
+            for i in 0 ..< maxConcurrent {
+                group.addTask {
+                    let r = try await Subprocess.run(
+                        .at("/bin/bash"),
+                        arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: byteCount)]
+                    )
+                    guard r.terminationStatus.isSuccess else {
+                        XCTFail("Unexpected exit \(r.terminationStatus) from \(r.processIdentifier)")
+                        return
+                    }
+                    XCTAssert(r.standardOutput.count == byteCount + 1, "\(r.standardOutput)")
+                    XCTAssert(r.standardError.count == byteCount + 1, "\(r.standardError)")
+                }
+                running += 1
+                if running >= maxConcurrent / 4 {
+                    try await group.next()
+                }
+            }
+            try await group.waitForAll()
+        }
+    }
+}
+
 // MARK: - Utils
 extension SubprocessUnixTests {
     private func assertID(

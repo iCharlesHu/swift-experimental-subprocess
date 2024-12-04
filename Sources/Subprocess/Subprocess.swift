@@ -268,6 +268,9 @@ extension Subprocess {
               let readFd = readFd else {
             return nil
         }
+        defer {
+            try? readFd.close()
+        }
         return try await self.capture(fileDescriptor: readFd, maxLength: limit)
     }
 
@@ -276,6 +279,9 @@ extension Subprocess {
             .consumeCollectedFileDescriptor(),
               let readFd = readFd else {
             return nil
+        }
+        defer {
+            try? readFd.close()
         }
         return try await self.capture(fileDescriptor: readFd, maxLength: limit)
     }
