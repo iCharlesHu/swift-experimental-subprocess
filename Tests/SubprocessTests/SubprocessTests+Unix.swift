@@ -389,17 +389,18 @@ extension SubprocessUnixTests {
     }
 
     func testCollectedOutputWithLimit() async throws {
+        let limit = 4
         let expected = randomString(length: 32)
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
-            output: .collect(upTo: 2)
+            output: .collect(upTo: limit)
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
             String(data: echoResult.standardOutput, encoding: .utf8)
         ).trimmingCharacters(in: .whitespacesAndNewlines)
-        let targetRange = expected.startIndex ..< expected.index(expected.startIndex, offsetBy: 4)
+        let targetRange = expected.startIndex ..< expected.index(expected.startIndex, offsetBy: limit)
         XCTAssertEqual(String(expected[targetRange]), output)
     }
 
@@ -671,13 +672,13 @@ extension SubprocessUnixTests {
         var status: Int32 = 0
         waitpid(pid.value, &status, 0)
         XCTAssertTrue(_was_process_exited(status) > 0)
-        let data = try await readFd.read(upToLength: 1024)
+        try writeFd.close()
+        let data = try await readFd.read(upToLength: 10)
         let resultPID = try XCTUnwrap(
             String(data: Data(data), encoding: .utf8)
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual("\(pid.value)", resultPID)
         try readFd.close()
-        try writeFd.close()
     }
 
     func testTerminateProcess() async throws {
@@ -734,6 +735,28 @@ extension SubprocessUnixTests {
                 }
                 running += 1
                 if running >= maxConcurrent / 4 {
+                    try await group.next()
+                }
+            }
+            try await group.waitForAll()
+        }
+    }
+
+    func testCaptureLongStandardOutputAndError() async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            var running = 0
+            for _ in 0 ..< 10 {
+                group.addTask {
+                    let r = try await Subprocess.run(
+                        .at("/bin/bash"),
+                        arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: 100_000)]
+                    )
+                    XCTAssert(r.terminationStatus == .exited(0))
+                    XCTAssert(r.standardOutput.count == 100_001, "Standard output actual \(r.standardOutput)")
+                    XCTAssert(r.standardError.count == 100_001, "Standard error actual \(r.standardError)")
+                }
+                running += 1
+                if running >= 1000 {
                     try await group.next()
                 }
             }
