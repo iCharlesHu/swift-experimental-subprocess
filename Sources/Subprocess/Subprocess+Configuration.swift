@@ -200,7 +200,7 @@ extension Subprocess {
             return try await withTaskCancellationHandler {
                 return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
                     group.addTask {
-                        let status = await monitorProcessTermination(
+                        let status = try await monitorProcessTermination(
                             forProcessWithIdentifier: process.processIdentifier)
                         return .monitorChildProcess(status)
                     }
@@ -275,7 +275,7 @@ extension Subprocess {
             return try await withTaskCancellationHandler {
                 return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
                     group.addTask {
-                        let status = await monitorProcessTermination(
+                        let status = try await monitorProcessTermination(
                             forProcessWithIdentifier: process.processIdentifier)
                         return .monitorChildProcess(status)
                     }
