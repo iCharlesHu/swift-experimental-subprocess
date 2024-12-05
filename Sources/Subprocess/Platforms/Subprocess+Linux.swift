@@ -266,7 +266,6 @@ private let setup: () = {
                 }
             }
         }
-        source.resume()
     }
     signalSource?.resume()
 }()

@@ -362,19 +362,32 @@ extension FileDescriptor {
 
     internal func read(upToLength maxLength: Int) async throws -> Data {
         return try await withCheckedThrowingContinuation { continuation in
-            DispatchIO.read(
-                fromFileDescriptor: self.rawValue,
-                maxLength: maxLength,
-                runningHandlerOn: .global()
-            ) { data, error in
+            let dispatchIO = DispatchIO(
+                type: .stream,
+                fileDescriptor: self.rawValue,
+                queue: .global()
+            ) { error in
+                if error != 0 {
+                    continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                }
+            }
+            var buffer: Data = Data()
+            dispatchIO.read(
+                offset: 0,
+                length: maxLength,
+                queue: .global()
+            ) { done, data, error in
                 guard error == 0 else {
-                    continuation.resume(
-                        throwing: POSIXError(
-                            .init(rawValue: error) ?? .ENODEV)
-                    )
+                    continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
                     return
                 }
-                continuation.resume(returning: Data(data))
+                if let data = data {
+                    buffer += Data(data)
+                }
+                if done {
+                    dispatchIO.close()
+                    continuation.resume(returning: buffer)
+                }
             }
         }
     }
