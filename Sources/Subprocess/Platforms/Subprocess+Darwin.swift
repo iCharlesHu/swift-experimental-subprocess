@@ -309,26 +309,34 @@ PlatformOptions(
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
-) async -> Subprocess.TerminationStatus {
-    return await withCheckedContinuation { continuation in
+) async throws -> Subprocess.TerminationStatus {
+    return try await withCheckedThrowingContinuation { continuation in
         let source = DispatchSource.makeProcessSource(
             identifier: pid.value,
-            eventMask: [.exit, .signal],
+            eventMask: [.exit],
             queue: .global()
         )
         source.setEventHandler {
             source.cancel()
-            var status: Int32 = -1
-            waitpid(pid.value, &status, 0)
-            if _was_process_exited(status) != 0 {
-                continuation.resume(returning: .exited(_get_exit_code(status)))
+            var siginfo = siginfo_t()
+            let rc = waitid(P_PID, id_t(pid.value), &siginfo, WEXITED)
+            guard rc == 0 else {
+                continuation.resume(throwing: POSIXError(.init(rawValue: errno) ?? .ENODEV))
                 return
             }
-            if _was_process_signaled(status) != 0 {
-                continuation.resume(returning: .unhandledException(_get_signal_code(status)))
+            switch siginfo.si_code {
+            case .init(CLD_EXITED):
+                continuation.resume(returning: .exited(siginfo.si_status))
                 return
+            case .init(CLD_KILLED), .init(CLD_DUMPED):
+                continuation.resume(returning: .unhandledException(siginfo.si_status))
+            case .init(CLD_TRAPPED), .init(CLD_STOPPED), .init(CLD_CONTINUED), .init(CLD_NOOP):
+                // Ignore these signals because they are not related to
+                // process exiting
+                break
+            default:
+                fatalError("Unexpected exit status: \(siginfo.si_code)")
             }
-            fatalError("Unexpected exit status type: \(status)")
         }
         source.resume()
     }

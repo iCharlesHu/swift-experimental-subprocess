@@ -424,7 +424,7 @@ PlatformOptions(
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
-) async -> Subprocess.TerminationStatus {
+) async throws -> Subprocess.TerminationStatus {
     // Once the continuation resumes, it will need to unregister the wait, so
     // yield the wait handle back to the calling scope.
     var waitHandle: HANDLE?

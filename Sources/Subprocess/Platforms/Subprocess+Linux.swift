@@ -204,21 +204,13 @@ extension String {
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
-) async -> Subprocess.TerminationStatus {
-    return await withCheckedContinuation { continuation in
+) async throws -> Subprocess.TerminationStatus {
+    return try await withCheckedThrowingContinuation { continuation in
         _childProcessContinuations.withLock { continuations in
             if let existing = continuations.removeValue(forKey: pid.value),
                case .status(let existingStatus) = existing {
                 // We already have existing status to report
-                if _was_process_exited(existingStatus) != 0 {
-                    continuation.resume(returning: .exited(_get_exit_code(existingStatus)))
-                    return
-                }
-                if _was_process_signaled(existingStatus) != 0 {
-                    continuation.resume(returning: .unhandledException(_get_signal_code(existingStatus)))
-                    return
-                }
-                fatalError("Unexpected exit status type: \(existingStatus)")
+                continuation.resume(returning: existingStatus)
             } else {
                 // Save the continuation for handler
                 continuations[pid.value] = .continuation(continuation)
@@ -228,8 +220,8 @@ internal func monitorProcessTermination(
 }
 
 private enum ContinuationOrStatus {
-    case continuation(CheckedContinuation<Subprocess.TerminationStatus, Never>)
-    case status(Int32)
+    case continuation(CheckedContinuation<Subprocess.TerminationStatus, any Error>)
+    case status(Subprocess.TerminationStatus)
 }
 
 private let _childProcessContinuations: LockedState<
@@ -244,25 +236,33 @@ private let setup: () = {
     )
     signalSource?.setEventHandler {
         _childProcessContinuations.withLock { continuations in
-            var status: Int32 = -1
             while true {
-                let childPid = waitpid(-1, &status, WNOHANG)
-                if childPid <= 0 {
-                    break
+                var siginfo = siginfo_t()
+                guard waitid(P_ALL, id_t(0), &siginfo, WEXITED) == 0 else {
+                    return
                 }
-                if let existing = continuations.removeValue(forKey: childPid),
-                   case .continuation(let c) = existing {
-                    // We already have continuations saved
-                    if _was_process_exited(status) != 0 {
-                        c.resume(returning: .exited(_get_exit_code(status)))
-                    } else if _was_process_signaled(status) != 0 {
-                        c.resume(returning: .unhandledException(_get_signal_code(status)))
+                var status: Subprocess.TerminationStatus? = nil
+                switch siginfo.si_code {
+                case .init(CLD_EXITED):
+                    status = .exited(siginfo._sifields._sigchld.si_status)
+                case .init(CLD_KILLED), .init(CLD_DUMPED):
+                    status = .unhandledException(siginfo._sifields._sigchld.si_status)
+                case .init(CLD_TRAPPED), .init(CLD_STOPPED), .init(CLD_CONTINUED):
+                    // Ignore these signals because they are not related to
+                    // process exiting
+                    break
+                default:
+                    fatalError("Unexpected exit status: \(siginfo.si_code)")
+                }
+                if let status = status {
+                    let pid = siginfo._sifields._sigchld.si_pid
+                    if let existing = continuations.removeValue(forKey: pid),
+                       case .continuation(let c) = existing {
+                        c.resume(returning: status)
                     } else {
-                        fatalError("Unexpected exit status type: \(status)")
+                        // We don't have continuation yet, just state status
+                        continuations[pid] = .status(status)
                     }
-                } else {
-                    // We don't have continuation yet, just save the state
-                    continuations[childPid] = .status(status)
                 }
             }
         }
