@@ -161,7 +161,6 @@ extension SubprocessUnixTests {
     }
 
     func testEnvironmentCustom() async throws {
-        let currentDir = FileManager.default.currentDirectoryPath
         let result = try await Subprocess.run(
             .at("/usr/bin/printenv"),
             environment: .custom([
@@ -625,7 +624,6 @@ extension SubprocessUnixTests {
         guard getuid() == 0 else {
             throw XCTSkip("This test requires root privileges")
         }
-        let expectedPGID = Int.random(in: 1000 ... Int(pid_t.max))
         var platformOptions = Subprocess.PlatformOptions()
         // Sets the process group ID to 0, which creates a new session
         platformOptions.processGroupID = 0
@@ -658,6 +656,48 @@ extension SubprocessUnixTests {
         )
         try assertNewSessionCreated(with: psResult)
     }
+
+    func testTeardownSequence() async throws {
+        let result = try await Subprocess.run(
+            .named("/bin/bash"),
+            arguments: [
+                "-c",
+                """
+                set -e
+                trap 'echo saw SIGQUIT; echo >&2 saw SIGQUIT' QUIT
+                trap 'echo saw SIGTERM; echo >&2 saw SIGTERM' TERM
+                trap 'echo saw SIGINT; echo >&2 saw SIGINT; exit 42;' INT
+                while true; do sleep 0.1; done
+                exit 2
+                """,
+            ]
+        ) { subprocess in
+            return try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 200_00_000)
+                    // Send shut down signal
+                    await subprocess.teardown(using: [
+                        .sendSignal(.quit, allowedNanoSecondsToExit: 200_000_000),
+                        .sendSignal(.terminate, allowedNanoSecondsToExit: 200_000_000),
+                        .sendSignal(.interrupt, allowedNanoSecondsToExit: 1_000_000_000)
+                    ])
+                }
+                group.addTask {
+                    var outputs: [String] = []
+                    for try await bit in subprocess.standardOutput {
+                        let bitString = String(data: bit, encoding: .utf8)?
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let bit = bitString {
+                            outputs.append(bit)
+                        }
+                    }
+                    XCTAssert(outputs == ["saw SIGQUIT", "saw SIGTERM", "saw SIGINT"])
+                }
+                try await group.waitForAll()
+            }
+        }
+        XCTAssertEqual(result.terminationStatus, .exited(42))
+    }
 }
 
 // MARK: - Misc
@@ -673,7 +713,7 @@ extension SubprocessUnixTests {
         waitpid(pid.value, &status, 0)
         XCTAssertTrue(_was_process_exited(status) > 0)
         try writeFd.close()
-        let data = try await readFd.read(upToLength: 10)
+        let data = try await readFd.readUntilEOF(upToLength: 10)
         let resultPID = try XCTUnwrap(
             String(data: Data(data), encoding: .utf8)
         ).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -720,7 +760,7 @@ extension SubprocessUnixTests {
         try await withThrowingTaskGroup(of: Void.self) { group in
             var running = 0
             let byteCount = 1000
-            for i in 0 ..< maxConcurrent {
+            for _ in 0 ..< maxConcurrent {
                 group.addTask {
                     let r = try await Subprocess.run(
                         .at("/bin/bash"),

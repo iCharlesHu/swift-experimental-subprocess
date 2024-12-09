@@ -118,6 +118,11 @@ extension Subprocess {
         // Creates a session and sets the process group ID
         // i.e. Detach from the terminal.
         public var createSession: Bool = false
+        /// An ordered list of steps in order to tear down the child
+        /// process in case the parent task is cancelled before
+        /// the child proces terminates.
+        /// Always ends in sending a `SIGKILL` at the end.
+        public var teardownSequence: [TeardownStep] = []
         /// A closure to configure platform-specific
         /// spawning constructs. This closure enables direct
         /// configuration or override of underlying platform-specific

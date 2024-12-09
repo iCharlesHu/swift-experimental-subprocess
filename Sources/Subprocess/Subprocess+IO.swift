@@ -272,8 +272,10 @@ extension Subprocess {
                         throw writeFdCloseError
                     }
                 case .fileDescriptor(let fd, let closeWhenDone):
-                    try fd?.close()
-                    $0 = .fileDescriptor(nil, closeWhenDone)
+                    if closeWhenDone {
+                        try fd?.close()
+                        $0 = .fileDescriptor(nil, closeWhenDone)
+                    }
                 }
             }
         }
@@ -384,8 +386,10 @@ extension Subprocess {
                     try writeFd?.close()
                     $0 = .discarded(nil)
                 case .fileDescriptor(let fd, let closeWhenDone):
-                    try fd?.close()
-                    $0 = .fileDescriptor(nil, closeWhenDone)
+                    if closeWhenDone {
+                        try fd?.close()
+                        $0 = .fileDescriptor(nil, closeWhenDone)
+                    }
                 case .collected(let limit, let readFd, let writeFd):
                     var readFdCloseError: Error?
                     var writeFdCloseError: Error?

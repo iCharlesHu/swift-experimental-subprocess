@@ -67,6 +67,20 @@ public struct Subprocess: Sendable {
     }
 }
 
+// MARK: - Teardown
+#if canImport(Darwin) || canImport(Glibc)
+extension Subprocess {
+    /// Performs a sequence of teardown steps on the Subprocess.
+    /// Teardown sequence always ends with a `.kill` signal
+    /// - Parameter sequence: The  steps to perform.
+    public func teardown(using sequence: [TeardownStep]) async {
+        await withUncancelledTask {
+            await self.runTeardownSequence(sequence)
+        }
+    }
+}
+#endif
+
 // MARK: - StandardInputWriter
 extension Subprocess {
     /// A writer that writes to the standard input of the subprocess.
@@ -120,12 +134,6 @@ extension Subprocess {
 @available(watchOS, unavailable)
 @available(*, unavailable)
 extension Subprocess.StandardInputWriter : Sendable {}
-
-extension Subprocess.StandardInputWriter : TextOutputStream {
-    public mutating func write(_ string: String) {
-        
-    }
-}
 
 // MARK: - Result
 extension Subprocess {
@@ -250,7 +258,7 @@ extension Subprocess {
     internal typealias CapturedIOs = (standardOutput: Data?, standardError: Data?)
 
     private func capture(fileDescriptor: FileDescriptor, maxLength: Int) async throws -> Data {
-        return try await fileDescriptor.read(upToLength: maxLength)
+        return try await fileDescriptor.readUntilEOF(upToLength: maxLength)
     }
 
     internal func captureStandardOutput() async throws -> Data? {
