@@ -360,7 +360,27 @@ extension FileDescriptor {
         return self
     }
 
-    internal func read(upToLength maxLength: Int) async throws -> Data {
+    internal func readChunk(upToLength maxLength: Int) async throws -> Data? {
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchIO.read(
+                fromFileDescriptor: self.rawValue,
+                maxLength: maxLength,
+                runningHandlerOn: .global()
+            ) { data, error in
+                if error != 0 {
+                    continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                    return
+                }
+                if data.isEmpty {
+                    continuation.resume(returning: nil)
+                } else {
+                    continuation.resume(returning: Data(data))
+                }
+            }
+        }
+    }
+
+    internal func readUntilEOF(upToLength maxLength: Int) async throws -> Data {
         return try await withCheckedThrowingContinuation { continuation in
             let dispatchIO = DispatchIO(
                 type: .stream,

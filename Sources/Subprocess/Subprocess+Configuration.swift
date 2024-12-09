@@ -68,9 +68,16 @@ extension Subprocess {
             process: Subprocess,
             childSide: Bool, parentSide: Bool,
             attemptToTerminateSubProcess: Bool
-        ) throws {
+        ) async throws {
             guard childSide || parentSide || attemptToTerminateSubProcess else {
                 return
+            }
+
+            // Attempt to teardown the subprocess
+            if attemptToTerminateSubProcess {
+                await process.teardown(
+                    using: self.platformOptions.teardownSequence
+                )
             }
 
             let inputCloseFunc: () throws -> Void
@@ -114,12 +121,6 @@ extension Subprocess {
                 errorError = error // lolol
             }
 
-            // Attempt to kill the subprocess
-            var killError: Error?
-            if attemptToTerminateSubProcess {
-                killError = process.tryTerminate()
-            }
-
             if let inputError = inputError {
                 throw inputError
             }
@@ -130,10 +131,6 @@ extension Subprocess {
 
             if let errorError = errorError {
                 throw errorError
-            }
-
-            if let killError = killError {
-                throw killError
             }
         }
 
@@ -191,13 +188,13 @@ extension Subprocess {
                 output: executionOutput,
                 error: executionError)
             // After spawn, cleanup child side fds
-            try self.cleanup(
+            try await self.cleanup(
                 process: process,
                 childSide: true,
                 parentSide: false,
                 attemptToTerminateSubProcess: false
             )
-            return try await withTaskCancellationHandler {
+            return try await withAsyncTaskCancellationHandler {
                 return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
                     group.addTask {
                         let status = try await monitorProcessTermination(
@@ -207,7 +204,7 @@ extension Subprocess {
                     group.addTask {
                         do {
                             let result = try await body(process, .init(input: executionInput))
-                            try self.cleanup(
+                            try await self.cleanup(
                                 process: process,
                                 childSide: false,
                                 parentSide: true,
@@ -216,11 +213,11 @@ extension Subprocess {
                             return .workBody(result)
                         } catch {
                             // Cleanup everything
-                            try self.cleanup(
+                            try await self.cleanup(
                                 process: process,
-                                childSide: true,
+                                childSide: false,
                                 parentSide: true,
-                                attemptToTerminateSubProcess: true
+                                attemptToTerminateSubProcess: false
                             )
                             throw error
                         }
@@ -243,7 +240,7 @@ extension Subprocess {
                 // Attempt to terminate the child process
                 // Since the task has already been cancelled,
                 // this is the best we can do
-                try? self.cleanup(
+                try? await self.cleanup(
                     process: process,
                     childSide: true,
                     parentSide: true,
@@ -266,13 +263,13 @@ extension Subprocess {
                 output: executionOutput,
                 error: executionError)
             // After spawn, clean up child side
-            try self.cleanup(
+            try await self.cleanup(
                 process: process,
                 childSide: true,
                 parentSide: false,
                 attemptToTerminateSubProcess: false
             )
-            return try await withTaskCancellationHandler {
+            return try await withAsyncTaskCancellationHandler {
                 return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
                     group.addTask {
                         let status = try await monitorProcessTermination(
@@ -282,7 +279,7 @@ extension Subprocess {
                     group.addTask {
                         do {
                             let result = try await body(process)
-                            try self.cleanup(
+                            try await  self.cleanup(
                                 process: process,
                                 childSide: false,
                                 parentSide: true,
@@ -290,11 +287,11 @@ extension Subprocess {
                             )
                             return .workBody(result)
                         } catch {
-                            try self.cleanup(
+                            try await self.cleanup(
                                 process: process,
-                                childSide: true,
+                                childSide: false,
                                 parentSide: true,
-                                attemptToTerminateSubProcess: true
+                                attemptToTerminateSubProcess: false
                             )
                             throw error
                         }
@@ -316,7 +313,7 @@ extension Subprocess {
                 // Attempt to terminate the child process
                 // Since the task has already been cancelled,
                 // this is the best we can do
-                try? self.cleanup(
+                try? await self.cleanup(
                     process: process,
                     childSide: true,
                     parentSide: true,
@@ -737,3 +734,34 @@ public enum QualityOfService: Int, Sendable {
     case background         = 0x09
     case `default`          = -1
 }
+
+internal func withAsyncTaskCancellationHandler<R>(
+    _ body: sending @escaping () async throws -> R,
+    onCancel handler: sending @escaping () async -> Void
+) async rethrows -> R {
+    return try await withThrowingTaskGroup(
+        of: R?.self,
+        returning: R.self
+    ) { group in
+        group.addTask {
+            return try await body()
+        }
+        group.addTask {
+            // wait until cancelled
+            do { while true { try await Task.sleep(nanoseconds: 1_000_000_000) } } catch {}
+            // Run task cancel handler
+            await handler()
+            return nil
+        }
+
+        while let result = try await group.next() {
+            if let result = result {
+                // As soon as the body finishes, cancel the group
+                group.cancelAll()
+                return result
+            }
+        }
+        fatalError("Unreachable")
+    }
+}
+

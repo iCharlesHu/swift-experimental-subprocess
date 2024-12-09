@@ -52,7 +52,7 @@ internal var getgroupsSwift: FilePath {
 }
 
 internal var windowsTester: FilePath {
-    var path = Bundle.module.url(
+    let path = Bundle.module.url(
         forResource: "windows-tester",
         withExtension: "ps1",
         subdirectory: "Resources"

@@ -41,10 +41,10 @@ extension Subprocess {
             }
 
             public mutating func next() async throws -> Data? {
-                let data = try await self.fileDescriptor.read(
+                let data = try await self.fileDescriptor.readChunk(
                     upToLength: Subprocess.readBufferSize
                 )
-                if data.count == 0 {
+                if data == nil {
                     // We finished reading. Close the file descriptor now
                     try self.fileDescriptor.close()
                     return nil
