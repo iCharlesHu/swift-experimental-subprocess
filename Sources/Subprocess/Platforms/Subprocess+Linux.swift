@@ -121,7 +121,7 @@ extension Subprocess {
         /// An ordered list of steps in order to tear down the child
         /// process in case the parent task is cancelled before
         /// the child proces terminates.
-        /// Always ends in sending a `SIGKILL` at the end.
+        /// Always ends in sending a `.kill` signal at the end.
         public var teardownSequence: [TeardownStep] = []
         /// A closure to configure platform-specific
         /// spawning constructs. This closure enables direct

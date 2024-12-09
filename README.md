@@ -72,6 +72,9 @@
         - Introduced `Subprocess.runDetached` as a top level API and sibling to all `Subprocess.run` methods. This method allows you to spawn a subprocess **WITHOUT** needing to wait for it to finish.
     - Updated `.standardOutput` and `.standardError` properties on `Subprocess` to be `AsyncSequence<Data, any Error>` instead of `AsyncSequence<UInt8, any Error>`.
         - The previous design, while more "traditional", leads to performance problems when the subprocess outputs large amount of data
+    - Teardown Sequence support (for Darwin and Linux):
+        - Introduced `Subprocess.teardown(using:)` to allow developers to gracefully shutdown a subprocess.
+        - Introuuced `PlatformOptions.teardownSequence` that will be used to gracefully shutdown the subprocess if the parent task is cancelled.
 
 ## Introduction
 
@@ -641,6 +644,57 @@ extension Subprocess {
 #endif // canImport(Glibc) || canImport(Darwin)
 ```
 
+### Teardown Sequence (macOS and Linux)
+
+`Subprocess` provides a graceful shutdown mechanism for child processes using the `.teardown(using:)` method. This method allows for a sequence of teardown steps to be executed, with the final step always sending a `.kill` signal.
+
+```swift
+#if canImport(Glibc) || canImport(Darwin)
+extension Subprocses {
+    /// Performs a sequence of teardown steps on the Subprocess.
+    /// Teardown sequence always ends with a `.kill` signal
+    /// - Parameter sequence: The  steps to perform.
+    @available(FoundationPreview 0.4, *)
+    @available(iOS, unavailable)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
+    public func teardown(using sequence: [TeardownStep]) async
+
+    /// A step in the graceful shutdown teardown sequence.
+    /// It consists of a signal to send to the child process and the
+    /// number of nanoseconds allowed for the child process to exit
+    /// before proceeding to the next step.
+    @available(FoundationPreview 0.4, *)
+    @available(iOS, unavailable)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
+    public struct TeardownStep: Sendable, Hashable {
+        /// Sends `signal` to the process and provides `allowedNanoSecondsToExit`
+        /// nanoseconds for the process to exit before proceeding to the next step.
+        /// The final step in the sequence will always send a `.kill` signal.
+        public static func sendSignal(
+            _ signal: Signal,
+            allowedNanoSecondsToExit: UInt64
+        ) -> Self
+    }
+}
+#endif // canImport(Glibc) || canImport(Darwin)
+```
+
+A teardown sequence is a series of signals sent to the child process, accompanied by a specified time limit for the child process to terminate before proceeding to the next step. For instance, it may be appropriate to initially send `.quit` and `.terminate` signals to the child process to facilitate a graceful shutdown before sending `.kill`.
+
+```swift
+let result = try await Subprocess.run(
+    .at("/bin/bash"),
+    arguments: [...]
+) { subprocess in
+    // ... more work
+    await subprocess.teardown(using: [
+        .sendSignal(.quit, allowedNanoSecondsToExit: 100_000_000),
+        .sendSignal(.terminate, allowedNanoSecondsToExit: 100_000_000),
+    ])
+}
+```
 
 ### Process Controls (Windows)
 
@@ -786,6 +840,11 @@ extension Subprocess {
         // i.e. Detach from the terminal.
         public var createSession: Bool
         public var launchRequirementData: Data?
+        /// An ordered list of steps in order to tear down the child
+        /// process in case the parent task is cancelled before
+        /// the child proces terminates.
+        /// Always ends in sending a `.kill` signal at the end.
+        public var teardownSequence: [TeardownStep]
         /// A closure to configure platform-specific
         /// spawning constructs. This closure enables direct
         /// configuration or override of underlying platform-specific
@@ -879,6 +938,11 @@ extension Subprocess {
         // because `POSIX_SPAWN_CLOEXEC_DEFAULT` is a darwin-specific
         // extension and we can only emulate it on Linux.
         public var closeAllUnknownFileDescriptors: Bool
+        /// An ordered list of steps in order to tear down the child
+        /// process in case the parent task is cancelled before
+        /// the child proces terminates.
+        /// Always ends in sending a `.kill` signal at the end.
+        public var teardownSequence: [TeardownStep] = []
         /// A closure to configure platform-specific
         /// spawning constructs. This closure enables direct
         /// configuration or override of underlying platform-specific

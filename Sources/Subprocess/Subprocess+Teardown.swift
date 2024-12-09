@@ -20,15 +20,20 @@ import Foundation
 #endif
 
 extension Subprocess {
-    public struct TeardownStep: Sendable {
-        internal enum Storage {
+    /// A step in the graceful shutdown teardown sequence.
+    /// It consists of a signal to send to the child process and the
+    /// number of nanoseconds allowed for the child process to exit
+    /// before proceeding to the next step.
+    public struct TeardownStep: Sendable, Hashable {
+        internal enum Storage: Sendable, Hashable {
             case sendSignal(Signal, allowedNanoseconds: UInt64)
             case kill
         }
         var storage: Storage
 
-        /// Send `signal` to process and give it `allowedTimeToExitNS` nanoseconds to exit before progressing
-        /// to the next teardown step. The final teardown step is always sending a `SIGKILL`.
+        /// Sends `signal` to the process and provides `allowedNanoSecondsToExit`
+        /// nanoseconds for the process to exit before proceeding to the next step.
+        /// The final step in the sequence will always send a `.kill` signal.
         public static func sendSignal(
             _ signal: Signal,
             allowedNanoSecondsToExit: UInt64
