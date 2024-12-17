@@ -84,7 +84,7 @@ extension Subprocess {
 // MARK: - StandardInputWriter
 extension Subprocess {
     /// A writer that writes to the standard input of the subprocess.
-    public struct StandardInputWriter {
+    public actor StandardInputWriter: Sendable {
 
         private let input: ExecutionInput
 
@@ -94,7 +94,7 @@ extension Subprocess {
 
         /// Write a sequence of UInt8 to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S>(_ sequence: S) async throws where S : Sequence, S.Element == UInt8 {
+        public func write<S>(_ sequence: S) async throws where S : Sequence & Sendable, S.Element == UInt8 {
             guard let fd: FileDescriptor = self.input.getWriteFileDescriptor() else {
                 fatalError("Attempting to write to a file descriptor that's already closed")
             }
@@ -109,14 +109,14 @@ extension Subprocess {
 
         /// Write a AsyncSequence of CChar to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S: AsyncSequence>(_ asyncSequence: S) async throws where S.Element == CChar {
+        public func write<S: AsyncSequence & Sendable>(_ asyncSequence: S) async throws where S.Element == CChar {
             let sequence = try await Array(asyncSequence).map { UInt8($0) }
             try await self.write(sequence)
         }
 
         /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S: AsyncSequence>(_ asyncSequence: S) async throws where S.Element == UInt8 {
+        public func write<S: AsyncSequence & Sendable>(_ asyncSequence: S) async throws where S.Element == UInt8 {
             let sequence = try await Array(asyncSequence)
             try await self.write(sequence)
         }
@@ -127,13 +127,6 @@ extension Subprocess {
         }
     }
 }
-
-@available(macOS, unavailable)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
-@available(*, unavailable)
-extension Subprocess.StandardInputWriter : Sendable {}
 
 // MARK: - Result
 extension Subprocess {

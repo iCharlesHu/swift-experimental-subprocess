@@ -177,7 +177,7 @@ extension Subprocess {
         internal func run<R>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
-            _ body: sending @escaping (Subprocess, StandardInputWriter) async throws -> R
+            _ body: @escaping (Subprocess, StandardInputWriter) async throws -> R
         ) async throws -> ExecutionResult<R> {
             let (readFd, writeFd) = try FileDescriptor.pipe()
             let executionInput: ExecutionInput = .init(storage: .customWrite(readFd, writeFd))
@@ -195,46 +195,28 @@ extension Subprocess {
                 attemptToTerminateSubProcess: false
             )
             return try await withAsyncTaskCancellationHandler {
-                return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
-                    group.addTask {
-                        let status = try await monitorProcessTermination(
-                            forProcessWithIdentifier: process.processIdentifier)
-                        return .monitorChildProcess(status)
-                    }
-                    group.addTask {
-                        do {
-                            let result = try await body(process, .init(input: executionInput))
-                            try await self.cleanup(
-                                process: process,
-                                childSide: false,
-                                parentSide: true,
-                                attemptToTerminateSubProcess: false
-                            )
-                            return .workBody(result)
-                        } catch {
-                            // Cleanup everything
-                            try await self.cleanup(
-                                process: process,
-                                childSide: false,
-                                parentSide: true,
-                                attemptToTerminateSubProcess: false
-                            )
-                            throw error
-                        }
-                    }
-
-                    var result: R!
-                    var terminationStatus: TerminationStatus!
-                    while let state = try await group.next() {
-                        switch state {
-                        case .monitorChildProcess(let status):
-                            // We don't really care about termination status here
-                            terminationStatus = status
-                        case .workBody(let workResult):
-                            result = workResult
-                        }
-                    }
-                    return ExecutionResult(terminationStatus: terminationStatus, value: result)
+                async let waitingStatus = try await monitorProcessTermination(forProcessWithIdentifier: process.processIdentifier)
+                // Body runs in the same isolation
+                do {
+                    let result = try await body(process, .init(input: executionInput))
+                    // Clean up parent side when body finishes
+                    try await self.cleanup(
+                        process: process,
+                        childSide: false,
+                        parentSide: true,
+                        attemptToTerminateSubProcess: false
+                    )
+                    let status: TerminationStatus = try await waitingStatus
+                    return ExecutionResult(terminationStatus: status, value: result)
+                } catch {
+                    // Cleanup everything
+                    try await self.cleanup(
+                        process: process,
+                        childSide: false,
+                        parentSide: true,
+                        attemptToTerminateSubProcess: false
+                    )
+                    throw error
                 }
             } onCancel: {
                 // Attempt to terminate the child process
@@ -270,44 +252,29 @@ extension Subprocess {
                 attemptToTerminateSubProcess: false
             )
             return try await withAsyncTaskCancellationHandler {
-                return try await withThrowingTaskGroup(of: RunState<R>.self) { group in
-                    group.addTask {
-                        let status = try await monitorProcessTermination(
-                            forProcessWithIdentifier: process.processIdentifier)
-                        return .monitorChildProcess(status)
-                    }
-                    group.addTask {
-                        do {
-                            let result = try await body(process)
-                            try await  self.cleanup(
-                                process: process,
-                                childSide: false,
-                                parentSide: true,
-                                attemptToTerminateSubProcess: false
-                            )
-                            return .workBody(result)
-                        } catch {
-                            try await self.cleanup(
-                                process: process,
-                                childSide: false,
-                                parentSide: true,
-                                attemptToTerminateSubProcess: false
-                            )
-                            throw error
-                        }
-                    }
-
-                    var result: R!
-                    var terminationStatus: TerminationStatus!
-                    while let state = try await group.next() {
-                        switch state {
-                        case .monitorChildProcess(let status):
-                            terminationStatus = status
-                        case .workBody(let workResult):
-                            result = workResult
-                        }
-                    }
-                    return ExecutionResult(terminationStatus: terminationStatus, value: result)
+                async let waitingStatus = try monitorProcessTermination(
+                    forProcessWithIdentifier: process.processIdentifier
+                )
+                do {
+                    // Body runs in the same isolation
+                    let result = try await body(process)
+                    // After body finishes, cleanup parent side
+                    try await self.cleanup(
+                        process: process,
+                        childSide: false,
+                        parentSide: true,
+                        attemptToTerminateSubProcess: false
+                    )
+                    let status = try await waitingStatus
+                    return ExecutionResult(terminationStatus: status, value: result)
+                } catch {
+                    try await self.cleanup(
+                        process: process,
+                        childSide: false,
+                        parentSide: true,
+                        attemptToTerminateSubProcess: false
+                    )
+                    throw error
                 }
             } onCancel: {
                 // Attempt to terminate the child process
@@ -735,33 +702,24 @@ public enum QualityOfService: Int, Sendable {
     case `default`          = -1
 }
 
-internal func withAsyncTaskCancellationHandler<R>(
-    _ body: sending @escaping () async throws -> R,
-    onCancel handler: sending @escaping () async -> Void
+internal func withAsyncTaskCancellationHandler<R: Sendable>(
+    _ body: @escaping () async throws -> R,
+    onCancel handler: @Sendable @escaping () async -> Void
 ) async rethrows -> R {
     return try await withThrowingTaskGroup(
-        of: R?.self,
+        of: Void.self,
         returning: R.self
     ) { group in
-        group.addTask {
-            return try await body()
-        }
         group.addTask {
             // wait until cancelled
             do { while true { try await Task.sleep(nanoseconds: 1_000_000_000) } } catch {}
             // Run task cancel handler
             await handler()
-            return nil
         }
 
-        while let result = try await group.next() {
-            if let result = result {
-                // As soon as the body finishes, cancel the group
-                group.cancelAll()
-                return result
-            }
-        }
-        fatalError("Unreachable")
+        let result = try await body()
+        group.cancelAll()
+        return result
     }
 }
 
