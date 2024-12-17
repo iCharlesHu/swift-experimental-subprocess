@@ -86,7 +86,7 @@ extension Subprocess {
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
-        input: some Sequence<UInt8>,
+        input: some Sequence<UInt8> & Sendable,
         output: CollectedOutputMethod = .collect(),
         error: CollectedOutputMethod = .collect()
     ) async throws -> CollectedResult {
@@ -143,7 +143,7 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run<S: AsyncSequence>(
+    public static func run<S: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -217,7 +217,7 @@ extension Subprocess {
         input: InputMethod = .noInput,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (sending @escaping (Subprocess) async throws -> R)
+        _ body: (@escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await Configuration(
             executable: executable,
@@ -250,10 +250,10 @@ extension Subprocess {
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
-        input: some Sequence<UInt8>,
+        input: some Sequence<UInt8> & Sendable,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (sending @escaping (Subprocess) async throws -> R)
+        _ body: (@escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await Configuration(
             executable: executable,
@@ -263,19 +263,13 @@ extension Subprocess {
             platformOptions: platformOptions
         )
         .run(output: output, error: error) { execution, writer in
-            return try await withThrowingTaskGroup(of: R?.self) { group in
+            return try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
                     try await writer.write(input)
                     try await writer.finish()
-                    return nil
                 }
-                group.addTask {
-                    return try await body(execution)
-                }
-                var result: R!
-                while let next = try await group.next() {
-                    result = next
-                }
+                let result = try await body(execution)
+                try await group.waitForAll()
                 return result
             }
         }
@@ -296,7 +290,7 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
-    public static func run<R, S: AsyncSequence>(
+    public static func run<R, S: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -305,7 +299,7 @@ extension Subprocess {
         input: S,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (sending @escaping (Subprocess) async throws -> R)
+        _ body: (@escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> where S.Element == UInt8 {
         return try await Configuration(
             executable: executable,
@@ -315,19 +309,13 @@ extension Subprocess {
             platformOptions: platformOptions
         )
         .run(output: output, error: error) { execution, writer in
-            return try await withThrowingTaskGroup(of: R?.self) { group in
+            return try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
                     try await writer.write(input)
                     try await writer.finish()
-                    return nil
                 }
-                group.addTask {
-                    return try await body(execution)
-                }
-                var result: R!
-                while let next = try await group.next() {
-                    result = next
-                }
+                let result = try await body(execution)
+                try await group.waitForAll()
                 return result
             }
         }
@@ -356,7 +344,7 @@ extension Subprocess {
         platformOptions: PlatformOptions = PlatformOptions(),
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)
+        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await Configuration(
             executable: executable,
@@ -385,7 +373,7 @@ extension Subprocess {
         _ configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
-        _ body: (sending @escaping (Subprocess, StandardInputWriter) async throws -> R)
+        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R> {
         return try await configuration.run(output: output, error: error, body)
     }

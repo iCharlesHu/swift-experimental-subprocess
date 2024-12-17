@@ -32,7 +32,10 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system"),
 
             ],
-            path: "Sources/Subprocess"
+            path: "Sources/Subprocess",
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency")
+            ]
         ),
         .testTarget(
             name: "SwiftExperimentalSubprocessTests",
