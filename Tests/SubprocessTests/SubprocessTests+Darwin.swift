@@ -75,7 +75,7 @@ final class SubprocessDarwinTests : XCTestCase {
             // Now resume the process
             try subprocess.send(.resume, toProcessGroup: false)
             var resumedStatus: Int32 = 0
-            let rc = waitpid(subprocess.processIdentifier.value, &resumedStatus, WNOHANG | WUNTRACED)
+            waitpid(subprocess.processIdentifier.value, &resumedStatus, WNOHANG | WUNTRACED)
             XCTAssertTrue(_was_process_suspended(resumedStatus) == 0)
 
             // Now kill the process

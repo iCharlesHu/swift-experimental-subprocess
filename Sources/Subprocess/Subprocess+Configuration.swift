@@ -177,6 +177,7 @@ extension Subprocess {
         internal func run<R>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
+            isolation: isolated (any Actor)? = #isolation,
             _ body: @escaping (Subprocess, StandardInputWriter) async throws -> R
         ) async throws -> ExecutionResult<R> {
             let (readFd, writeFd) = try FileDescriptor.pipe()
@@ -235,6 +236,7 @@ extension Subprocess {
             input: InputMethod,
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
+            isolation: isolated (any Actor)? = #isolation,
             _ body: (sending @escaping (Subprocess) async throws -> R)
         ) async throws -> ExecutionResult<R> {
             let executionInput = try input.createExecutionInput()
@@ -704,7 +706,8 @@ public enum QualityOfService: Int, Sendable {
 
 internal func withAsyncTaskCancellationHandler<R: Sendable>(
     _ body: @escaping () async throws -> R,
-    onCancel handler: @Sendable @escaping () async -> Void
+    onCancel handler: @Sendable @escaping () async -> Void,
+    isolation: isolated (any Actor)? = #isolation
 ) async rethrows -> R {
     return try await withThrowingTaskGroup(
         of: Void.self,
