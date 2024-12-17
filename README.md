@@ -294,6 +294,7 @@ extension Subprocess {
         input: InputMethod = .noInput,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
@@ -320,6 +321,7 @@ extension Subprocess {
         input: some Sequence<UInt8> & Sendable,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
@@ -347,6 +349,7 @@ extension Subprocess {
         input: S,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess) async throws -> R)
     ) async throws -> ExecutionResult<R> where S.Element == UInt8
 
@@ -372,6 +375,7 @@ extension Subprocess {
         platformOptions: PlatformOptions = .default,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R>
 
@@ -389,6 +393,7 @@ extension Subprocess {
         _ configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> R)
     ) async throws -> ExecutionResult<R>
 }
