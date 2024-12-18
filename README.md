@@ -667,19 +667,19 @@ extension Subprocses {
 
     /// A step in the graceful shutdown teardown sequence.
     /// It consists of a signal to send to the child process and the
-    /// number of nanoseconds allowed for the child process to exit
-    /// before proceeding to the next step.
+    /// duration allowed for the child process to exit before proceeding
+    /// to the next step.
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
     public struct TeardownStep: Sendable, Hashable {
-        /// Sends `signal` to the process and provides `allowedNanoSecondsToExit`
-        /// nanoseconds for the process to exit before proceeding to the next step.
+        /// Sends `signal` to the process and allows `allowedDurationToExit`
+        /// for the process to exit before proceeding to the next step.
         /// The final step in the sequence will always send a `.kill` signal.
         public static func sendSignal(
             _ signal: Signal,
-            allowedNanoSecondsToExit: UInt64
+            allowedDurationToExit: Duration
         ) -> Self
     }
 }
@@ -695,8 +695,8 @@ let result = try await Subprocess.run(
 ) { subprocess in
     // ... more work
     await subprocess.teardown(using: [
-        .sendSignal(.quit, allowedNanoSecondsToExit: 100_000_000),
-        .sendSignal(.terminate, allowedNanoSecondsToExit: 100_000_000),
+        .sendSignal(.quit, allowedDurationToExit: .milliseconds(100)),
+        .sendSignal(.terminate, allowedDurationToExit: .milliseconds(100)),
     ])
 }
 ```

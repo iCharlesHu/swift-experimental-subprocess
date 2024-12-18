@@ -677,9 +677,9 @@ extension SubprocessUnixTests {
                     try await Task.sleep(nanoseconds: 200_00_000)
                     // Send shut down signal
                     await subprocess.teardown(using: [
-                        .sendSignal(.quit, allowedNanoSecondsToExit: 200_000_000),
-                        .sendSignal(.terminate, allowedNanoSecondsToExit: 200_000_000),
-                        .sendSignal(.interrupt, allowedNanoSecondsToExit: 1_000_000_000)
+                        .sendSignal(.quit, allowedDurationToExit: .milliseconds(200)),
+                        .sendSignal(.terminate, allowedDurationToExit: .milliseconds(200)),
+                        .sendSignal(.interrupt, allowedDurationToExit: .milliseconds(1000))
                     ])
                 }
                 group.addTask {
