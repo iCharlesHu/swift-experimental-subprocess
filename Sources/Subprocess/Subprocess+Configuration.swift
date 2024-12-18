@@ -704,7 +704,7 @@ public enum QualityOfService: Int, Sendable {
     case `default`          = -1
 }
 
-internal func withAsyncTaskCancellationHandler<R: Sendable>(
+internal func withAsyncTaskCancellationHandler<R>(
     _ body: @escaping () async throws -> R,
     onCancel handler: @Sendable @escaping () async -> Void,
     isolation: isolated (any Actor)? = #isolation

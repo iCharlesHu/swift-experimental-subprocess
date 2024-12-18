@@ -1279,7 +1279,7 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct ExecutionResult<T: Sendable>: Sendable {
+    public struct ExecutionResult<T> {
         /// The termination status of the child process
         public let terminationStatus: TerminationStatus
         /// The result returned by the closure passed to `.run` methods
