@@ -412,11 +412,22 @@ extension FileDescriptor {
         }
     }
 
-    internal func write<S: Sequence>(_ data: S) async throws where S.Element == UInt8 {
+    internal func write(_ data: [UInt8]) async throws {
+        let dispatchData: DispatchData = data.withUnsafeBytes {
+            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+        }
+        return try await self.write(dispatchData)
+    }
+
+    internal func write(_ data: Data) async throws {
+        let dispatchData: DispatchData = data.withUnsafeBytes {
+            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+        }
+        return try await self.write(dispatchData)
+    }
+
+    internal func write(_ dispatchData: DispatchData) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) -> Void in
-            let dispatchData: DispatchData = Array(data).withUnsafeBytes {
-                return DispatchData(bytes: $0)
-            }
             DispatchIO.write(
                 toFileDescriptor: self.rawValue,
                 data: dispatchData,

@@ -143,6 +143,73 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
+    public static func run(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
+        input: some Sequence<Data> & Sendable,
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
+    ) async throws -> CollectedResult {
+        let result = try await self.run(
+            executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions,
+            output: .init(method: output.method),
+            error: .init(method: output.method)
+        ) { subprocess, writer in
+            return try await withThrowingTaskGroup(of: CapturedIOs?.self) { group in
+                group.addTask {
+                    var buffer = Data()
+                    for chunk in input {
+                        buffer.append(chunk)
+                    }
+                    try await writer.write(buffer)
+                    try await writer.finish()
+                    return nil
+                }
+                group.addTask {
+                    return try await subprocess.captureIOs()
+                }
+                var capturedIOs: CapturedIOs!
+                while let result = try await group.next() {
+                    if result != nil {
+                        capturedIOs = result
+                    }
+                }
+                return (
+                    processIdentifier: subprocess.processIdentifier,
+                    standardOutput: capturedIOs.standardOutput,
+                    standardError: capturedIOs.standardError
+                )
+            }
+        }
+        return CollectedResult(
+            processIdentifier: result.value.processIdentifier,
+            terminationStatus: result.terminationStatus,
+            standardOutput: result.value.standardOutput,
+            standardError: result.value.standardError
+        )
+    }
+
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
     public static func run<S: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -152,7 +219,7 @@ extension Subprocess {
         input: S,
         output: CollectedOutputMethod = .collect(),
         error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult where S.Element == UInt8 {
+    ) async throws -> CollectedResult where S.Element == Data {
         let result =  try await self.run(
             executable,
             arguments: arguments,
@@ -292,6 +359,57 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
+    public static func run<R>(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
+        input: some Sequence<Data> & Sendable,
+        output: RedirectedOutputMethod = .redirectToSequence,
+        error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
+        _ body: (@escaping (Subprocess) async throws -> R)
+    ) async throws -> ExecutionResult<R> {
+        return try await Configuration(
+            executable: executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions
+        )
+        .run(output: output, error: error) { execution, writer in
+            return try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    var buffer = Data()
+                    for chunk in input {
+                        buffer.append(chunk)
+                    }
+                    try await writer.write(buffer)
+                    try await writer.finish()
+                }
+                let result = try await body(execution)
+                try await group.waitForAll()
+                return result
+            }
+        }
+    }
+
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a `ExecutableResult` type containing the return value
+    ///     of the closure.
     public static func run<R, S: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -303,7 +421,7 @@ extension Subprocess {
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R> where S.Element == UInt8 {
+    ) async throws -> ExecutionResult<R> where S.Element == Data {
         return try await Configuration(
             executable: executable,
             arguments: arguments,

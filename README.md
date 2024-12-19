@@ -72,6 +72,7 @@
         - Introduced `Subprocess.runDetached` as a top level API and sibling to all `Subprocess.run` methods. This method allows you to spawn a subprocess **WITHOUT** needing to wait for it to finish.
     - Updated `.standardOutput` and `.standardError` properties on `Subprocess` to be `AsyncSequence<Data, any Error>` instead of `AsyncSequence<UInt8, any Error>`.
         - The previous design, while more "traditional", leads to performance problems when the subprocess outputs large amount of data
+    - Updated input types to support: `Sequence<UInt8>`, `Sequence<Data>` and `AsyncSequence<Data>`.
     - Teardown Sequence support (for Darwin and Linux):
         - Introduced `Subprocess.teardown(using:)` to allow developers to gracefully shutdown a subprocess.
         - Introuuced `PlatformOptions.teardownSequence` that will be used to gracefully shutdown the subprocess if the parent task is cancelled.
@@ -256,6 +257,31 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
+    public static func run(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
+        input: some Sequence<Data> & Sendable,
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
+    ) async throws -> CollectedResult
+
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
     public static func run<S: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -265,7 +291,7 @@ extension Subprocess {
         input: S,
         output: CollectedOutputMethod = .collect(),
         error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult where S.Element == UInt8
+    ) async throws -> CollectedResult where S.Element == Data
 }
 
 // MARK: - Custom Execution Body
@@ -340,6 +366,34 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
+    public static func run<R>(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
+        input: some Sequence<Data> & Sendable,
+        output: RedirectedOutputMethod = .redirectToSequence,
+        error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
+        _ body: (@escaping (Subprocess) async throws -> R)
+    ) async throws -> ExecutionResult<R>
+
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a `ExecutableResult` type containing the return value
+    ///     of the closure.
     public static func run<R, S: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
@@ -351,7 +405,7 @@ extension Subprocess {
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R> where S.Element == UInt8
+    ) async throws -> ExecutionResult<R> where S.Element == Data
 
     /// Run a executable with given parameters and a custom closure
     /// to manage the running subprocess' lifetime and write to its
