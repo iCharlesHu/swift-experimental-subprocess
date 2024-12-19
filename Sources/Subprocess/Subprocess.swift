@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 import SystemPackage
+import Dispatch
 
 #if canImport(FoundationEssentials)
 import FoundationEssentials
@@ -98,7 +99,11 @@ extension Subprocess {
             guard let fd: FileDescriptor = self.input.getWriteFileDescriptor() else {
                 fatalError("Attempting to write to a file descriptor that's already closed")
             }
-            try await fd.write(sequence)
+            if let array = sequence as? Array<UInt8> {
+                try await fd.write(array)
+            } else {
+                try await fd.write(Array(sequence))
+            }
         }
 
         /// Write a sequence of CChar to the standard input of the subprocess.
@@ -107,18 +112,14 @@ extension Subprocess {
             try await self.write(sequence.map { UInt8($0) })
         }
 
-        /// Write a AsyncSequence of CChar to the standard input of the subprocess.
-        /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S: AsyncSequence & Sendable>(_ asyncSequence: S) async throws where S.Element == CChar {
-            let sequence = try await Array(asyncSequence).map { UInt8($0) }
-            try await self.write(sequence)
-        }
-
         /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S: AsyncSequence & Sendable>(_ asyncSequence: S) async throws where S.Element == UInt8 {
-            let sequence = try await Array(asyncSequence)
-            try await self.write(sequence)
+        public func write<S: AsyncSequence & Sendable>(_ asyncSequence: S) async throws where S.Element == Data {
+            var buffer = Data()
+            for try await data in asyncSequence {
+                buffer.append(data)
+            }
+            try await self.write(buffer)
         }
 
         /// Signal all writes are finished

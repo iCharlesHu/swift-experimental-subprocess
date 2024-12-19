@@ -281,7 +281,7 @@ extension SubprocessUnixTests {
         let channel = DispatchIO(type: .stream, fileDescriptor: fd.rawValue, queue: .main) { error in
             try? fd.close()
         }
-        let stream: AsyncStream<UInt8> = AsyncStream { continuation in
+        let stream: AsyncStream<Data> = AsyncStream { continuation in
             channel.read(offset: 0, length: .max, queue: .main) { done, data, error in
                 if done {
                     continuation.finish()
@@ -289,9 +289,7 @@ extension SubprocessUnixTests {
                 guard let data = data else {
                     return
                 }
-                for byte in Array(data) {
-                    continuation.yield(byte)
-                }
+                continuation.yield(Data(data))
             }
         }
         let catResult = try await Subprocess.run(
@@ -331,7 +329,7 @@ extension SubprocessUnixTests {
         let channel = DispatchIO(type: .stream, fileDescriptor: fd.rawValue, queue: .main) { error in
             try? fd.close()
         }
-        let stream: AsyncStream<UInt8> = AsyncStream { continuation in
+        let stream: AsyncStream<Data> = AsyncStream { continuation in
             channel.read(offset: 0, length: .max, queue: .main) { done, data, error in
                 if done {
                     continuation.finish()
@@ -339,9 +337,7 @@ extension SubprocessUnixTests {
                 guard let data = data else {
                     return
                 }
-                for byte in Array(data) {
-                    continuation.yield(byte)
-                }
+                continuation.yield(Data(data))
             }
         }
         let result = try await Subprocess.run(
