@@ -77,11 +77,11 @@ extension Subprocess {
                             return .processHasExited
                         }
                     }
-                    try? self.send(signal, toProcessGroup: false)
+                    try? self.send(signal: signal)
                     return await group.next()!
                 }
             case .kill:
-                try? self.send(.kill, toProcessGroup: false)
+                try? self.send(signal: .kill)
                 stepCompletion = .killedTheProcess
             }
 

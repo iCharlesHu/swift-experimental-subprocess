@@ -644,7 +644,7 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public func send(_ signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool) throws
+    public func send(signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws
 }
 #endif // canImport(Glibc) || canImport(Darwin)
 ```

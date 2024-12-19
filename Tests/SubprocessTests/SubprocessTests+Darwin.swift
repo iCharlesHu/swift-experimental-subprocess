@@ -68,18 +68,18 @@ final class SubprocessDarwinTests : XCTestCase {
             .at("/bin/cat")
         ) { subprocess in
             // First suspend the procss
-            try subprocess.send(.suspend, toProcessGroup: false)
+            try subprocess.send(signal: .suspend)
             var suspendedStatus: Int32 = 0
             waitpid(subprocess.processIdentifier.value, &suspendedStatus, WNOHANG | WUNTRACED)
             XCTAssertTrue(_was_process_suspended(suspendedStatus) > 0)
             // Now resume the process
-            try subprocess.send(.resume, toProcessGroup: false)
+            try subprocess.send(signal: .resume)
             var resumedStatus: Int32 = 0
             waitpid(subprocess.processIdentifier.value, &resumedStatus, WNOHANG | WUNTRACED)
             XCTAssertTrue(_was_process_suspended(resumedStatus) == 0)
 
             // Now kill the process
-            try subprocess.send(.terminate, toProcessGroup: false)
+            try subprocess.send(signal: .terminate)
         }
     }
 }

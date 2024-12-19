@@ -727,7 +727,7 @@ extension SubprocessUnixTests {
             .at("/bin/cat")
         ) { subprocess in
             // Make sure we can send signals to terminate the process
-            try subprocess.send(.terminate, toProcessGroup: false)
+            try subprocess.send(signal: .terminate)
         }
         guard case .unhandledException(let exception) = stuckResult.terminationStatus else {
             XCTFail("Wrong termination status repored")

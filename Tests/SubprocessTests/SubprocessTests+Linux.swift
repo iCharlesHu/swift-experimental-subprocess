@@ -69,17 +69,17 @@ final class SubprocessLinuxTests: XCTestCase {
             arguments: ["infinity"]
         ) { subprocess in
             // First suspend the procss
-            try subprocess.send(.suspend, toProcessGroup: false)
+            try subprocess.send(signal: .suspend)
             XCTAssertTrue(
                 try isProcessSuspended(subprocess.processIdentifier.value)
             )
             // Now resume the process
-            try subprocess.send(.resume, toProcessGroup: false)
+            try subprocess.send(signal: .resume)
             XCTAssertFalse(
                 try isProcessSuspended(subprocess.processIdentifier.value)
             )
             // Now kill the process
-            try subprocess.send(.terminate, toProcessGroup: false)
+            try subprocess.send(signal: .terminate)
         }
     }
 }
