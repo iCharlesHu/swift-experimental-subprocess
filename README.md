@@ -513,7 +513,10 @@ let result = try await Subprocess.run(
 }
 ```
 
-Both styles of the `run` methods provide convenient overloads that allow developers to pass a `Sequence<UInt8>` or `AsyncSequence<UInt8>` to the standard input of the subprocess.
+Both styles of the `run` methods provide convenient overloads that allow developers to pass the following types to the standard input of the subprocess:
+- `Sequence<UInt8>` (which `Data` conforms to)
+- `Sequence<Data>`
+- `AsyncSequence<Data>`
 
 The `Subprocess` object itself is designed to represent an executed process. This execution could be either in progress or completed. Direct construction of `Subprocess` instances is not supported; instead, a `Subprocess` object is passed to the `body` closure of `run()`. This object is only valid within the scope of the closure, and developers may use it to send signals to the child process or retrieve the child's standard I/Os via `AsyncSequence`s.
 
@@ -568,11 +571,11 @@ extension Subprocess {
     @available(watchOS, unavailable)
     public struct ProcessIdentifier: Sendable, Hashable, Codable {
         /// Windows specifc process identifier value
-        public let processID: DWORD
+        public let value: DWORD
         /// Windows specific thread identifier associated with process
         public let threadID: DWORD
 
-        public init(processID: DWORD, threadID: DWORD)
+        public init(value: DWORD, threadID: DWORD)
     }
 }
 #endif // canImport(WinSDK)
@@ -615,6 +618,26 @@ extension Subprocess {
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
+        input: FileDescriptor? = nil,
+        output: FileDescriptor? = nil,
+        error: FileDescriptor? = nil
+    ) throws -> ProcessIdentifier
+
+    /// Run a executable with given configuration and return its process
+    /// identifier immediately without monitoring the state of the
+    /// subprocess nor waiting until it exits.
+    ///
+    /// This method is useful for launching subprocesses that outlive their
+    /// parents (for example, daemons and trampolines).
+    ///
+    /// - Parameters:
+    ///   - configuration: The `Subprocess` configuration to run.
+    ///   - input: A file descriptor to bind to the subprocess' standard input.
+    ///   - output: A file descriptor to bind to the subprocess' standard output.
+    ///   - error: A file descriptor to bind to the subprocess' standard error.
+    /// - Returns: the process identifier for the subprocess.
+    public static func runDeatched(
+        _ configuration: Configuration,
         input: FileDescriptor? = nil,
         output: FileDescriptor? = nil,
         error: FileDescriptor? = nil
@@ -1145,7 +1168,7 @@ _(For more information on these values, checkout Microsoft's documentation [here
 
 ### `Subprocess.InputMethod`
 
-In addition to supporting the direct passing of `Sequence<UInt8>` and `AsyncSequence<UInt8>` as the standard input to the child process, `Subprocess` also provides a `Subprocess.InputMethod` type that includes two additional input options:
+In addition to supporting the direct passing of `Sequence` and `AsyncSequence` as the standard input to the child process, `Subprocess` also provides a `Subprocess.InputMethod` type that includes two additional input options:
 - `.noInput`: Specifies that the subprocess does not require any standard input. This is the default value.
 - `.readFrom`: Specifies that the subprocess should read its standard input from a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterSpawningProcess` is set to `true`.
 

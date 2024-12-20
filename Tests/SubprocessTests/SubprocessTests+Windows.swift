@@ -275,10 +275,15 @@ extension SubprocessWindowsTests {
         let expected: Data = try Data(
             contentsOf: URL(filePath: theMysteriousIsland.string)
         )
-        let stream: AsyncStream<UInt8> = AsyncStream { continuation in
+        let stream: AsyncStream<Data> = AsyncStream { continuation in
             DispatchQueue.global().async {
-                for byte in expected {
-                    continuation.yield(byte)
+                var currentStart = 0
+                while currentStart + chunkSize < expected.count {
+                    continuation.yield(expected[currentStart ..< currentStart + chunkSize])
+                    currentStart += chunkSize
+                }
+                if expected.count - currentStart > 0 {
+                    continuation.yield(expected[currentStart ..< expected.count])
                 }
                 continuation.finish()
             }
@@ -318,14 +323,20 @@ extension SubprocessWindowsTests {
 
     func testInputAsyncSequenceCustomExecutionBody() async throws {
         // Maeks ure we can read long text as AsyncSequence
+        let chunkSize = 4096
         let fd: FileDescriptor = try .open(theMysteriousIsland, .readOnly)
         let expected: Data = try Data(
             contentsOf: URL(filePath: theMysteriousIsland.string)
         )
-        let stream: AsyncStream<UInt8> = AsyncStream { continuation in
+        let stream: AsyncStream<Data> = AsyncStream { continuation in
             DispatchQueue.global().async {
-                for byte in expected {
-                    continuation.yield(byte)
+                var currentStart = 0
+                while currentStart + chunkSize < expected.count {
+                    continuation.yield(expected[currentStart ..< currentStart + chunkSize])
+                    currentStart += chunkSize
+                }
+                if expected.count - currentStart > 0 {
+                    continuation.yield(expected[currentStart ..< expected.count])
                 }
                 continuation.finish()
             }
@@ -363,17 +374,18 @@ extension SubprocessWindowsTests {
     }
 
     func testCollectedOutputWithLimit() async throws {
+        let limit = 2
         let expected = randomString(length: 32)
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo \(expected)"],
-            output: .collect(upTo: 2)
+            output: .collect(upTo: limit)
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
             String(data: echoResult.standardOutput, encoding: .utf8)
         ).trimmingCharacters(in: .whitespacesAndNewlines)
-        let targetRange = expected.startIndex ..< expected.index(expected.startIndex, offsetBy: 4)
+        let targetRange = expected.startIndex ..< expected.index(expected.startIndex, offsetBy: limit)
         XCTAssertEqual(String(expected[targetRange]), output)
     }
 
@@ -722,7 +734,7 @@ extension SubprocessWindowsTests {
                 arguments: [
                     "-File", windowsTester.string,
                     "-mode", "is-process-suspended",
-                    "-processID", "\(subprocess.processIdentifier.processID)"
+                    "-processID", "\(subprocess.processIdentifier.value)"
                 ]
             )
             XCTAssertTrue(checkResult.terminationStatus.isSuccess)
@@ -738,7 +750,7 @@ extension SubprocessWindowsTests {
                 arguments: [
                     "-File", windowsTester.string,
                     "-mode", "is-process-suspended",
-                    "-processID", "\(subprocess.processIdentifier.processID)"
+                    "-processID", "\(subprocess.processIdentifier.value)"
                 ]
             )
             XCTAssertTrue(checkResult.terminationStatus.isSuccess)
@@ -771,7 +783,7 @@ extension SubprocessWindowsTests {
         guard let processHandle = OpenProcess(
             DWORD(PROCESS_QUERY_INFORMATION | SYNCHRONIZE),
             false,
-            pid.processID
+            pid.value
         ) else {
             XCTFail("Failed to get process handle")
             return
@@ -780,11 +792,11 @@ extension SubprocessWindowsTests {
         // Wait for the process to finish
         WaitForSingleObject(processHandle, INFINITE);
 
-        let data = try await readFd.read(upToLength: 5)
+        let data = try await readFd.readUntilEOF(upToLength: 5)
         let resultPID = try XCTUnwrap(
-            String(data: Data(data), encoding: .utf8)
+            String(data: data, encoding: .utf8)
         ).trimmingCharacters(in: .whitespacesAndNewlines)
-        XCTAssertEqual("\(pid.processID)", resultPID)
+        XCTAssertEqual("\(pid.value)", resultPID)
         try readFd.close()
         try writeFd.close()
     }

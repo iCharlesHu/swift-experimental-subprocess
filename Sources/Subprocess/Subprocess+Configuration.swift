@@ -73,11 +73,16 @@ extension Subprocess {
                 return
             }
 
+            var exitError: Error? = nil
             // Attempt to teardown the subprocess
             if attemptToTerminateSubProcess {
+                #if os(Windows)
+                exitError = process.tryTerminate()
+                #else
                 await process.teardown(
                     using: self.platformOptions.teardownSequence
                 )
+                #endif
             }
 
             let inputCloseFunc: () throws -> Void
@@ -131,6 +136,10 @@ extension Subprocess {
 
             if let errorError = errorError {
                 throw errorError
+            }
+
+            if let exitError = exitError {
+                throw exitError
             }
         }
 

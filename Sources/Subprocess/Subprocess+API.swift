@@ -531,6 +531,35 @@ extension Subprocess {
         output: FileDescriptor? = nil,
         error: FileDescriptor? = nil
     ) throws -> ProcessIdentifier {
+        let config: Configuration = Configuration(
+            executable: executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions
+        )
+        return try Self.runDeatched(config, input: input, output: output, error: error)
+    }
+
+    /// Run a executable with given configuration and return its process
+    /// identifier immediately without monitoring the state of the
+    /// subprocess nor waiting until it exits.
+    ///
+    /// This method is useful for launching subprocesses that outlive their
+    /// parents (for example, daemons and trampolines).
+    ///
+    /// - Parameters:
+    ///   - configuration: The `Subprocess` configuration to run.
+    ///   - input: A file descriptor to bind to the subprocess' standard input.
+    ///   - output: A file descriptor to bind to the subprocess' standard output.
+    ///   - error: A file descriptor to bind to the subprocess' standard error.
+    /// - Returns: the process identifier for the subprocess.
+    public static func runDeatched(
+        _ configuration: Configuration,
+        input: FileDescriptor? = nil,
+        output: FileDescriptor? = nil,
+        error: FileDescriptor? = nil
+    ) throws -> ProcessIdentifier {
         // Create input
         let executionInput: ExecutionInput
         let executionOutput: ExecutionOutput
@@ -555,15 +584,8 @@ extension Subprocess {
             let devnull: FileDescriptor = try .openDevNull(withAcessMode: .writeOnly)
             executionError = .init(storage: .discarded(devnull))
         }
-        // Spawn!
-        let config: Configuration = Configuration(
-            executable: executable,
-            arguments: arguments,
-            environment: environment,
-            workingDirectory: workingDirectory,
-            platformOptions: platformOptions
-        )
-        return try config.spawn(
+
+        return try configuration.spawn(
             withInput: executionInput,
             output: executionOutput,
             error: executionError

@@ -126,7 +126,7 @@ extension Subprocess.Configuration {
             )
         }
         let pid = Subprocess.ProcessIdentifier(
-            processID: processInfo.dwProcessId,
+            value: processInfo.dwProcessId,
             threadID: processInfo.dwThreadId
         )
         return Subprocess(
@@ -237,7 +237,7 @@ extension Subprocess.Configuration {
             )
         }
         let pid = Subprocess.ProcessIdentifier(
-            processID: processInfo.dwProcessId,
+            value: processInfo.dwProcessId,
             threadID: processInfo.dwThreadId
         )
         return Subprocess(
@@ -436,7 +436,7 @@ internal func monitorProcessTermination(
     guard let processHandle = OpenProcess(
         DWORD(PROCESS_QUERY_INFORMATION | SYNCHRONIZE),
         false,
-        pid.processID
+        pid.value
     ) else {
         return .exited(1)
     }
@@ -487,7 +487,7 @@ extension Subprocess {
             // PROCESS_ALL_ACCESS
             DWORD(STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF),
             false,
-            self.processIdentifier.processID
+            self.processIdentifier.value
         ) else {
             throw CocoaError.windowsError(
                 underlying: GetLastError(),
@@ -511,7 +511,7 @@ extension Subprocess {
             // PROCESS_ALL_ACCESS
             DWORD(STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF),
             false,
-            self.processIdentifier.processID
+            self.processIdentifier.value
         ) else {
             throw CocoaError.windowsError(
                 underlying: GetLastError(),
@@ -547,7 +547,7 @@ extension Subprocess {
             // PROCESS_ALL_ACCESS
             DWORD(STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE | 0xFFFF),
             false,
-            self.processIdentifier.processID
+            self.processIdentifier.value
         ) else {
             throw CocoaError.windowsError(
                 underlying: GetLastError(),
@@ -656,15 +656,15 @@ extension Subprocess {
     /// A platform independent identifier for a subprocess.
     public struct ProcessIdentifier: Sendable, Hashable, Codable {
         /// Windows specifc process identifier value
-        public let processID: DWORD
+        public let value: DWORD
         /// Windows specific thread identifier associated with process
         public let threadID: DWORD
 
         internal init(
-            processID: DWORD,
+            value: DWORD,
             threadID: DWORD
         ) {
-            self.processID = processID
+            self.value = value
             self.threadID = threadID
         }
     }
@@ -672,7 +672,7 @@ extension Subprocess {
 
 extension Subprocess.ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
-        return "(processID: \(self.processID), threadID: \(self.threadID))"
+        return "(processID: \(self.value), threadID: \(self.threadID))"
     }
 
     public var debugDescription: String {
@@ -1021,7 +1021,15 @@ extension FileDescriptor {
         return HANDLE(bitPattern: _get_osfhandle(self.rawValue))!
     }
 
-    internal func read(upToLength maxLength: Int) async throws -> Data {
+    internal func readChunk(upToLength maxLength: Int) async throws -> Data? {
+        let result = try await self.readUntilEOF(upToLength: maxLength)
+        guard !result.isEmpty else {
+            return nil
+        }
+        return result
+    }
+
+    internal func readUntilEOF(upToLength maxLength: Int) async throws -> Data {
         // TODO: Figure out a better way to asynchornously read
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
