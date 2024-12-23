@@ -1173,7 +1173,7 @@ _(For more information on these values, checkout Microsoft's documentation [here
 
 In addition to supporting the direct passing of `Sequence` and `AsyncSequence` as the standard input to the child process, `Subprocess` also provides a `Subprocess.InputMethod` type that includes two additional input options:
 - `.noInput`: Specifies that the subprocess does not require any standard input. This is the default value.
-- `.readFrom`: Specifies that the subprocess should read its standard input from a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterSpawningProcess` is set to `true`.
+- `.readFrom`: Specifies that the subprocess should read its standard input from a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterSpawningProcess` is set to `true`. Note: when `closeAfterSpawningProcess` is `false`, the caller is responsible for closing the file descriptor even if `Subprocess` fails to spawn.
 
 ```swift
 extension Subprocess {
@@ -1192,6 +1192,8 @@ extension Subprocess {
         ///   - fd: the file descriptor to read from
         ///   - closeAfterSpawningProcess: whether the file descriptor
         ///     should be automatically closed after subprocess is spawned.
+        ///     If `false`, caller is responsible for closing `fd` even if
+        ///     subprocess fails to spawn.
         public static func readFrom(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> Self
     }
 }
@@ -1592,7 +1594,7 @@ extension Subprocess.TerminationStatus : CustomStringConvertible, CustomDebugStr
 
 ### Task Cancellation
 
-If the task running `Subprocess.run` is cancelled while the child process is running, `Subprocess` will attempt to release all the resources it acquired (i.e. file descriptors) and then terminate the child process via `SIGKILL`.
+If the task running `Subprocess.run` is cancelled while the child process is running, `Subprocess` will attempt to release all the resources it acquired (i.e. file descriptors) and then terminate the child process according to the `TeardownSequence`.
 
 
 ## Impact on Existing Code

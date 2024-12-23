@@ -56,6 +56,8 @@ extension Subprocess {
         ///   - fd: the file descriptor to read from
         ///   - closeAfterSpawningProcess: whether the file descriptor
         ///     should be automatically closed after subprocess is spawned.
+        ///     If `false`, caller is responsible for closing `fd` even if
+        ///     subprocess fails to spawn.
         public static func readFrom(
             _ fd: FileDescriptor,
             closeAfterSpawningProcess: Bool
