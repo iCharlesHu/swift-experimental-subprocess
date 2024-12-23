@@ -72,10 +72,17 @@
         - Introduced `Subprocess.runDetached` as a top level API and sibling to all `Subprocess.run` methods. This method allows you to spawn a subprocess **WITHOUT** needing to wait for it to finish.
     - Updated `.standardOutput` and `.standardError` properties on `Subprocess` to be `AsyncSequence<Data, any Error>` instead of `AsyncSequence<UInt8, any Error>`.
         - The previous design, while more "traditional", leads to performance problems when the subprocess outputs large amount of data
-    - Updated input types to support: `Sequence<UInt8>`, `Sequence<Data>` and `AsyncSequence<Data>`.
     - Teardown Sequence support (for Darwin and Linux):
         - Introduced `Subprocess.teardown(using:)` to allow developers to gracefully shutdown a subprocess.
         - Introuuced `PlatformOptions.teardownSequence` that will be used to gracefully shutdown the subprocess if the parent task is cancelled.
+- **v6**: Minor changes around IO and closure `sending` requirements
+    - Added a `Configuration` based overload for `runDetached`.
+    - Updated input types to support: `Sequence<UInt8>`, `Sequence<Data>` and `AsyncSequence<Data>` (dropped `AsyncSequence<UInt8>` in favor of `AsyncSequence<Data>`).
+    - Added `isolation` parameter for closure based `.run` methods.
+    - Dropped `sending` requirement for closure passed to `.run`.
+    - Windows: renamed `ProcessIdentifier.processID` to `ProcessIdentifier.value`.
+    - Updated `TeardownStep` to use `Duration` instead of raw nanoseconds.
+    - Switched all generic parameters to full words instead of a letter.
 
 ## Introduction
 
