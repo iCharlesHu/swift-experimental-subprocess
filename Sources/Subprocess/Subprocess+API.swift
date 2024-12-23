@@ -210,16 +210,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run<S: AsyncSequence & Sendable>(
+    public static func run<AsyncSendableSequence: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
-        input: S,
+        input: AsyncSendableSequence,
         output: CollectedOutputMethod = .collect(),
         error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult where S.Element == Data {
+    ) async throws -> CollectedResult where AsyncSendableSequence.Element == Data {
         let result =  try await self.run(
             executable,
             arguments: arguments,
@@ -275,7 +275,7 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -285,8 +285,8 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R> {
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -312,7 +312,7 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -322,8 +322,8 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R> {
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -359,7 +359,7 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -369,8 +369,8 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R> {
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -410,18 +410,18 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
-    public static func run<R, S: AsyncSequence & Sendable>(
+    public static func run<Result, AsyncSendableSequence: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
-        input: S,
+        input: AsyncSendableSequence,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R> where S.Element == Data {
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> where AsyncSendableSequence.Element == Data {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -457,7 +457,7 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -466,8 +466,8 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> R)
-    ) async throws -> ExecutionResult<R> {
+        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -491,13 +491,13 @@ extension Subprocess {
     ///       the running process and write to its standard input.
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> R)
-    ) async throws -> ExecutionResult<R> {
+        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> {
         return try await configuration.run(output: output, error: error, body)
     }
 }

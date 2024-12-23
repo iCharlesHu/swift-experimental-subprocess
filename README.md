@@ -282,16 +282,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run<S: AsyncSequence & Sendable>(
+    public static func run<AsyncSendableSequence: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
-        input: S,
+        input: AsyncSendableSequence,
         output: CollectedOutputMethod = .collect(),
         error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult where S.Element == Data
+    ) async throws -> CollectedResult where AsyncSendableSequence.Element == Data
 }
 
 // MARK: - Custom Execution Body
@@ -311,7 +311,7 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -321,8 +321,8 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R>
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result>
 
     /// Run a executable with given parameters and a custom closure
     /// to manage the running subprocess' lifetime and its IOs.
@@ -339,7 +339,7 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -348,8 +348,8 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R>
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result>
 
     /// Run a executable with given parameters and a custom closure
     /// to manage the running subprocess' lifetime and its IOs.
@@ -366,7 +366,7 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -376,8 +376,8 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R>
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result>
 
     /// Run a executable with given parameters and a custom closure
     /// to manage the running subprocess' lifetime and its IOs.
@@ -394,18 +394,18 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
-    public static func run<R, S: AsyncSequence & Sendable>(
+    public static func run<Result, AsyncSendableSequence: AsyncSequence & Sendable>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
-        input: S,
+        input: AsyncSendableSequence,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess) async throws -> R)
-    ) async throws -> ExecutionResult<R> where S.Element == Data
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> where AsyncSendableSequence.Element == Data
 
     /// Run a executable with given parameters and a custom closure
     /// to manage the running subprocess' lifetime and write to its
@@ -421,7 +421,7 @@ extension Subprocess {
     ///   - error: The method to use for redirecting the standard error.
     ///   - body: The custom execution body to manually control the running process
     /// - Returns the custom result type returned by the closure
-    public static func run<R>(
+    public static func run<Result>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
@@ -430,8 +430,8 @@ extension Subprocess {
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> R)
-    ) async throws -> ExecutionResult<R>
+        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> Result)
+    ) async throws -> ExecutionResult<Result>
 
     /// Run a executable with given parameters specified by a
     /// `Subprocess.Configuration`
@@ -443,13 +443,13 @@ extension Subprocess {
     ///       the running process and write to its standard input.
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
-    public static func run<R>(
+    public static func run<Result>(
         _ configuration: Configuration,
         output: RedirectedOutputMethod = .redirectToSequence,
         error: RedirectedOutputMethod = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> R)
-    ) async throws -> ExecutionResult<R>
+        _ body: (@escaping (Subprocess, StandardInputWriter) async throws -> Result)
+    ) async throws -> ExecutionResult<Result>
 }
 ```
 
@@ -469,7 +469,7 @@ let code = try await Subprocess.run(
     .named("code"),
     arguments: ["/some/directory"]
 )
-print("Code launched successfully: \(result.terminationStatus.isSuccess)")
+print("Code launched successfully: \(code.terminationStatus.isSuccess)")
 
 // Launch `cat` with sequence written to standardInput
 let inputData = "Hello SwiftFoundation".utf8CString.map { UInt8($0) }
@@ -815,20 +815,23 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public actor StandardInputWriter {
+    public final actor StandardInputWriter {
         /// Write a sequence of UInt8 to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S>(_ sequence: S) async throws where S : Sequence & Sendable, S.Element == UInt8
+        public func write<SendableSequence: Sequence<UInt8> & Sendable>(
+            _ sequence: SendableSequence
+        ) async throws
         /// Write a sequence of CChar to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S>(_ sequence: S) async throws where S : Sequence & Sendable, S.Element == CChar
+        public func write<SendableSequence: Sequence<CChar> & Sendable>(
+            _ sequence: SendableSequence
+        ) async throws
 
-        /// Write a AsyncSequence of CChar to the standard input of the subprocess.
+        /// Write a AsyncSequence of Data to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S: AsyncSequence & Sendable>(_ asyncSequence: S) async throws where S.Element == CChar
-        /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
-        /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S: AsyncSequence & Sendable>(_ asyncSequence: S) async throws where S.Element == UInt8
+        public func write<AsyncSendableSequence: AsyncSequence & Sendable>(
+            _ asyncSequence: AsyncSendableSequence
+        ) async throws where AsyncSendableSequence.Element == Data
         /// Signal all writes are finished
         public func finish() async throws
     }
@@ -1356,11 +1359,11 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct ExecutionResult<T> {
+    public struct ExecutionResult<Result> {
         /// The termination status of the child process
         public let terminationStatus: TerminationStatus
         /// The result returned by the closure passed to `.run` methods
-        public let value: T
+        public let value: Result
     }
 }
 
@@ -1368,31 +1371,31 @@ extension Subprocess {
 @available(iOS, unavailable)
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
-extension Subprocess.ExecutionResult: Equatable where T : Equatable {}
+extension Subprocess.ExecutionResult: Equatable where Result : Equatable {}
 
 @available(FoundationPreview 0.4, *)
 @available(iOS, unavailable)
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
-extension Subprocess.ExecutionResult : Hashable where T : Hashable {}
+extension Subprocess.ExecutionResult : Hashable where Result : Hashable {}
 
 @available(FoundationPreview 0.4, *)
 @available(iOS, unavailable)
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
-extension Subprocess.ExecutionResult : Codable where T : Codable {}
+extension Subprocess.ExecutionResult : Codable where Result : Codable {}
 
 @available(FoundationPreview 0.4, *)
 @available(iOS, unavailable)
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
-extension Subprocess.ExecutionResult: CustomStringConvertible where T : CustomStringConvertible {}
+extension Subprocess.ExecutionResult: CustomStringConvertible where Result : CustomStringConvertible {}
 
 @available(FoundationPreview 0.4, *)
 @available(iOS, unavailable)
 @available(tvOS, unavailable)
 @available(watchOS, unavailable)
-extension Subprocess.ExecutionResult: CustomDebugStringConvertible where T : CustomDebugStringConvertible {}
+extension Subprocess.ExecutionResult: CustomDebugStringConvertible where Result : CustomDebugStringConvertible {}
 ```
 
 

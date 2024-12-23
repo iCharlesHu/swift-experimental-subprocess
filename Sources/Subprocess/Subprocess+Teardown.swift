@@ -102,10 +102,10 @@ extension Subprocess {
     }
 }
 
-func withUncancelledTask<R: Sendable>(
-    returning: R.Type = R.self,
-    _ body: @Sendable @escaping () async -> R
-) async -> R {
+func withUncancelledTask<Result: Sendable>(
+    returning: Result.Type = Result.self,
+    _ body: @Sendable @escaping () async -> Result
+) async -> Result {
     // This looks unstructured but it isn't, please note that we `await` `.value` of this task.
     // The reason we need this separate `Task` is that in general, we cannot assume that code performs to our
     // expectations if the task we run it on is already cancelled. However, in some cases we need the code to
