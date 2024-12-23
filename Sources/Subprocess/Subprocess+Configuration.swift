@@ -183,12 +183,12 @@ extension Subprocess {
             }
         }
 
-        internal func run<R>(
+        internal func run<Result>(
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
             isolation: isolated (any Actor)? = #isolation,
-            _ body: @escaping (Subprocess, StandardInputWriter) async throws -> R
-        ) async throws -> ExecutionResult<R> {
+            _ body: @escaping (Subprocess, StandardInputWriter) async throws -> Result
+        ) async throws -> ExecutionResult<Result> {
             let (readFd, writeFd) = try FileDescriptor.pipe()
             let executionInput: ExecutionInput = .init(storage: .customWrite(readFd, writeFd))
             let executionOutput: ExecutionOutput = try output.createExecutionOutput()
@@ -241,13 +241,13 @@ extension Subprocess {
             }
         }
 
-        internal func run<R>(
+        internal func run<Result>(
             input: InputMethod,
             output: RedirectedOutputMethod,
             error: RedirectedOutputMethod,
             isolation: isolated (any Actor)? = #isolation,
-            _ body: (sending @escaping (Subprocess) async throws -> R)
-        ) async throws -> ExecutionResult<R> {
+            _ body: (sending @escaping (Subprocess) async throws -> Result)
+        ) async throws -> ExecutionResult<Result> {
             let executionInput = try input.createExecutionInput()
             let executionOutput = try output.createExecutionOutput()
             let executionError = try error.createExecutionOutput()
@@ -672,7 +672,9 @@ extension FilePath {
 }
 
 extension Optional where Wrapped : Collection {
-    func withOptionalUnsafeBufferPointer<R>(_ body: ((UnsafeBufferPointer<Wrapped.Element>)?) throws -> R) rethrows -> R {
+    func withOptionalUnsafeBufferPointer<Result>(
+        _ body: ((UnsafeBufferPointer<Wrapped.Element>)?) throws -> Result
+    ) rethrows -> Result {
         switch self {
         case .some(let wrapped):
             guard let array: Array<Wrapped.Element> = wrapped as? Array else {
@@ -688,7 +690,9 @@ extension Optional where Wrapped : Collection {
 }
 
 extension Optional where Wrapped == String {
-    func withOptionalCString<R>(_ body: ((UnsafePointer<Int8>)?) throws -> R) rethrows -> R {
+    func withOptionalCString<Result>(
+        _ body: ((UnsafePointer<Int8>)?) throws -> Result
+    ) rethrows -> Result {
         switch self {
         case .none:
             return try body(nil)
@@ -713,14 +717,14 @@ public enum QualityOfService: Int, Sendable {
     case `default`          = -1
 }
 
-internal func withAsyncTaskCancellationHandler<R>(
-    _ body: @escaping () async throws -> R,
+internal func withAsyncTaskCancellationHandler<Result>(
+    _ body: @escaping () async throws -> Result,
     onCancel handler: @Sendable @escaping () async -> Void,
     isolation: isolated (any Actor)? = #isolation
-) async rethrows -> R {
+) async rethrows -> Result {
     return try await withThrowingTaskGroup(
         of: Void.self,
-        returning: R.self
+        returning: Result.self
     ) { group in
         group.addTask {
             // wait until cancelled

@@ -85,7 +85,7 @@ extension Subprocess {
 // MARK: - StandardInputWriter
 extension Subprocess {
     /// A writer that writes to the standard input of the subprocess.
-    public actor StandardInputWriter: Sendable {
+    public final actor StandardInputWriter: Sendable {
 
         private let input: ExecutionInput
 
@@ -95,7 +95,9 @@ extension Subprocess {
 
         /// Write a sequence of UInt8 to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S>(_ sequence: S) async throws where S : Sequence & Sendable, S.Element == UInt8 {
+        public func write<SendableSequence: Sequence<UInt8> & Sendable>(
+            _ sequence: SendableSequence
+        ) async throws {
             guard let fd: FileDescriptor = self.input.getWriteFileDescriptor() else {
                 fatalError("Attempting to write to a file descriptor that's already closed")
             }
@@ -108,13 +110,17 @@ extension Subprocess {
 
         /// Write a sequence of CChar to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S>(_ sequence: S) async throws where S : Sequence, S.Element == CChar {
+        public func write<SendableSequence: Sequence<CChar> & Sendable>(
+            _ sequence: SendableSequence
+        ) async throws {
             try await self.write(sequence.map { UInt8($0) })
         }
 
         /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<S: AsyncSequence & Sendable>(_ asyncSequence: S) async throws where S.Element == Data {
+        public func write<AsyncSendableSequence: AsyncSequence & Sendable>(
+            _ asyncSequence: AsyncSendableSequence
+        ) async throws where AsyncSendableSequence.Element == Data {
             var buffer = Data()
             for try await data in asyncSequence {
                 buffer.append(data)
@@ -134,13 +140,13 @@ extension Subprocess {
     /// A simple wrapper around the generic result returned by the
     /// `run` closures with the corresponding `TerminationStatus`
     /// of the child process.
-    public struct ExecutionResult<T> {
+    public struct ExecutionResult<Result> {
         /// The termination status of the child process
         public let terminationStatus: TerminationStatus
         /// The result returned by the closure passed to `.run` methods
-        public let value: T
+        public let value: Result
 
-        internal init(terminationStatus: TerminationStatus, value: T) {
+        internal init(terminationStatus: TerminationStatus, value: Result) {
             self.terminationStatus = terminationStatus
             self.value = value
         }
@@ -190,13 +196,13 @@ extension Subprocess {
     }
 }
 
-extension Subprocess.ExecutionResult: Equatable where T : Equatable {}
+extension Subprocess.ExecutionResult: Equatable where Result : Equatable {}
 
-extension Subprocess.ExecutionResult: Hashable where T : Hashable {}
+extension Subprocess.ExecutionResult: Hashable where Result : Hashable {}
 
-extension Subprocess.ExecutionResult: Codable where T : Codable {}
+extension Subprocess.ExecutionResult: Codable where Result : Codable {}
 
-extension Subprocess.ExecutionResult: CustomStringConvertible where T : CustomStringConvertible {
+extension Subprocess.ExecutionResult: CustomStringConvertible where Result : CustomStringConvertible {
     public var description: String {
         return """
 Subprocess.ExecutionResult(
@@ -207,7 +213,7 @@ Subprocess.ExecutionResult(
     }
 }
 
-extension Subprocess.ExecutionResult: CustomDebugStringConvertible where T : CustomDebugStringConvertible {
+extension Subprocess.ExecutionResult: CustomDebugStringConvertible where Result : CustomDebugStringConvertible {
     public var debugDescription: String {
         return """
 Subprocess.ExecutionResult(
