@@ -149,6 +149,42 @@ extension Subprocess {
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
+        input: some StringProtocol,
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
+    ) async throws -> CollectedResult {
+        return try await self.run(
+            executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions,
+            input: Data(input.utf8),
+            output: output,
+            error: error
+        )
+    }
+
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
+    public static func run(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
         input: some Sequence<Data> & Sendable,
         output: CollectedOutputMethod = .collect(),
         error: CollectedOutputMethod = .collect()
@@ -295,6 +331,44 @@ extension Subprocess {
             platformOptions: platformOptions
         )
         .run(input: input, output: output, error: error, body)
+    }
+
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a ExecutableResult type containing the return value
+    ///     of the closure.
+    public static func run<Result>(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
+        input: some StringProtocol,
+        output: RedirectedOutputMethod = .redirectToSequence,
+        error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> {
+        return try await Self.run(
+            executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions,
+            input: Data(input.utf8),
+            body
+        )
     }
 
     /// Run a executable with given parameters and a custom closure

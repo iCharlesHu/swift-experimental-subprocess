@@ -33,7 +33,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             message
         )
@@ -57,7 +57,7 @@ extension SubprocessUnixTests {
         let result = try await Subprocess.run(.at("/bin/pwd"))
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             expected
         )
@@ -89,7 +89,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             "Hello World!"
         )
@@ -105,7 +105,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             "apple"
         )
@@ -122,7 +122,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             "Data Content"
         )
@@ -140,7 +140,7 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // As a sanity check, make sure there's `/bin` in PATH
         // since we inherited the environment variables
-        let pathValue = try XCTUnwrap(String(data: result.standardOutput, encoding: .utf8))
+        let pathValue = try XCTUnwrap(result.standardOutput.stringUsingUTF8)
         XCTAssertTrue(pathValue.contains("/bin"))
     }
 
@@ -154,7 +154,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             "/my/new/home"
         )
@@ -171,7 +171,7 @@ extension SubprocessUnixTests {
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             "PATH=/bin:/usr/bin"
         )
@@ -191,7 +191,7 @@ extension SubprocessUnixTests {
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             workingDirectory
         )
@@ -208,7 +208,7 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
-        let resultPath = String(data: result.standardOutput, encoding: .utf8)!
+        let resultPath = result.standardOutput.stringUsingUTF8!
             .trimmingCharacters(in: .whitespacesAndNewlines)
 #if canImport(Darwin)
         // On Darwin, /var is linked to /private/var; /tmp is linked to /private/tmp
@@ -238,7 +238,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // We should have read exactly 0 bytes
-        XCTAssertTrue(catResult.standardOutput.isEmpty)
+        XCTAssertTrue(catResult.standardOutput.data.isEmpty)
     }
 
     func testInputFileDescriptor() async throws {
@@ -255,7 +255,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(cat.terminationStatus.isSuccess)
         // Make sure we read all bytes
-        XCTAssertEqual(cat.standardOutput, expected)
+        XCTAssertEqual(cat.standardOutput.data, expected)
     }
 
     func testInputSequence() async throws {
@@ -269,7 +269,7 @@ extension SubprocessUnixTests {
             output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
-        XCTAssertEqual(catResult.standardOutput, expected)
+        XCTAssertEqual(catResult.standardOutput.data, expected)
     }
 
     func testInputAsyncSequence() async throws {
@@ -298,7 +298,7 @@ extension SubprocessUnixTests {
             output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
-        XCTAssertEqual(catResult.standardOutput, expected)
+        XCTAssertEqual(catResult.standardOutput.data, expected)
     }
 
     func testInputSequenceCustomExecutionBody() async throws {
@@ -378,7 +378,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
-            String(data: echoResult.standardOutput, encoding: .utf8)
+            echoResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(output, expected)
     }
@@ -393,7 +393,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
-            String(data: echoResult.standardOutput, encoding: .utf8)
+            echoResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         let targetRange = expected.startIndex ..< expected.index(expected.startIndex, offsetBy: limit)
         XCTAssertEqual(String(expected[targetRange]), output)
@@ -556,7 +556,7 @@ extension SubprocessUnixTests {
             error: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
-        XCTAssertEqual(catResult.standardError, expected)
+        XCTAssertEqual(catResult.standardError.data, expected)
     }
 }
 
@@ -610,7 +610,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(idResult.terminationStatus.isSuccess)
         let ids = try XCTUnwrap(
-            String(data: idResult.standardOutput, encoding: .utf8)
+            idResult.standardOutput.stringUsingUTF8
         ).split(separator: ",")
             .map { gid_t($0.trimmingCharacters(in: .whitespacesAndNewlines))! }
         XCTAssertEqual(Set(ids), expectedGroups)
@@ -630,7 +630,7 @@ extension SubprocessUnixTests {
         )
         XCTAssertTrue(psResult.terminationStatus.isSuccess)
         let resultValue = try XCTUnwrap(
-            String(data: psResult.standardOutput, encoding: .utf8)
+            psResult.standardOutput.stringUsingUTF8
         ).split { $0.isWhitespace || $0.isNewline }
         XCTAssertEqual(resultValue.count, 4)
         XCTAssertEqual(resultValue[0], "PID")
@@ -742,9 +742,9 @@ extension SubprocessUnixTests {
             .at("/bin/bash"),
             arguments: ["-c", "ulimit -n"]
         )
-        guard let limitString = String(
-            data: limitResult.standardOutput, encoding: .utf8
-        )?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let limitString = limitResult
+            .standardOutput.stringUsingUTF8?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
             let limit = Int(limitString) else {
             XCTFail("Failed to run  ulimit -n")
             return
@@ -766,8 +766,8 @@ extension SubprocessUnixTests {
                         XCTFail("Unexpected exit \(r.terminationStatus) from \(r.processIdentifier)")
                         return
                     }
-                    XCTAssert(r.standardOutput.count == byteCount + 1, "\(r.standardOutput)")
-                    XCTAssert(r.standardError.count == byteCount + 1, "\(r.standardError)")
+                    XCTAssert(r.standardOutput.data.count == byteCount + 1, "\(r.standardOutput)")
+                    XCTAssert(r.standardError.data.count == byteCount + 1, "\(r.standardError)")
                 }
                 running += 1
                 if running >= maxConcurrent / 4 {
@@ -788,8 +788,8 @@ extension SubprocessUnixTests {
                         arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: 100_000)]
                     )
                     XCTAssert(r.terminationStatus == .exited(0))
-                    XCTAssert(r.standardOutput.count == 100_001, "Standard output actual \(r.standardOutput)")
-                    XCTAssert(r.standardError.count == 100_001, "Standard error actual \(r.standardError)")
+                    XCTAssert(r.standardOutput.data.count == 100_001, "Standard output actual \(r.standardOutput)")
+                    XCTAssert(r.standardError.data.count == 100_001, "Standard error actual \(r.standardError)")
                 }
                 running += 1
                 if running >= 1000 {
@@ -814,7 +814,7 @@ extension SubprocessUnixTests {
             platformOptions: platformOptions
         )
         XCTAssertTrue(idResult.terminationStatus.isSuccess)
-        let id = try XCTUnwrap(String(data: idResult.standardOutput, encoding: .utf8))
+        let id = try XCTUnwrap(idResult.standardOutput.stringUsingUTF8)
         XCTAssertEqual(
             id.trimmingCharacters(in: .whitespacesAndNewlines),
             "\(expected)"
@@ -825,7 +825,7 @@ extension SubprocessUnixTests {
 internal func assertNewSessionCreated(with result: Subprocess.CollectedResult) throws {
     XCTAssertTrue(result.terminationStatus.isSuccess)
     let psValue = try XCTUnwrap(
-        String(data: result.standardOutput, encoding: .utf8)
+        result.standardOutput.stringUsingUTF8
     ).split {
         return $0.isNewline || $0.isWhitespace
     }

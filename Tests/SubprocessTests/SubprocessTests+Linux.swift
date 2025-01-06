@@ -30,7 +30,7 @@ final class SubprocessLinuxTests: XCTestCase {
             platformOptions: platformOptions
         )
         XCTAssertTrue(idResult.terminationStatus.isSuccess)
-        let id = try XCTUnwrap(String(data: idResult.standardOutput, encoding: .utf8))
+        let id = try XCTUnwrap(idResult.standardOutput.stringUsingUTF8)
         XCTAssertEqual(
             id.trimmingCharacters(in: .whitespacesAndNewlines),
             "\(4321)"

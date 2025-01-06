@@ -52,7 +52,7 @@ final class SubprocessDarwinTests : XCTestCase {
         )
         XCTAssertTrue(pwdResult.terminationStatus.isSuccess)
         let currentDir = try XCTUnwrap(
-            String(data: pwdResult.standardOutput, encoding: .utf8)
+            pwdResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         // On Darwin, /var is linked to /private/var; /tmp is linked /private/tmp
         var expected = FilePath(intendedWorkingDir)

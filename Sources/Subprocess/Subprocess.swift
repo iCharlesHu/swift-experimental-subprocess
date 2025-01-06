@@ -110,10 +110,10 @@ extension Subprocess {
 
         /// Write a sequence of CChar to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
-        public func write<SendableSequence: Sequence<CChar> & Sendable>(
-            _ sequence: SendableSequence
+        public func write(
+            _ string: some StringProtocol
         ) async throws {
-            try await self.write(sequence.map { UInt8($0) })
+            try await self.write(Data(string.utf8))
         }
 
         /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
@@ -166,21 +166,21 @@ extension Subprocess {
         /// Accessing this property will *fatalError* if the
         /// corresponding `CollectedOutputMethod` is not set to
         /// `.collect` or `.collect(upTo:)`
-        public var standardOutput: Data {
+        public var standardOutput: OutputWrapper {
             guard let output = self._standardOutput else {
                 fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
             }
-            return output
+            return OutputWrapper(data: output)
         }
         /// The collected standard error value for the subprocess.
         /// Accessing this property will *fatalError* if the
         /// corresponding `CollectedOutputMethod` is not set to
         /// `.collect` or `.collect(upTo:)`
-        public var standardError: Data {
+        public var standardError: OutputWrapper {
             guard let output = self._standardError else {
                 fatalError("standardError is only available if the Subprocess was ran with .collect as error ")
             }
-            return output
+            return OutputWrapper(data: output)
         }
 
         internal init(
@@ -245,6 +245,22 @@ Subprocess.CollectedResult(
     standardError: \(self._standardError?.debugDescription ?? "not captured")
 )
 """
+    }
+}
+
+extension Subprocess.CollectedResult {
+    /// A simple wrapper that offers a convinent way to access
+    /// the Subprocess output as Data or String assuming UTF8
+    /// encoding.
+    public struct OutputWrapper: Sendable, Hashable, Codable {
+        public let data: Data
+        public var stringUsingUTF8: String? {
+            return String(data: self.data, encoding: .utf8)
+        }
+
+        internal init(data: Data) {
+            self.data = data
+        }
     }
 }
 
