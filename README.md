@@ -3,7 +3,7 @@
 * Proposal: [SF-0007](0007-swift-subprocess.md)
 * Authors: [Charles Hu](https://github.com/iCharlesHu)
 * Review Manager: [Tina Liu](https://github.com/itingliu)
-* Status: **Active Review: Feb 28, 2024...Mar 06, 2024**
+* Status: **2nd Review, Active: Dec 12, 2024...Dec 19, 2024**
 * Bugs: [rdar://118127512](rdar://118127512), [apple/swift-foundation#309](https://github.com/apple/swift-foundation/issues/309)
 
 
@@ -75,7 +75,7 @@
     - Teardown Sequence support (for Darwin and Linux):
         - Introduced `Subprocess.teardown(using:)` to allow developers to gracefully shutdown a subprocess.
         - Introuuced `PlatformOptions.teardownSequence` that will be used to gracefully shutdown the subprocess if the parent task is cancelled.
-- **v6**: Minor changes around IO and closure `sending` requirements
+- **v6**: String support, minor changes around IO and closure `sending` requirements:
     - Added a `Configuration` based overload for `runDetached`.
     - Updated input types to support: `Sequence<UInt8>`, `Sequence<Data>` and `AsyncSequence<Data>` (dropped `AsyncSequence<UInt8>` in favor of `AsyncSequence<Data>`).
     - Added `isolation` parameter for closure based `.run` methods.
@@ -83,6 +83,9 @@
     - Windows: renamed `ProcessIdentifier.processID` to `ProcessIdentifier.value`.
     - Updated `TeardownStep` to use `Duration` instead of raw nanoseconds.
     - Switched all generic parameters to full words instead of a letter.
+    - Introduced String support:
+        - Added `some StringProtocol` input overloads for `run()`.
+        - Changed `CollectedResult.standard{Output|Error}` to `OutputWrapper`, which offers convenient views to the outputs as Data and String with UTF8 encoding 
 
 ## Introduction
 
@@ -167,10 +170,7 @@ let gitResult = try await Subprocess.run(   // <- 0
     arguments: ["diff", "--name-only"]
 )
 
-var changedFiles = String(
-    data: gitResult.standardOutput,
-    encoding: .utf8
-)!
+let changedFiles = gitResult.standardOutput.stringUsingUTF8!
 if changedFiles.isEmpty {
     changedFiles = "No changed files"
 }
@@ -246,6 +246,31 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
         input: some Sequence<UInt8> & Sendable,
+        output: CollectedOutputMethod = .collect(),
+        error: CollectedOutputMethod = .collect()
+    ) async throws -> CollectedResult
+
+    /// Run a executable with given parameters and capture its
+    /// standard output and standard error.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment to use for the process.
+    ///   - workingDirectory: The working directory to use for the subprocess.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for collecting the standard output.
+    ///   - error: The method to use for collecting the standard error.
+    /// - Returns: `CollectedResult` which contains process identifier,
+    ///     termination status, captured standard output and standard error.
+    public static func run(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
+        input: some StringProtocol,
         output: CollectedOutputMethod = .collect(),
         error: CollectedOutputMethod = .collect()
     ) async throws -> CollectedResult
@@ -371,6 +396,34 @@ extension Subprocess {
     ///   - output: The method to use for redirecting the standard output.
     ///   - error: The method to use for redirecting the standard error.
     ///   - body: The custom execution body to manually control the running process
+    /// - Returns a ExecutableResult type containing the return value
+    ///     of the closure.
+    public static func run<Result>(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
+        input: some StringProtocol,
+        output: RedirectedOutputMethod = .redirectToSequence,
+        error: RedirectedOutputMethod = .redirectToSequence,
+        isolation: isolated (any Actor)? = #isolation,
+        _ body: (@escaping (Subprocess) async throws -> Result)
+    ) async throws -> ExecutionResult<Result>
+
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
     /// - Returns a `ExecutableResult` type containing the return value
     ///     of the closure.
     public static func run<Result>(
@@ -469,7 +522,7 @@ let ls = try await Subprocess.run(
     .named("ls"),
     output: .collect
 )
-print("Items in current directory: \(String(data: ls.standardOutput, encoding: .utf8)!)")
+print("Items in current directory: \(ls.standardOutput.stringUsingUTF8!)")
 
 // Launch VSCode with arguments
 let code = try await Subprocess.run(
@@ -485,7 +538,7 @@ let cat = try await Subprocess.run(
     input: inputData,
     output: .collect
 )
-print("Cat result: \(String(data: cat.standardOutput, encoding: .utf8)!)")
+print("Cat result: \(cat.standardOutput.stringUsingUTF8!)")
 ```
 
 - Alternatively, developers can leverage the closure-based approach. These methods spawn the child process and invoke the provided `body` closure with a `Subprocess` object. Developers can send signals to the running subprocess or transform `standardOutput` or `standardError` to the desired result type within the closure. One additional variation of the closure-based methods provides the `body` closure with an additional `Subprocess.StandardInputWriter` object, allowing developers to write to the standard input of the subprocess directly. These methods asynchronously wait for the child process to exit before returning the result.
@@ -828,10 +881,10 @@ extension Subprocess {
         public func write<SendableSequence: Sequence<UInt8> & Sendable>(
             _ sequence: SendableSequence
         ) async throws
-        /// Write a sequence of CChar to the standard input of the subprocess.
-        /// - Parameter sequence: The sequence of bytes to write.
-        public func write<SendableSequence: Sequence<CChar> & Sendable>(
-            _ sequence: SendableSequence
+        /// Write a String to the standard input of the subprocess.
+        /// - Parameter sequence: The string write.
+        public func write(
+            _ string: some StringProtocol
         ) async throws
 
         /// Write a AsyncSequence of Data to the standard input of the subprocess.
@@ -1293,14 +1346,14 @@ Here are some examples of using both output methods:
 ```swift
 let ls = try await Subprocess.run(.named("ls"), output: .collect())
 // The output has been collected as `Data`, up to 16kb limit
-print("ls output: \(String(data: ls.standardOutput, encoding: .utf8)!)")
+print("ls output: \(ls.standardOutout.stringUsingUTF8!)")
 
 // Increase the default buffer limit to 256kb
 let curl = try await Subprocess.run(
     .named("curl"),
     output: .collect(upTo: 256 * 1024)
 )
-print("curl output: \(String(data: curl.standardOutput, encoding: .utf8)!)")
+print("curl output: \(curl.standardOutput.stringUsingUTF8!)")
 
 // Write to a specific file descriptor
 let fd: FileDescriptor = try .open(...)
@@ -1326,7 +1379,7 @@ let result2 = try await Subprocess.run(
 
 `Subprocess` provides two "Result" types corresponding to the two categories of `run` methods: `Subprocess.CollectedResult` and `Subprocess.ExecutionResult<T>`.
 
-`Subprocess.CollectedResult` is essentially a collection of properties that represent the result of an execution after the child process has exited. It is used by the non-closure-based `run` methods. In many ways, `CollectedResult` can be seen as the "synchronous" version of `Subprocess`—instead of the asynchronous `AsyncSequence<Data>`, the standard IOs can be retrieved via synchronous `Data`.
+`Subprocess.CollectedResult` is essentially a collection of properties that represent the result of an execution after the child process has exited. It is used by the non-closure-based `run` methods. In many ways, `CollectedResult` can be seen as the "synchronous" version of `Subprocess`—instead of the asynchronous `AsyncSequence<Data>`, the standard IOs can be retrieved via synchronous `Data` or `String`.
 
 ```swift
 extension Subprocess {
@@ -1345,16 +1398,30 @@ extension Subprocess {
         /// Accessing this property will *fatalError* if the
         /// corresponding `CollectedOutputMethod` is not set to
         /// `.collect` or `.collect(upTo:)`
-        public let standardOutput: Data
+        public let standardOutput: OutputWrapper
         /// The collected standard error value for the subprocess.
         /// Accessing this property will *fatalError* if the
         /// corresponding `CollectedOutputMethod` is not set to
         /// `.collect` or `.collect(upTo:)`
-        public let standardError: Data
+        public let standardError: OutputWrapper
     }
 }
 
 extension Subprocess.CollectedResult : CustomStringConvertible, CustomDebugStringConvertible {}
+
+extension Subprocess.CollectedResult {
+    /// A simple wrapper that offers a convinent way to access
+    /// the Subprocess output as Data or String assuming UTF8
+    /// encoding.
+    @available(FoundationPreview 0.4, *)
+    @available(iOS, unavailable)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
+    public struct OutputWrapper: Sendable, Hashable, Codable {
+        public let data: Data
+        public var stringUsingUTF8: String? { get }
+    }
+}
 ```
 
 `Subprocess.ExecutionResult` is a simple wrapper around the generic result returned by the `run` closures with the corresponding `TerminationStatus` of the child process:
@@ -1642,7 +1709,7 @@ async let grep = try await Subprocess.run(
     input: .readFrom(pipe.readEnd, closeAfterSpawningProcess: true)
 )
 
-let result = await String(data: grep.standardOutput, encoding: .utf8)
+let result = await grep.standardOutput.stringUsingUTF8
 ```
 
 This setup is overly complex for such a simple operation in shell script (`ls | grep "swift"`). We should reimagine how piping should work with `Subprocess` next.

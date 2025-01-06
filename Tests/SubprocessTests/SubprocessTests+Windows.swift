@@ -34,7 +34,7 @@ extension SubprocessWindowsTests {
 
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             "\"\(message)\""
         )
@@ -61,7 +61,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             expected
         )
@@ -100,7 +100,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             "\"\(message)\""
         )
@@ -119,7 +119,7 @@ extension SubprocessWindowsTests {
         // As a sanity check, make sure there's
         // `C:\Windows\system32` in PATH
         // since we inherited the environment variables
-        let pathValue = try XCTUnwrap(String(data: result.standardOutput, encoding: .utf8))
+        let pathValue = try XCTUnwrap(result.standardOutput.stringUsingUTF8)
         XCTAssertTrue(pathValue.contains("C:\\Windows\\system32"))
     }
 
@@ -133,7 +133,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             "/my/new/home"
         )
@@ -157,9 +157,8 @@ extension SubprocessWindowsTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // Make sure the newly launched process does
         // NOT have `SystemRoot` in environment
-        let output = String(
-            data: result.standardOutput, encoding: .utf8
-        )!.trimmingCharacters(in: .whitespacesAndNewlines)
+        let output = result.standardOutput.stringUsingUTF8!
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertTrue(!output.contains("SystemRoot"))
     }
 }
@@ -178,7 +177,7 @@ extension SubprocessWindowsTests {
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
         XCTAssertEqual(
-            String(data: result.standardOutput, encoding: .utf8)!
+            result.standardOutput.stringUsingUTF8?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
             workingDirectory
         )
@@ -196,7 +195,7 @@ extension SubprocessWindowsTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
-        let resultPath = String(data: result.standardOutput, encoding: .utf8)!
+        let resultPath = result.standardOutput.stringUsingUTF8!
             .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
             FilePath(resultPath),
@@ -215,7 +214,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // We should have read exactly 0 bytes
-        XCTAssertTrue(catResult.standardOutput.isEmpty)
+        XCTAssertTrue(catResult.standardOutput.data.isEmpty)
     }
 
     func testInputFileDescriptor() async throws {
@@ -240,7 +239,7 @@ extension SubprocessWindowsTests {
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // Make sure we read all bytes
         XCTAssertEqual(
-            catResult.standardOutput,
+            catResult.standardOutput.data,
             expected
         )
     }
@@ -263,7 +262,7 @@ extension SubprocessWindowsTests {
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // Make sure we read all bytes
         XCTAssertEqual(
-            catResult.standardOutput,
+            catResult.standardOutput.data,
             expected
         )
     }
@@ -296,7 +295,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(
-            catResult.standardOutput,
+            catResult.standardOutput.data,
             expected
         )
     }
@@ -368,7 +367,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
-            String(data: echoResult.standardOutput, encoding: .utf8)
+            echoResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(output, expected)
     }
@@ -383,7 +382,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
-            String(data: echoResult.standardOutput, encoding: .utf8)
+            echoResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         let targetRange = expected.startIndex ..< expected.index(expected.startIndex, offsetBy: limit)
         XCTAssertEqual(String(expected[targetRange]), output)
@@ -572,7 +571,7 @@ extension SubprocessWindowsTests {
             )
             XCTAssertTrue(whoamiResult.terminationStatus.isSuccess)
             let result = try XCTUnwrap(
-                String(data: whoamiResult.standardOutput, encoding: .utf8)
+                whoamiResult.standardOutput.stringUsingUTF8
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             // whoami returns `computerName\userName`.
             let userInfo = result.split(separator: "\\")
@@ -598,7 +597,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(sameConsoleResult.terminationStatus.isSuccess)
         let sameConsoleValue = try XCTUnwrap(
-            String(data: sameConsoleResult.standardOutput, encoding: .utf8)
+            sameConsoleResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         // Make sure the child console is same as parent
         XCTAssertEqual(
@@ -618,7 +617,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(differentConsoleResult.terminationStatus.isSuccess)
         let differentConsoleValue = try XCTUnwrap(
-            String(data: differentConsoleResult.standardOutput, encoding: .utf8)
+            differentConsoleResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         // Make sure the child console is different from parent
         XCTAssertNotEqual(
@@ -640,7 +639,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(detachConsoleResult.terminationStatus.isSuccess)
         let detachConsoleValue = try XCTUnwrap(
-            String(data: detachConsoleResult.standardOutput, encoding: .utf8)
+            detachConsoleResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         // Detached process shoud NOT have a console
         XCTAssertTrue(detachConsoleValue.isEmpty)
@@ -663,7 +662,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(newConsoleResult.terminationStatus.isSuccess)
         let newConsoleValue = try XCTUnwrap(
-            String(data: newConsoleResult.standardOutput, encoding: .utf8)
+            newConsoleResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         // Make sure the child console is different from parent
         XCTAssertNotEqual(
@@ -694,7 +693,7 @@ extension SubprocessWindowsTests {
         )
         XCTAssertTrue(changeTitleResult.terminationStatus.isSuccess)
         let newTitle = try XCTUnwrap(
-            String(data: changeTitleResult.standardOutput, encoding: .utf8)
+            changeTitleResult.standardOutput.stringUsingUTF8
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         // Make sure the child console is different from parent\
         XCTAssertEqual(newTitle, title)
@@ -739,7 +738,7 @@ extension SubprocessWindowsTests {
             )
             XCTAssertTrue(checkResult.terminationStatus.isSuccess)
             var isSuspended = try XCTUnwrap(
-                String(data: checkResult.standardOutput, encoding: .utf8)
+                checkResult.standardOutput.stringUsingUTF8
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             XCTAssertEqual(isSuspended, "true")
 
@@ -755,7 +754,7 @@ extension SubprocessWindowsTests {
             )
             XCTAssertTrue(checkResult.terminationStatus.isSuccess)
             isSuspended = try XCTUnwrap(
-                String(data: checkResult.standardOutput, encoding: .utf8)
+                checkResult.standardOutput.stringUsingUTF8
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             XCTAssertEqual(isSuspended, "false")
 
