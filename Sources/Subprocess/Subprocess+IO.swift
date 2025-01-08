@@ -68,25 +68,26 @@ extension Subprocess {
 }
 
 extension Subprocess {
+    internal enum OutputMethodStorage: Sendable, Hashable {
+        case discarded
+        case fileDescriptor(FileDescriptor, Bool)
+        case collected(Int, String.Encoding?)
+    }
+
     /// `CollectedOutputMethod` defines how should Subprocess collect
     /// output from child process' standard output and standard error
-    public struct CollectedOutputMethod: Sendable, Hashable {
-        internal enum Storage: Sendable, Hashable {
-            case discarded
-            case fileDescriptor(FileDescriptor, Bool)
-            case collected(Int)
-        }
+    public struct CollectedOutputMethod<Result>: Sendable, Hashable {
 
-        internal let method: Storage
+        internal let method: OutputMethodStorage
 
-        internal init(method: Storage) {
+        internal init(method: OutputMethodStorage) {
             self.method = method
         }
 
         /// Subprocess shold dicard the child process output.
         /// This option is equivalent to binding the child process
         /// output to `/dev/null`.
-        public static var discard: Self {
+        public static var discard: CollectedOutputMethod<Void> {
             return .init(method: .discarded)
         }
         /// Subprocess should write the child process output
@@ -95,14 +96,27 @@ extension Subprocess {
         ///   - fd: the file descriptor to write to
         ///   - closeAfterSpawningProcess: whether to close the
         ///     file descriptor once the process is spawned.
-        public static func writeTo(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> Self {
+        public static func writeTo(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> CollectedOutputMethod<Void> {
             return .init(method: .fileDescriptor(fd, closeAfterSpawningProcess))
         }
         /// Subprocess should collect the child process output
         /// as `Data` with the given limit in bytes. The default
         /// limit is 128kb.
-        public static func collect(upTo limit: Int = 128 * 1024) -> Self {
-            return .init(method: .collected(limit))
+        public static func collect(upTo limit: Int = 128 * 1024) -> CollectedOutputMethod<Data> {
+            return .init(method: .collected(limit, nil))
+        }
+
+        public static func collectString(
+            upTo limit: Int = 128 * 1024,
+            encoding: String.Encoding = .utf8
+        ) -> CollectedOutputMethod<String?> {
+            return .init(method:.collected(limit, encoding))
+        }
+
+        public static func collect<Output: OutputConvertible>(
+            upTo limit: Int, as: Output.Type
+        ) -> CollectedOutputMethod<Output> {
+            return .init(method: .collected(limit, nil))
         }
 
         internal func createExecutionOutput() throws -> ExecutionOutput {
@@ -113,21 +127,26 @@ extension Subprocess {
                 return .init(storage: .discarded(devnull))
             case .fileDescriptor(let fileDescriptor, let closeWhenDone):
                 return .init(storage: .fileDescriptor(fileDescriptor, closeWhenDone))
-            case .collected(let limit):
+            case .collected(let limit, _):
                 let (readFd, writeFd) = try FileDescriptor.pipe()
                 return .init(storage: .collected(limit, readFd, writeFd))
             }
+        }
+
+        internal func targetEncoding() -> String.Encoding? {
+            guard case .collected(_, let encoding) = self.method else {
+                return nil
+            }
+            return encoding
         }
     }
 
     /// `CollectedOutputMethod` defines how should Subprocess redirect
     /// output from child process' standard output and standard error.
-    public struct RedirectedOutputMethod: Sendable, Hashable {
-        typealias Storage = CollectedOutputMethod.Storage
+    public struct RedirectedOutputMethod: Sendable {
+        internal let method: OutputMethodStorage
 
-        internal let method: Storage
-
-        internal init(method: Storage) {
+        internal init(method: OutputMethodStorage) {
             self.method = method
         }
 
@@ -141,7 +160,7 @@ extension Subprocess {
         /// to `Subprocess.standardOutput` or `Subprocess.standardError`
         /// so they can be consumed as an AsyncSequence
         public static var redirectToSequence: Self {
-            return .init(method: .collected(128 * 1024))
+            return .init(method: .collected(128 * 1024, nil))
         }
         /// Subprocess shold write the child process output
         /// to the file descriptor specified.
@@ -164,7 +183,7 @@ extension Subprocess {
                 return .init(storage: .discarded(devnull))
             case .fileDescriptor(let fileDescriptor, let closeWhenDone):
                 return .init(storage: .fileDescriptor(fileDescriptor, closeWhenDone))
-            case .collected(let limit):
+            case .collected(let limit, _):
                 let (readFd, writeFd) = try FileDescriptor.pipe()
                 return .init(storage: .collected(limit, readFd, writeFd))
             }

@@ -137,6 +137,10 @@ extension Subprocess {
 
 // MARK: - Result
 extension Subprocess {
+    public protocol OutputConvertible {
+        static func convert(from input: Data) -> Self
+    }
+
     /// A simple wrapper around the generic result returned by the
     /// `run` closures with the corresponding `TerminationStatus`
     /// of the child process.
@@ -154,7 +158,9 @@ extension Subprocess {
 
     /// The result of a subprocess execution with its collected
     /// standard output and standard error.
-    public struct CollectedResult: Sendable, Hashable, Codable {
+    public struct CollectedResult<Output, Error>: Sendable, Hashable, Codable {
+        private var outputEncoding: String.Encoding?
+        private var errorEncoding: String.Encoding?
         /// The process identifier for the executed subprocess
         public let processIdentifier: ProcessIdentifier
         /// The termination status of the executed subprocess
@@ -162,37 +168,82 @@ extension Subprocess {
         private let _standardOutput: Data?
         private let _standardError: Data?
 
-        /// The collected standard output value for the subprocess.
-        /// Accessing this property will *fatalError* if the
-        /// corresponding `CollectedOutputMethod` is not set to
-        /// `.collect` or `.collect(upTo:)`
-        public var standardOutput: OutputWrapper {
-            guard let output = self._standardOutput else {
-                fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
-            }
-            return OutputWrapper(data: output)
-        }
-        /// The collected standard error value for the subprocess.
-        /// Accessing this property will *fatalError* if the
-        /// corresponding `CollectedOutputMethod` is not set to
-        /// `.collect` or `.collect(upTo:)`
-        public var standardError: OutputWrapper {
-            guard let output = self._standardError else {
-                fatalError("standardError is only available if the Subprocess was ran with .collect as error ")
-            }
-            return OutputWrapper(data: output)
+        enum CodingKeys: String, CodingKey {
+            case processIdentifier
+            case terminationStatus
+            case _standardOutput
+            case _standardError
         }
 
         internal init(
             processIdentifier: ProcessIdentifier,
             terminationStatus: TerminationStatus,
             standardOutput: Data?,
-            standardError: Data?) {
+            standardError: Data?,
+            outputEncoding: String.Encoding?,
+            errorEncoding: String.Encoding?
+        ) {
             self.processIdentifier = processIdentifier
             self.terminationStatus = terminationStatus
             self._standardOutput = standardOutput
             self._standardError = standardError
+            self.outputEncoding = outputEncoding
+            self.errorEncoding = errorEncoding
         }
+    }
+}
+
+extension Data : Subprocess.OutputConvertible {
+    public static func convert(from data: Data) -> Self {
+        return data
+    }
+}
+
+extension Subprocess.CollectedResult where Output : Subprocess.OutputConvertible {
+    /// The collected standard output value for the subprocess.
+    /// Accessing this property will *fatalError* if the
+    /// corresponding `CollectedOutputMethod` is not set to
+    /// `.collect` or `.collect(upTo:)`
+    public var standardOutput: Output {
+        guard let output = self._standardOutput else {
+            fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
+        }
+        return Output.convert(from: output)
+    }
+}
+
+extension Subprocess.CollectedResult where Error : Subprocess.OutputConvertible {
+    /// The collected standard error value for the subprocess.
+    /// Accessing this property will *fatalError* if the
+    /// corresponding `CollectedOutputMethod` is not set to
+    /// `.collect` or `.collect(upTo:)`
+    public var standardError: Error {
+        guard let output = self._standardError else {
+            fatalError("standardError is only available if the Subprocess was ran with .collect as error ")
+        }
+        return Error.convert(from: output)
+    }
+}
+
+extension Subprocess.CollectedResult where Output == String? {
+    /// The collected standard output value for the subprocess.
+    /// Accessing this property will *fatalError* if the
+    /// corresponding `CollectedOutputMethod` is not set to
+    /// `.collect` or `.collect(upTo:)`
+    public var standardOutput: String? {
+        guard let output = self._standardOutput else {
+            fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
+        }
+        return String(data: output, encoding: self.outputEncoding ?? .utf8)
+    }
+}
+
+extension Subprocess.CollectedResult where Error == String? {
+    public var standardError: String? {
+        guard let output = self._standardError else {
+            fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
+        }
+        return String(data: output, encoding: self.errorEncoding ?? .utf8)
     }
 }
 

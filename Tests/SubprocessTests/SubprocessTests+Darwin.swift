@@ -32,7 +32,8 @@ final class SubprocessDarwinTests : XCTestCase {
         let psResult = try await Subprocess.run(
             .named("/bin/bash"),
             arguments: ["-c", "ps -o pid,pgid,tpgid -p $$"],
-            platformOptions: platformOptions
+            platformOptions: platformOptions,
+            output: .collectString()
         )
         try assertNewSessionCreated(with: psResult)
     }
@@ -48,11 +49,12 @@ final class SubprocessDarwinTests : XCTestCase {
         }
         let pwdResult = try await Subprocess.run(
             .at("/bin/pwd"),
-            platformOptions: platformOptions
+            platformOptions: platformOptions,
+            output: .collectString()
         )
         XCTAssertTrue(pwdResult.terminationStatus.isSuccess)
         let currentDir = try XCTUnwrap(
-            pwdResult.standardOutput.stringUsingUTF8
+            pwdResult.standardOutput
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         // On Darwin, /var is linked to /private/var; /tmp is linked /private/tmp
         var expected = FilePath(intendedWorkingDir)

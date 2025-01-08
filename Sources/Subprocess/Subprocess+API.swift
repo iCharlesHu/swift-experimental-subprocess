@@ -31,16 +31,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run(
+    public static func run<Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: InputMethod = .noInput,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult {
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error> {
         let result = try await self.run(
             executable,
             arguments: arguments,
@@ -62,7 +62,9 @@ extension Subprocess {
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
             standardOutput: result.value.standardOutput,
-            standardError: result.value.standardError
+            standardError: result.value.standardError,
+            outputEncoding: output.targetEncoding(),
+            errorEncoding: error.targetEncoding()
         )
     }
 
@@ -80,16 +82,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run(
+    public static func run<Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: some Sequence<UInt8> & Sendable,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult {
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error> {
         let result = try await self.run(
             executable,
             arguments: arguments,
@@ -125,7 +127,9 @@ extension Subprocess {
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
             standardOutput: result.value.standardOutput,
-            standardError: result.value.standardError
+            standardError: result.value.standardError,
+            outputEncoding: output.targetEncoding(),
+            errorEncoding: error.targetEncoding()
         )
     }
 
@@ -143,16 +147,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run(
+    public static func run<Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: some StringProtocol,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult {
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error> {
         return try await self.run(
             executable,
             arguments: arguments,
@@ -179,16 +183,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run(
+    public static func run<Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: some Sequence<Data> & Sendable,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult {
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error> {
         let result = try await self.run(
             executable,
             arguments: arguments,
@@ -228,7 +232,9 @@ extension Subprocess {
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
             standardOutput: result.value.standardOutput,
-            standardError: result.value.standardError
+            standardError: result.value.standardError,
+            outputEncoding: output.targetEncoding(),
+            errorEncoding: error.targetEncoding()
         )
     }
 
@@ -246,16 +252,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run<AsyncSendableSequence: AsyncSequence & Sendable>(
+    public static func run<AsyncSendableSequence: AsyncSequence & Sendable, Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: AsyncSendableSequence,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult where AsyncSendableSequence.Element == Data {
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error> where AsyncSendableSequence.Element == Data {
         let result =  try await self.run(
             executable,
             arguments: arguments,
@@ -289,7 +295,9 @@ extension Subprocess {
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
             standardOutput: result.value.standardOutput,
-            standardError: result.value.standardError
+            standardError: result.value.standardError,
+            outputEncoding: output.targetEncoding(),
+            errorEncoding: error.targetEncoding()
         )
     }
 }
