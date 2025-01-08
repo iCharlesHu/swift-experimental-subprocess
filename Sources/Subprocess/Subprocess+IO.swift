@@ -106,6 +106,10 @@ extension Subprocess {
             return .init(method: .collected(limit, nil))
         }
 
+        /// Subprocess should collect the child process output
+        /// as `String` with the given limit in bytes and the
+        /// given `encoding`. The default limit is 128kb and
+        /// the default encoding us UTF8.
         public static func collectString(
             upTo limit: Int = 128 * 1024,
             encoding: String.Encoding = .utf8
@@ -113,6 +117,8 @@ extension Subprocess {
             return .init(method:.collected(limit, encoding))
         }
 
+        /// Subprocess should collect the child process output
+        /// as a OutputConvertible type.
         public static func collect<Output: OutputConvertible>(
             upTo limit: Int, as: Output.Type
         ) -> CollectedOutputMethod<Output> {

@@ -85,7 +85,8 @@
     - Switched all generic parameters to full words instead of a letter.
     - Introduced String support:
         - Added `some StringProtocol` input overloads for `run()`.
-        - Changed `CollectedResult.standard{Output|Error}` to `OutputWrapper`, which offers convenient views to the outputs as Data and String with UTF8 encoding 
+        - Introduced `protocol Subprocess.OutputConvertible`, which allows developers to define their own type as the return type for `CollecedOutput.standard{Output|Error}`.
+        - Make `CollectedOutput`, its associated `run()` family of methods, and `CollectedOutputMethod` genric. The entire chain of genrics is ultimately inferred from `CollectedOutputMethod`, which allows developers to specify custom return type for `.standard{Output|Error}`.
 
 ## Introduction
 
@@ -167,10 +168,11 @@ import FoundationEssentials
 
 let gitResult = try await Subprocess.run(   // <- 0
     .named("git"),                          // <- 1
-    arguments: ["diff", "--name-only"]
+    arguments: ["diff", "--name-only"],
+    output: .collectString()
 )
 
-let changedFiles = gitResult.standardOutput.stringUsingUTF8!
+let changedFiles = gitResult.standardOutput!
 if changedFiles.isEmpty {
     changedFiles = "No changed files"
 }
@@ -214,16 +216,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run(
+    public static func run<Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
         input: InputMethod = .noInput,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error>
 
     /// Run a executable with given parameters and capture its
     /// standard output and standard error.
@@ -239,16 +241,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run(
+    public static func run<Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
         input: some Sequence<UInt8> & Sendable,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error>
 
     /// Run a executable with given parameters and capture its
     /// standard output and standard error.
@@ -264,16 +266,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run(
+    public static func run<Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: some StringProtocol,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error>
 
     /// Run a executable with given parameters and capture its
     /// standard output and standard error.
@@ -289,16 +291,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run(
+    public static func run<Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: some Sequence<Data> & Sendable,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error>
 
     /// Run a executable with given parameters and capture its
     /// standard output and standard error.
@@ -314,16 +316,16 @@ extension Subprocess {
     ///   - error: The method to use for collecting the standard error.
     /// - Returns: `CollectedResult` which contains process identifier,
     ///     termination status, captured standard output and standard error.
-    public static func run<AsyncSendableSequence: AsyncSequence & Sendable>(
+    public static func run<AsyncSendableSequence: AsyncSequence & Sendable, Output, Error>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = .default,
         input: AsyncSendableSequence,
-        output: CollectedOutputMethod = .collect(),
-        error: CollectedOutputMethod = .collect()
-    ) async throws -> CollectedResult where AsyncSendableSequence.Element == Data
+        output: CollectedOutputMethod<Output> = .collect(),
+        error: CollectedOutputMethod<Error> = .collect()
+    ) async throws -> CollectedResult<Output, Error> where AsyncSendableSequence.Element == Data
 }
 
 // MARK: - Custom Execution Body
@@ -520,9 +522,9 @@ The `run` methods can generally be divided into two categories, each addressing 
 // Simple ls with no standard input
 let ls = try await Subprocess.run(
     .named("ls"),
-    output: .collect
+    output: .collectString()
 )
-print("Items in current directory: \(ls.standardOutput.stringUsingUTF8!)")
+print("Items in current directory: \(ls.standardOutput!)")
 
 // Launch VSCode with arguments
 let code = try await Subprocess.run(
@@ -536,9 +538,9 @@ let inputData = "Hello SwiftFoundation".utf8CString.map { UInt8($0) }
 let cat = try await Subprocess.run(
     .named("cat"),
     input: inputData,
-    output: .collect
+    output: .collectString()
 )
-print("Cat result: \(cat.standardOutput.stringUsingUTF8!)")
+print("Cat result: \(cat.standardOutput!)")
 ```
 
 - Alternatively, developers can leverage the closure-based approach. These methods spawn the child process and invoke the provided `body` closure with a `Subprocess` object. Developers can send signals to the running subprocess or transform `standardOutput` or `standardError` to the desired result type within the closure. One additional variation of the closure-based methods provides the `body` closure with an additional `Subprocess.StandardInputWriter` object, allowing developers to write to the standard input of the subprocess directly. These methods asynchronously wait for the child process to exit before returning the result.
@@ -1281,32 +1283,67 @@ let exe = try await Subprocess.run(.at("/some/executable"), input: sequence)
 - `.discard`: Specifies that the child process's output should be discarded, effectively written to `/dev/null`.
 - `.writeTo`: Specifies that the child process should write its output to a file descriptor provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterSpawningProcess` is set to `true`.
 
-`CollectedOutMethod` adds one more option to non-closure-based `run` methods that return a `CollectedResult`: `.collect(upTo:)`. This option specifies that `Subprocess` should collect the output as `Data`. Since the output of a child process could be arbitrarily large, `Subprocess` imposes a limit on how many bytes it will collect. By default, this limit is 128kb.
+`CollectedOutMethod` adds three more options to non-closure-based `run` methods that return a `CollectedResult`:
+- `.collect(upTo:)`: this option specifies that `Subprocess` should collect the output as `Data`. Since the output of a child process could be arbitrarily large, `Subprocess` imposes a limit on how many bytes it will collect. By default, this limit is 128kb.
+- `.collectString(upTo:encoding:)`: this option specifies that `Subprocess` should collect the output as `String` with the given encoding and limit.
+- `.collect(upTo:as:)`: this option specifies that `Subprocess` should collect the output as a custom type that conforms to `Subprocess.OutputConvertible`
 
 ```swift
 extension Subprocess {
+    /// Conform to this protocol if you wish to have `Subprocess.run` return
+    /// your custom type. For example:
+    /// ```
+    /// extension MyType : Subprocess.OutputConvertible { ... }
+    ///
+    /// let result = try await Subprocess.run(
+    ///     .at(...),
+    ///     output: .collect(as: MyType.self)
+    /// )
+    ///
+    /// print(result.standardOutput) // MyType
+    /// ```
+    public protocol OutputConvertible {
+        static func convert(from input: Data) -> Self
+    }
+
     /// `CollectedOutputMethod` defines how should Subprocess collect
     /// output from child process' standard output and standard error
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct CollectedOutputMethod: Sendable, Hashable {
+    public struct CollectedOutputMethod<Result>: Sendable, Hashable {
         /// Subprocess shold dicard the child process output.
         /// This option is equivalent to binding the child process
         /// output to `/dev/null`.
-        public static var discard: Self
-        /// Subprocess should collect the child process output
-        /// as `Data` with the given limit in bytes.
-        /// The default limit is 128kb
-        public static func collect(upTo limit: Int = 128 * 1024) -> Self
+        public static var discard: CollectedOutputMethod<Void>
         /// Subprocess should write the child process output
         /// to the file descriptor specified.
         /// - Parameters:
         ///   - fd: the file descriptor to write to
         ///   - closeAfterSpawningProcess: whether to close the
         ///     file descriptor once the process is spawned.
-        public static func writeTo(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> Self
+        public static func writeTo(
+            _ fd: FileDescriptor,
+            closeAfterSpawningProcess: Bool
+        ) -> CollectedOutputMethod<Void>
+        /// Subprocess should collect the child process output
+        /// as `Data` with the given limit in bytes.
+        /// The default limit is 128kb
+        public static func collect(upTo limit: Int = 128 * 1024) -> CollectedOutputMethod<Data>
+        /// Subprocess should collect the child process output
+        /// as `String` with the given limit in bytes and the
+        /// given `encoding`. The default limit is 128kb and
+        /// the default encoding us UTF8.
+        public static func collectString(
+            upTo limit: Int = 128 * 1024,
+            encoding: String.Encoding = .utf8
+        ) -> CollectedOutputMethod<String?>
+        /// Subprocess should collect the child process output
+        /// as a OutputConvertible type.
+        public static func collect<Output: OutputConvertible>(
+            upTo limit: Int, as: Output.Type
+        ) -> CollectedOutputMethod<Output>
     }
 }
 ```
@@ -1344,21 +1381,31 @@ extension Subprocess {
 Here are some examples of using both output methods:
 
 ```swift
-let ls = try await Subprocess.run(.named("ls"), output: .collect())
-// The output has been collected as `Data`, up to 16kb limit
-print("ls output: \(ls.standardOutout.stringUsingUTF8!)")
+let ls = try await Subprocess.run(.named("ls"), output: .collectString())
+// The output has been collected as `String`, up to 128kb limit
+print("ls output: \(ls.standardOutout!)")
 
-// Increase the default buffer limit to 256kb
+// Increase the default buffer limit to 256kb and collect output as Data
 let curl = try await Subprocess.run(
     .named("curl"),
     output: .collect(upTo: 256 * 1024)
 )
-print("curl output: \(curl.standardOutput.stringUsingUTF8!)")
+print("curl output: \(curl.standardOutput?.count)")
+
+// Collect the output as custom type
+struct MyType : Subprocess.OutputConvertible { ... }
+
+let curl = try await Subprocess.run(
+    .named("cat"),
+    output: .collect(as: MyType.self)
+)
+print("curl output: \(curl.standardOutput)") // MyType
 
 // Write to a specific file descriptor
 let fd: FileDescriptor = try .open(...)
 let result = try await Subprocess.run(
-    .at("/some/script"), output: .writeTo(fd, closeAfterSpawningProcess: true))
+    .at("/some/script"), output: .writeTo(fd, closeAfterSpawningProcess: true)
+)
 
 // Redirect the output as AsyncSequence
 let result2 = try await Subprocess.run(
@@ -1379,7 +1426,7 @@ let result2 = try await Subprocess.run(
 
 `Subprocess` provides two "Result" types corresponding to the two categories of `run` methods: `Subprocess.CollectedResult` and `Subprocess.ExecutionResult<T>`.
 
-`Subprocess.CollectedResult` is essentially a collection of properties that represent the result of an execution after the child process has exited. It is used by the non-closure-based `run` methods. In many ways, `CollectedResult` can be seen as the "synchronous" version of `Subprocess`—instead of the asynchronous `AsyncSequence<Data>`, the standard IOs can be retrieved via synchronous `Data` or `String`.
+`Subprocess.CollectedResult` is essentially a collection of properties that represent the result of an execution after the child process has exited. It is used by the non-closure-based `run` methods. In many ways, `CollectedResult` can be seen as the "synchronous" version of `Subprocess`—instead of the asynchronous `AsyncSequence<Data>`, the standard IOs can be retrieved via synchronous `Data`, `String`, or custom types that conform to `Subprocess.OutputConvertible`.
 
 ```swift
 extension Subprocess {
@@ -1389,39 +1436,65 @@ extension Subprocess {
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct CollectedResult: Sendable, Hashable, Codable {
+    public struct CollectedResult<Output, Error>: Sendable, Hashable, Codable {
         /// The process identifier for the executed subprocess
         public let processIdentifier: ProcessIdentifier
         /// The termination status of the executed subprocess
         public let terminationStatus: TerminationStatus
-        /// The collected standard output value for the subprocess.
-        /// Accessing this property will *fatalError* if the
-        /// corresponding `CollectedOutputMethod` is not set to
-        /// `.collect` or `.collect(upTo:)`
-        public let standardOutput: OutputWrapper
-        /// The collected standard error value for the subprocess.
-        /// Accessing this property will *fatalError* if the
-        /// corresponding `CollectedOutputMethod` is not set to
-        /// `.collect` or `.collect(upTo:)`
-        public let standardError: OutputWrapper
     }
 }
 
-extension Subprocess.CollectedResult : CustomStringConvertible, CustomDebugStringConvertible {}
-
-extension Subprocess.CollectedResult {
-    /// A simple wrapper that offers a convinent way to access
-    /// the Subprocess output as Data or String assuming UTF8
-    /// encoding.
+extension Subprocess.CollectedResult where Output : Subprocess.OutputConvertible {
+    /// The collected standard output value for the subprocess.
+    /// Accessing this property will *fatalError* if the
+    /// corresponding `CollectedOutputMethod` is not set to
+    /// `.collect` or `.collect(upTo:)`
     @available(FoundationPreview 0.4, *)
     @available(iOS, unavailable)
     @available(tvOS, unavailable)
     @available(watchOS, unavailable)
-    public struct OutputWrapper: Sendable, Hashable, Codable {
-        public let data: Data
-        public var stringUsingUTF8: String? { get }
-    }
+    public var standardOutput: Output { get }
 }
+
+extension Subprocess.CollectedResult where Error : Subprocess.OutputConvertible {
+    /// The collected standard error value for the subprocess.
+    /// Accessing this property will *fatalError* if the
+    /// corresponding `CollectedOutputMethod` is not set to
+    /// `.collect` or `.collect(upTo:)`
+    @available(FoundationPreview 0.4, *)
+    @available(iOS, unavailable)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
+    public var standardError: Error { get }
+}
+
+extension Subprocess.CollectedResult where Output == String? {
+    /// The collected standard output value for the subprocess.
+    /// Accessing this property will *fatalError* if the
+    /// corresponding `CollectedOutputMethod` is not set to
+    /// `.collect` or `.collect(upTo:)`
+    @available(FoundationPreview 0.4, *)
+    @available(iOS, unavailable)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
+    public var standardOutput: String? { get }
+}
+
+extension Subprocess.CollectedResult where Error == String? {
+    /// The collected standard error value for the subprocess.
+    /// Accessing this property will *fatalError* if the
+    /// corresponding `CollectedOutputMethod` is not set to
+    /// `.collect` or `.collect(upTo:)`
+    @available(FoundationPreview 0.4, *)
+    @available(iOS, unavailable)
+    @available(tvOS, unavailable)
+    @available(watchOS, unavailable)
+    public var standardError: String? { get }
+}
+
+extension Data: Subprocess.OutputConvertible {}
+
+extension Subprocess.CollectedResult : CustomStringConvertible, CustomDebugStringConvertible {}
 ```
 
 `Subprocess.ExecutionResult` is a simple wrapper around the generic result returned by the `run` closures with the corresponding `TerminationStatus` of the child process:
@@ -1706,10 +1779,11 @@ async let ls = try await Subprocess.run(
 async let grep = try await Subprocess.run(
     .named("grep"),
     arguments: ["swift"],
-    input: .readFrom(pipe.readEnd, closeAfterSpawningProcess: true)
+    input: .readFrom(pipe.readEnd, closeAfterSpawningProcess: true),
+    output: .collectString()
 )
 
-let result = await grep.standardOutput.stringUsingUTF8
+let result = await grep.standardOutput
 ```
 
 This setup is overly complex for such a simple operation in shell script (`ls | grep "swift"`). We should reimagine how piping should work with `Subprocess` next.

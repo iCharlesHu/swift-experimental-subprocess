@@ -137,6 +137,18 @@ extension Subprocess {
 
 // MARK: - Result
 extension Subprocess {
+    /// Conform to this protocol if you wish to have `Subprocess.run` return
+    /// your custom type. For example:
+    /// ```
+    /// extension MyType : Subprocess.OutputConvertible { ... }
+    ///
+    /// let result = try await Subprocess.run(
+    ///     .at(...),
+    ///     output: .collect(as: MyType.self)
+    /// )
+    ///
+    /// print(result.standardOutput) // MyType
+    /// ```
     public protocol OutputConvertible {
         static func convert(from input: Data) -> Self
     }
@@ -159,14 +171,14 @@ extension Subprocess {
     /// The result of a subprocess execution with its collected
     /// standard output and standard error.
     public struct CollectedResult<Output, Error>: Sendable, Hashable, Codable {
-        private var outputEncoding: String.Encoding?
-        private var errorEncoding: String.Encoding?
         /// The process identifier for the executed subprocess
         public let processIdentifier: ProcessIdentifier
         /// The termination status of the executed subprocess
         public let terminationStatus: TerminationStatus
         private let _standardOutput: Data?
         private let _standardError: Data?
+        private var outputEncoding: String.Encoding?
+        private var errorEncoding: String.Encoding?
 
         enum CodingKeys: String, CodingKey {
             case processIdentifier
