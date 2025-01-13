@@ -11,7 +11,6 @@
 
 @preconcurrency import SystemPackage
 
-
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Glibc)
@@ -64,66 +63,54 @@ extension Subprocess {
 
         /// Close each input individually, and throw the first error if there's multiple errors thrown
         @Sendable
-        private func cleanup(
-            process: Subprocess,
+        private func cleanup<
+            Input: Subprocess.InputProtocol,
+            Output: Subprocess.OutputProtocol,
+            Error: Subprocess.OutputProtocol
+        >(
+            execution: Subprocess.Execution<Input, Output, Error>,
             childSide: Bool, parentSide: Bool,
             attemptToTerminateSubProcess: Bool
         ) async throws {
+            func safeClose(_ work: () throws -> Void) -> Swift.Error? {
+                do {
+                    try work()
+                    return nil
+                } catch {
+                    return error
+                }
+            }
+
             guard childSide || parentSide || attemptToTerminateSubProcess else {
                 return
             }
 
-            var exitError: Error? = nil
+            var exitError: Swift.Error? = nil
             // Attempt to teardown the subprocess
             if attemptToTerminateSubProcess {
                 #if os(Windows)
                 exitError = process.tryTerminate()
                 #else
-                await process.teardown(
+                await execution.teardown(
                     using: self.platformOptions.teardownSequence
                 )
                 #endif
             }
 
-            let inputCloseFunc: () throws -> Void
-            let outputCloseFunc: () throws -> Void
-            let errorCloseFunc: () throws -> Void
-            if childSide && parentSide {
-                // Close all
-                inputCloseFunc = process.executionInput.closeAll
-                outputCloseFunc = process.executionOutput.closeAll
-                errorCloseFunc = process.executionError.closeAll
-            } else if childSide {
-                // Close child only
-                inputCloseFunc = process.executionInput.closeChildSide
-                outputCloseFunc = process.executionOutput.closeChildSide
-                errorCloseFunc = process.executionError.closeChildSide
-            } else {
-                // Close parent only
-                inputCloseFunc = process.executionInput.closeParentSide
-                outputCloseFunc = process.executionOutput.closeParentSide
-                errorCloseFunc = process.executionError.closeParentSide
+            var inputError: Swift.Error?
+            var outputError: Swift.Error?
+            var errorError: Swift.Error? // lol
+
+            if childSide {
+                inputError = safeClose(execution.input.closeReadFileDescriptor)
+                outputError = safeClose(execution.output.closeWriteFileDescriptor)
+                errorError = safeClose(execution.error.closeWriteFileDescriptor)
             }
 
-            var inputError: Error?
-            var outputError: Error?
-            var errorError: Error? // lol
-            do {
-                try inputCloseFunc()
-            } catch {
-                inputError = error
-            }
-
-            do {
-                try outputCloseFunc()
-            } catch {
-                outputError = error
-            }
-
-            do {
-                try errorCloseFunc()
-            } catch {
-                errorError = error // lolol
+            if parentSide {
+                inputError = safeClose(execution.input.closeWriteFileDescriptor)
+                outputError = safeClose(execution.output.closeReadFileDescriptor)
+                errorError = safeClose(execution.error.closeReadFileDescriptor)
             }
 
             if let inputError = inputError {
@@ -145,29 +132,36 @@ extension Subprocess {
 
         /// Close each input individually, and throw the first error if there's multiple errors thrown
         @Sendable
-        internal func cleanupAll(
-            input: ExecutionInput,
-            output: ExecutionOutput,
-            error: ExecutionOutput
+        internal func cleanupAll<
+            Input: Subprocess.InputProtocol,
+            Output: Subprocess.OutputProtocol,
+            Error: Subprocess.OutputProtocol
+        >(
+            input: Input,
+            output: Output,
+            error: Error
         ) throws {
-            var inputError: Error?
-            var outputError: Error?
-            var errorError: Error?
+            var inputError: Swift.Error?
+            var outputError: Swift.Error?
+            var errorError: Swift.Error?
 
             do {
-                try input.closeAll()
+                try input.closeReadFileDescriptor()
+                try input.closeWriteFileDescriptor()
             } catch {
                 inputError = error
             }
 
             do {
-                try output.closeAll()
+                try output.closeReadFileDescriptor()
+                try output.closeWriteFileDescriptor()
             } catch {
                 outputError = error
             }
 
             do {
-                try error.closeAll()
+                try error.closeReadFileDescriptor()
+                try error.closeWriteFileDescriptor()
             } catch {
                 errorError = error
             }
@@ -183,35 +177,40 @@ extension Subprocess {
             }
         }
 
-        internal func run<Result>(
-            output: RedirectedOutputMethod,
-            error: RedirectedOutputMethod,
+        internal func run<
+            Result,
+            Output: Subprocess.OutputProtocol,
+            Error: Subprocess.OutputProtocol
+        >(
+            output: Output,
+            error: Error,
             isolation: isolated (any Actor)? = #isolation,
-            _ body: @escaping (Subprocess, StandardInputWriter) async throws -> Result
+            _ body: @escaping (
+                Subprocess.Execution<CustomWriteInput, Output, Error>,
+                StandardInputWriter
+            ) async throws -> Result
         ) async throws -> ExecutionResult<Result> {
-            let (readFd, writeFd) = try FileDescriptor.pipe()
-            let executionInput: ExecutionInput = .init(storage: .customWrite(readFd, writeFd))
-            let executionOutput: ExecutionOutput = try output.createExecutionOutput()
-            let executionError: ExecutionOutput = try error.createExecutionOutput()
-            let process: Subprocess = try self.spawn(
-                withInput: executionInput,
-                output: executionOutput,
-                error: executionError)
+            let input = Subprocess.CustomWriteInput()
+            let execution = try self.spawn(
+                withInput: input,
+                output: output,
+                error: error
+            )
             // After spawn, cleanup child side fds
             try await self.cleanup(
-                process: process,
+                execution: execution,
                 childSide: true,
                 parentSide: false,
                 attemptToTerminateSubProcess: false
             )
             return try await withAsyncTaskCancellationHandler {
-                async let waitingStatus = try await monitorProcessTermination(forProcessWithIdentifier: process.processIdentifier)
+                async let waitingStatus = try await monitorProcessTermination(forProcessWithIdentifier: execution.processIdentifier)
                 // Body runs in the same isolation
                 do {
-                    let result = try await body(process, .init(input: executionInput))
+                    let result = try await body(execution, .init(input: input))
                     // Clean up parent side when body finishes
                     try await self.cleanup(
-                        process: process,
+                        execution: execution,
                         childSide: false,
                         parentSide: true,
                         attemptToTerminateSubProcess: false
@@ -221,7 +220,7 @@ extension Subprocess {
                 } catch {
                     // Cleanup everything
                     try await self.cleanup(
-                        process: process,
+                        execution: execution,
                         childSide: false,
                         parentSide: true,
                         attemptToTerminateSubProcess: false
@@ -233,7 +232,7 @@ extension Subprocess {
                 // Since the task has already been cancelled,
                 // this is the best we can do
                 try? await self.cleanup(
-                    process: process,
+                    execution: execution,
                     childSide: true,
                     parentSide: true,
                     attemptToTerminateSubProcess: true
@@ -241,46 +240,66 @@ extension Subprocess {
             }
         }
 
-        internal func run<Result>(
-            input: InputMethod,
-            output: RedirectedOutputMethod,
-            error: RedirectedOutputMethod,
+        internal func run<
+            Result,
+            Input: Subprocess.InputProtocol,
+            Output: Subprocess.OutputProtocol,
+            Error: Subprocess.OutputProtocol
+        >(
+            input: Input,
+            output: Output,
+            error: Error,
             isolation: isolated (any Actor)? = #isolation,
-            _ body: (sending @escaping (Subprocess) async throws -> Result)
+            _ body: (@escaping (Subprocess.Execution<Input, Output, Error>) async throws -> Result)
         ) async throws -> ExecutionResult<Result> {
-            let executionInput = try input.createExecutionInput()
-            let executionOutput = try output.createExecutionOutput()
-            let executionError = try error.createExecutionOutput()
-            let process = try self.spawn(
-                withInput: executionInput,
-                output: executionOutput,
-                error: executionError)
+            let execution = try self.spawn(
+                withInput: input,
+                output: output,
+                error: error
+            )
             // After spawn, clean up child side
             try await self.cleanup(
-                process: process,
+                execution: execution,
                 childSide: true,
                 parentSide: false,
                 attemptToTerminateSubProcess: false
             )
             return try await withAsyncTaskCancellationHandler {
-                async let waitingStatus = try monitorProcessTermination(
-                    forProcessWithIdentifier: process.processIdentifier
-                )
                 do {
-                    // Body runs in the same isolation
-                    let result = try await body(process)
-                    // After body finishes, cleanup parent side
-                    try await self.cleanup(
-                        process: process,
-                        childSide: false,
-                        parentSide: true,
-                        attemptToTerminateSubProcess: false
-                    )
-                    let status = try await waitingStatus
-                    return ExecutionResult(terminationStatus: status, value: result)
+                    return try await withThrowingTaskGroup(
+                        of: Subprocess.TerminationStatus?.self,
+                        returning: ExecutionResult.self
+                    ) { group in
+                        group.addTask {
+                            try await input.writeInput()
+                            return nil
+                        }
+                        group.addTask {
+                            return try await monitorProcessTermination(
+                                forProcessWithIdentifier: execution.processIdentifier
+                            )
+                        }
+
+                        // Body runs in the same isolation
+                        let result = try await body(execution)
+                        // After body finishes, cleanup parent side
+                        try await self.cleanup(
+                            execution: execution,
+                            childSide: false,
+                            parentSide: true,
+                            attemptToTerminateSubProcess: false
+                        )
+                        var status: Subprocess.TerminationStatus? = nil
+                        while let monitorResult = try await group.next() {
+                            if let monitorResult = monitorResult {
+                                status = monitorResult
+                            }
+                        }
+                        return ExecutionResult(terminationStatus: status!, value: result)
+                    }
                 } catch {
                     try await self.cleanup(
-                        process: process,
+                        execution: execution,
                         childSide: false,
                         parentSide: true,
                         attemptToTerminateSubProcess: false
@@ -292,7 +311,7 @@ extension Subprocess {
                 // Since the task has already been cancelled,
                 // this is the best we can do
                 try? await self.cleanup(
-                    process: process,
+                    execution: execution,
                     childSide: true,
                     parentSide: true,
                     attemptToTerminateSubProcess: true

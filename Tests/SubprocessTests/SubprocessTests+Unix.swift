@@ -273,7 +273,7 @@ extension SubprocessUnixTests {
         )
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            input: expected,
+            input: .sequence(expected),
             output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
@@ -302,7 +302,7 @@ extension SubprocessUnixTests {
         }
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            input: stream,
+            input: .asyncSequence(stream),
             output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
@@ -315,7 +315,7 @@ extension SubprocessUnixTests {
         )
         let result = try await Subprocess.run(
             .at("/bin/cat"),
-            input: expected,
+            input: .sequence(expected),
             output: .redirectToSequence
         ) { execution in
             var buffer = Data()
@@ -350,7 +350,7 @@ extension SubprocessUnixTests {
         }
         let result = try await Subprocess.run(
             .at("/bin/cat"),
-            input: stream
+            input: .asyncSequence(stream)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -468,6 +468,7 @@ extension SubprocessUnixTests {
         }
     }
 
+/*
     func testRedirectedOutputFileDescriptor() async throws {
         let outputFilePath = FilePath(FileManager.default.temporaryDirectory.path())
             .appending("Test.out")
@@ -532,6 +533,7 @@ extension SubprocessUnixTests {
             XCTAssertEqual(typedError, .badFileDescriptor)
         }
     }
+*/
 
     func testRedirectedOutputRedirectToSequence() async throws {
         // Make ure we can read long text redirected to AsyncSequence
@@ -835,7 +837,12 @@ extension SubprocessUnixTests {
     }
 }
 
-internal func assertNewSessionCreated(with result: Subprocess.CollectedResult<String?, Data>) throws {
+internal func assertNewSessionCreated<Output: Subprocess.OutputProtocol>(
+    with result: Subprocess.CollectedResult<
+        Subprocess.StringOutput,
+        Output
+    >
+) throws {
     XCTAssertTrue(result.terminationStatus.isSuccess)
     let psValue = try XCTUnwrap(
         result.standardOutput

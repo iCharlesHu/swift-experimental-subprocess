@@ -90,33 +90,6 @@ extension Subprocess {
         /// its controlling terminal changes its size (a window change).
         public static var windowSizeChange: Self { .init(rawValue: SIGWINCH) }
     }
-
-    /// Send the given signal to the child process.
-    /// - Parameters:
-    ///   - signal: The signal to send.
-    ///   - shouldSendToProcessGroup: Whether this signal should be sent to
-    ///     the entire process group.
-    public func send(signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
-        let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
-        guard kill(pid, signal.rawValue) == 0 else {
-            throw POSIXError(.init(rawValue: errno)!)
-        }
-    }
-
-    internal func tryTerminate() -> Error? {
-        do {
-            try self.send(signal: .kill)
-        } catch {
-            guard let posixError: POSIXError = error as? POSIXError else {
-                return error
-            }
-            // Ignore ESRCH (no such process)
-            if posixError.code != .ESRCH {
-                return error
-            }
-        }
-        return nil
-    }
 }
 
 // MARK: - Environment Resolution
@@ -419,6 +392,13 @@ extension FileDescriptor {
         return try await self.write(dispatchData)
     }
 
+    internal func write(_ data: [UInt8], completion: @escaping (Int32) -> Void) {
+        let dispatchData: DispatchData = data.withUnsafeBytes {
+            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+        }
+        self.write(dispatchData, completion: completion)
+    }
+
     internal func write(_ data: Data) async throws {
         let dispatchData: DispatchData = data.withUnsafeBytes {
             return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
@@ -426,12 +406,19 @@ extension FileDescriptor {
         return try await self.write(dispatchData)
     }
 
-    internal func write(_ dispatchData: DispatchData) async throws {
+    internal func write(_ data: Data, completion: @escaping (Int32) -> Void) {
+        let dispatchData: DispatchData = data.withUnsafeBytes {
+            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+        }
+        self.write(dispatchData, completion: completion)
+    }
+
+    internal func write(_ dispatchData: DispatchData, queue: DispatchQueue = .global()) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) -> Void in
             DispatchIO.write(
                 toFileDescriptor: self.rawValue,
                 data: dispatchData,
-                runningHandlerOn: .global()
+                runningHandlerOn: queue
             ) { _, error in
                 guard error == 0 else {
                     continuation.resume(
@@ -442,6 +429,19 @@ extension FileDescriptor {
                 }
                 continuation.resume()
             }
+        }
+    }
+
+    internal func write(
+        _ dispatchData: DispatchData,
+        completion: @escaping (Int32) -> Void
+    ) {
+        DispatchIO.write(
+            toFileDescriptor: self.rawValue,
+            data: dispatchData,
+            runningHandlerOn: .global()
+        ) { _, error in
+            completion(error)
         }
     }
 }

@@ -18,78 +18,15 @@ import FoundationEssentials
 import Foundation
 #endif
 
-/// An object that represents a subprocess of the current process.
-///
-/// Using `Subprocess`, your program can run another program as a subprocess
-/// and can monitor that program’s execution. A `Subprocess` object creates a
-/// **separate executable** entity; it’s different from `Thread` because it doesn’t
-/// share memory space with the process that creates it.
-public struct Subprocess: Sendable {
-    /// The process identifier of the current subprocess
-    public let processIdentifier: ProcessIdentifier
-
-    internal let executionInput: ExecutionInput
-    internal let executionOutput: ExecutionOutput
-    internal let executionError: ExecutionOutput
-#if os(Windows)
-    internal let consoleBehavior: PlatformOptions.ConsoleBehavior
-#endif
-
-    /// The standard output of the subprocess.
-    /// Accessing this property will **fatalError** if
-    /// - `.output` wasn't set to `.redirectToSequence` when the subprocess was spawned;
-    /// - This property was accessed multiple times. Subprocess communicates with
-    ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardOutput: some _AsyncSequence<Data, any Error> {
-        guard let (_, fd) = self.executionOutput
-            .consumeCollectedFileDescriptor() else {
-            fatalError("The standard output was not redirected")
-        }
-        guard let fd = fd else {
-            fatalError("The standard output has already been closed")
-        }
-        return AsyncDataSequence(fileDescriptor: fd)
-    }
-
-    /// The standard error of the subprocess.
-    /// Accessing this property will **fatalError** if
-    /// - `.error` wasn't set to `.redirectToSequence` when the subprocess was spawned;
-    /// - This property was accessed multiple times. Subprocess communicates with
-    ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardError: some _AsyncSequence<Data, any Error> {
-        guard let (_, fd) = self.executionError
-            .consumeCollectedFileDescriptor() else {
-            fatalError("The standard error was not redirected")
-        }
-        guard let fd = fd else {
-            fatalError("The standard error has already been closed")
-        }
-        return AsyncDataSequence(fileDescriptor: fd)
-    }
-}
-
-// MARK: - Teardown
-#if canImport(Darwin) || canImport(Glibc)
-extension Subprocess {
-    /// Performs a sequence of teardown steps on the Subprocess.
-    /// Teardown sequence always ends with a `.kill` signal
-    /// - Parameter sequence: The  steps to perform.
-    public func teardown(using sequence: [TeardownStep]) async {
-        await withUncancelledTask {
-            await self.runTeardownSequence(sequence)
-        }
-    }
-}
-#endif
 
 // MARK: - StandardInputWriter
 extension Subprocess {
     /// A writer that writes to the standard input of the subprocess.
     public final actor StandardInputWriter: Sendable {
 
-        private let input: ExecutionInput
+        private let input: CustomWriteInput
 
-        init(input: ExecutionInput) {
+        init(input: CustomWriteInput) {
             self.input = input
         }
 
@@ -98,7 +35,7 @@ extension Subprocess {
         public func write<SendableSequence: Sequence<UInt8> & Sendable>(
             _ sequence: SendableSequence
         ) async throws {
-            guard let fd: FileDescriptor = self.input.getWriteFileDescriptor() else {
+            guard let fd: FileDescriptor = try self.input.getWriteFileDescriptor() else {
                 fatalError("Attempting to write to a file descriptor that's already closed")
             }
             if let array = sequence as? Array<UInt8> {
@@ -111,9 +48,16 @@ extension Subprocess {
         /// Write a sequence of CChar to the standard input of the subprocess.
         /// - Parameter sequence: The sequence of bytes to write.
         public func write(
-            _ string: some StringProtocol
+            _ string: some StringProtocol,
+            using encoding: String.Encoding = .utf8
         ) async throws {
-            try await self.write(Data(string.utf8))
+            guard encoding != .utf8 else {
+                try await self.write(Data(string.utf8))
+                return
+            }
+            if let data = string.data(using: encoding) {
+                try await self.write(data)
+            }
         }
 
         /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
@@ -130,7 +74,7 @@ extension Subprocess {
 
         /// Signal all writes are finished
         public func finish() async throws {
-            try self.input.closeParentSide()
+            try self.input.closeWriteFileDescriptor()
         }
     }
 }
@@ -170,37 +114,47 @@ extension Subprocess {
 
     /// The result of a subprocess execution with its collected
     /// standard output and standard error.
-    public struct CollectedResult<Output, Error>: Sendable, Hashable, Codable {
+    public struct CollectedResult<
+        Output: Subprocess.OutputProtocol,
+        Error:Subprocess.OutputProtocol
+    >: Sendable, Hashable {
         /// The process identifier for the executed subprocess
         public let processIdentifier: ProcessIdentifier
         /// The termination status of the executed subprocess
         public let terminationStatus: TerminationStatus
         private let _standardOutput: Data?
         private let _standardError: Data?
-        private var outputEncoding: String.Encoding?
-        private var errorEncoding: String.Encoding?
-
-        enum CodingKeys: String, CodingKey {
-            case processIdentifier
-            case terminationStatus
-            case _standardOutput
-            case _standardError
-        }
+        private let output: Output
+        private let error: Error
 
         internal init(
             processIdentifier: ProcessIdentifier,
             terminationStatus: TerminationStatus,
             standardOutput: Data?,
             standardError: Data?,
-            outputEncoding: String.Encoding?,
-            errorEncoding: String.Encoding?
+            output: Output,
+            error: Error
         ) {
             self.processIdentifier = processIdentifier
             self.terminationStatus = terminationStatus
             self._standardOutput = standardOutput
             self._standardError = standardError
-            self.outputEncoding = outputEncoding
-            self.errorEncoding = errorEncoding
+            self.output = output
+            self.error = error
+        }
+
+        public func hash(into hasher: inout Hasher) {
+            hasher.combine(self.processIdentifier)
+            hasher.combine(self.terminationStatus)
+            hasher.combine(self._standardOutput)
+            hasher.combine(self._standardError)
+        }
+
+        public static func ==(lhs: Self, rhs: Self) -> Bool {
+            return lhs.processIdentifier == rhs.processIdentifier
+            && lhs.terminationStatus == rhs.terminationStatus
+            && lhs._standardOutput == rhs._standardOutput
+            && lhs._standardError == rhs._standardError
         }
     }
 }
@@ -211,33 +165,33 @@ extension Data : Subprocess.OutputConvertible {
     }
 }
 
-extension Subprocess.CollectedResult where Output : Subprocess.OutputConvertible {
+extension Subprocess.CollectedResult where Output.OutputType: Subprocess.OutputConvertible {
     /// The collected standard output value for the subprocess.
     /// Accessing this property will *fatalError* if the
     /// corresponding `CollectedOutputMethod` is not set to
     /// `.collect` or `.collect(upTo:)`
-    public var standardOutput: Output {
+    public var standardOutput: Output.OutputType {
         guard let output = self._standardOutput else {
             fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
         }
-        return Output.convert(from: output)
+        return Output.OutputType.convert(from: output)
     }
 }
 
-extension Subprocess.CollectedResult where Error : Subprocess.OutputConvertible {
+extension Subprocess.CollectedResult where Error.OutputType : Subprocess.OutputConvertible {
     /// The collected standard error value for the subprocess.
     /// Accessing this property will *fatalError* if the
     /// corresponding `CollectedOutputMethod` is not set to
     /// `.collect` or `.collect(upTo:)`
-    public var standardError: Error {
+    public var standardError: Error.OutputType {
         guard let output = self._standardError else {
             fatalError("standardError is only available if the Subprocess was ran with .collect as error ")
         }
-        return Error.convert(from: output)
+        return Error.OutputType.convert(from: output)
     }
 }
 
-extension Subprocess.CollectedResult where Output == String? {
+extension Subprocess.CollectedResult where Output == Subprocess.StringOutput {
     /// The collected standard output value for the subprocess.
     /// Accessing this property will *fatalError* if the
     /// corresponding `CollectedOutputMethod` is not set to
@@ -246,16 +200,16 @@ extension Subprocess.CollectedResult where Output == String? {
         guard let output = self._standardOutput else {
             fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
         }
-        return String(data: output, encoding: self.outputEncoding ?? .utf8)
+        return String(data: output, encoding: self.output.encoding)
     }
 }
 
-extension Subprocess.CollectedResult where Error == String? {
+extension Subprocess.CollectedResult where Error == Subprocess.StringOutput {
     public var standardError: String? {
         guard let output = self._standardError else {
             fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
         }
-        return String(data: output, encoding: self.errorEncoding ?? .utf8)
+        return String(data: output, encoding: self.error.encoding)
     }
 }
 
@@ -327,65 +281,3 @@ extension Subprocess.CollectedResult {
     }
 }
 
-// MARK: - Internal
-extension Subprocess {
-    internal enum OutputCapturingState {
-        case standardOutputCaptured(Data?)
-        case standardErrorCaptured(Data?)
-    }
-
-    internal typealias CapturedIOs = (standardOutput: Data?, standardError: Data?)
-
-    private func capture(fileDescriptor: FileDescriptor, maxLength: Int) async throws -> Data {
-        return try await fileDescriptor.readUntilEOF(upToLength: maxLength)
-    }
-
-    internal func captureStandardOutput() async throws -> Data? {
-        guard let (limit, readFd) = self.executionOutput
-            .consumeCollectedFileDescriptor(),
-              let readFd = readFd else {
-            return nil
-        }
-        defer {
-            try? readFd.close()
-        }
-        return try await self.capture(fileDescriptor: readFd, maxLength: limit)
-    }
-
-    internal func captureStandardError() async throws -> Data? {
-        guard let (limit, readFd) = self.executionError
-            .consumeCollectedFileDescriptor(),
-              let readFd = readFd else {
-            return nil
-        }
-        defer {
-            try? readFd.close()
-        }
-        return try await self.capture(fileDescriptor: readFd, maxLength: limit)
-    }
-
-    internal func captureIOs() async throws -> CapturedIOs {
-        return try await withThrowingTaskGroup(of: OutputCapturingState.self) { group in
-            group.addTask {
-                let stdout = try await self.captureStandardOutput()
-                return .standardOutputCaptured(stdout)
-            }
-            group.addTask {
-                let stderr = try await self.captureStandardError()
-                return .standardErrorCaptured(stderr)
-            }
-            
-            var stdout: Data?
-            var stderror: Data?
-            while let state = try await group.next() {
-                switch state {
-                case .standardOutputCaptured(let output):
-                    stdout = output
-                case .standardErrorCaptured(let error):
-                    stderror = error
-                }
-            }
-            return (standardOutput: stdout, standardError: stderror)
-        }
-    }
-}

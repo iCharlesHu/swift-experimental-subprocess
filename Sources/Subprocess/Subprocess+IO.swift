@@ -21,425 +21,564 @@ import Synchronization
 
 // MARK: - Input
 extension Subprocess {
-    /// `InputMethod` defines how should the standard input
-    /// of the subprocess receive inputs.
-    public struct InputMethod: Sendable, Hashable {
-        internal enum Storage: Sendable, Hashable {
-            case noInput
-            case fileDescriptor(FileDescriptor, Bool)
-        }
+    public protocol InputProtocol: Sendable {
+        func getReadFileDescriptor() throws -> FileDescriptor?
+        func getWriteFileDescriptor() throws -> FileDescriptor?
 
-        internal let method: Storage
+        func closeReadFileDescriptor() throws
+        func closeWriteFileDescriptor() throws
 
-        internal init(method: Storage) {
-            self.method = method
-        }
+        func writeInput() async throws
+    }
 
-        internal func createExecutionInput() throws -> ExecutionInput {
-            switch self.method {
-            case .noInput:
+    internal protocol PipeInputProtocol: InputProtocol, AnyObject {
+        // Use DispatchQueue instead of LockedState as synchornization
+        // since wirteInput uses DispatchIO
+        var queue: DispatchQueue { get }
+        var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)? { get set }
+    }
+
+    public final class NoInput: InputProtocol {
+        private let devnull: LockedState<FileDescriptor?>
+
+        public func getReadFileDescriptor() throws -> FileDescriptor? {
+            return try self.devnull.withLock { fd in
+                if let devnull = fd {
+                    return devnull
+                }
                 let devnull: FileDescriptor = try .openDevNull(withAcessMode: .readOnly)
-                return .init(storage: .noInput(devnull))
-            case .fileDescriptor(let fileDescriptor, let closeWhenDone):
-                return .init(storage: .fileDescriptor(fileDescriptor, closeWhenDone))
+                fd = devnull
+                return devnull
             }
         }
 
-        /// Subprocess should read no input. This option is equivalent
-        /// to bind the stanard input to `/dev/null`.
-        public static var noInput: Self {
-            return .init(method: .noInput)
+        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+            return nil
         }
 
-        /// Subprocess should read input from a given file descriptor.
-        /// - Parameters:
-        ///   - fd: the file descriptor to read from
-        ///   - closeAfterSpawningProcess: whether the file descriptor
-        ///     should be automatically closed after subprocess is spawned.
-        ///     If `false`, caller is responsible for closing `fd` even if
-        ///     subprocess fails to spawn.
-        public static func readFrom(
-            _ fd: FileDescriptor,
+        public func closeReadFileDescriptor() throws {
+            try self.devnull.withLock { fd in
+                try fd?.close()
+                fd = nil
+            }
+        }
+
+        public func closeWriteFileDescriptor() throws {
+            // NOOP
+        }
+
+        public func writeInput() async throws {
+            // NOOP
+        }
+
+        internal init() {
+            self.devnull = LockedState(initialState: nil)
+        }
+    }
+
+    public final class FileDescriptorInput: InputProtocol {
+        private let closeAfterSpawningProcess: Bool
+        private let fileDescriptor: LockedState<FileDescriptor?>
+
+        public func getReadFileDescriptor() throws -> FileDescriptor? {
+            return self.fileDescriptor.withLock { $0 }
+        }
+
+        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+            return nil
+        }
+
+        public func closeReadFileDescriptor() throws {
+            if self.closeAfterSpawningProcess {
+                try self.fileDescriptor.withLock { fd in
+                    try fd?.close()
+                    fd = nil
+                }
+            }
+        }
+
+        public func closeWriteFileDescriptor() throws {
+            // NOOP
+        }
+
+        public func writeInput() async throws {
+            // NOOP
+        }
+
+        internal init(
+            fileDescriptor: FileDescriptor,
             closeAfterSpawningProcess: Bool
-        ) -> Self {
-            return .init(method: .fileDescriptor(fd, closeAfterSpawningProcess))
+        ) {
+            self.fileDescriptor = LockedState(initialState: fileDescriptor)
+            self.closeAfterSpawningProcess = closeAfterSpawningProcess
+        }
+    }
+
+    public final class StringInput<
+        InputString: StringProtocol & Sendable
+    >: PipeInputProtocol, @unchecked Sendable {
+        private let string: InputString
+        internal let encoding: String.Encoding
+        internal let queue: DispatchQueue
+        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+
+        public func writeInput() async throws {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                self.queue.async {
+                    guard let writeEnd = self.pipe?.writeEnd else {
+                        fatalError("Attempting to write before process is launched")
+                    }
+                    guard let data = self.string.data(using: self.encoding) else {
+                        continuation.resume()
+                        return
+                    }
+                    writeEnd.write(data) { error in
+                        guard error == 0 else {
+                            continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                            return
+                        }
+                        continuation.resume()
+                    }
+                }
+            }
+        }
+
+        internal init(string: InputString, encoding: String.Encoding) {
+            self.string = string
+            self.encoding = encoding
+            self.pipe = nil
+            self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
+        }
+    }
+
+    public final class UInt8SequenceInput<
+        InputSequence: Sequence & Sendable
+    >: PipeInputProtocol, @unchecked Sendable where InputSequence.Element == UInt8 {
+        private let sequence: InputSequence
+        internal let queue: DispatchQueue
+        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+
+        public func writeInput() async throws {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                self.queue.async {
+                    guard let writeEnd = self.pipe?.writeEnd else {
+                        fatalError("Attempting to write before process is launched")
+                    }
+                    let array: [UInt8] = self.sequence as? [UInt8] ?? Array(self.sequence)
+                    writeEnd.write(array) { error in
+                        guard error == 0 else {
+                            continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                            return
+                        }
+                        continuation.resume()
+                    }
+                }
+            }
+        }
+
+        internal init(underlying: InputSequence) {
+            self.sequence = underlying
+            self.pipe = nil
+            self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
+        }
+    }
+
+    public final class DataSequenceInput<
+        InputSequence: Sequence & Sendable
+    >: PipeInputProtocol, @unchecked Sendable where InputSequence.Element == Data {
+        private let sequence: InputSequence
+        internal let queue: DispatchQueue
+        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+
+        public func writeInput() async throws {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                self.queue.async {
+                    guard let writeEnd = self.pipe?.writeEnd else {
+                        fatalError("Attempting to write before process is launched")
+                    }
+                    var buffer = Data()
+                    for chunk in self.sequence {
+                        buffer.append(chunk)
+                    }
+                    writeEnd.write(buffer) { error in
+                        guard error == 0 else {
+                            continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                            return
+                        }
+                        continuation.resume()
+                    }
+                }
+            }
+        }
+
+        internal init(underlying: InputSequence) {
+            self.sequence = underlying
+            self.pipe = nil
+            self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
+        }
+    }
+
+    public final class DataAsyncSequenceInput<
+        InputSequence: AsyncSequence & Sendable
+    >: PipeInputProtocol, @unchecked Sendable where InputSequence.Element == Data {
+        private let sequence: InputSequence
+        internal let queue: DispatchQueue
+        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+
+        private func writeChunk(_ chunk: Data) async throws {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                self.queue.async {
+                    guard let writeEnd = self.pipe?.writeEnd else {
+                        fatalError("Attempting to write before process is launched")
+                    }
+                    writeEnd.write(chunk) { error in
+                        guard error == 0 else {
+                            continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                            return
+                        }
+                        continuation.resume()
+                    }
+                }
+            }
+        }
+
+        public func writeInput() async throws {
+            for try await chunk in self.sequence {
+                try await self.writeChunk(chunk)
+            }
+        }
+
+        internal init(underlying: InputSequence) {
+            self.sequence = underlying
+            self.pipe = nil
+            self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
+        }
+    }
+
+    public final class CustomWriteInput: PipeInputProtocol, @unchecked Sendable {
+        internal let queue: DispatchQueue
+        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+
+        public func writeInput() async throws {
+            // NOOP
+        }
+
+        internal init() {
+            self.pipe = nil
+            self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
         }
     }
 }
 
-extension Subprocess {
-    internal enum OutputMethodStorage: Sendable, Hashable {
-        case discarded
-        case fileDescriptor(FileDescriptor, Bool)
-        case collected(Int, String.Encoding?)
+extension Subprocess.PipeInputProtocol {
+    public func getReadFileDescriptor() throws -> FileDescriptor? {
+        return self.queue.sync {
+            return self.pipe?.readEnd
+        }
     }
 
-    /// `CollectedOutputMethod` defines how should Subprocess collect
-    /// output from child process' standard output and standard error
-    public struct CollectedOutputMethod<Result>: Sendable, Hashable {
+    public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        return self.queue.sync {
+            return self.pipe?.writeEnd
+        }
+    }
 
-        internal let method: OutputMethodStorage
+    public func closeReadFileDescriptor() throws {
+        try self.queue.sync {
+            guard let pipe = self.pipe else {
+                return
+            }
+            try pipe.readEnd?.close()
+            self.pipe = (readEnd: nil, writeEnd: pipe.writeEnd)
+        }
+    }
 
-        internal init(method: OutputMethodStorage) {
-            self.method = method
+    public func closeWriteFileDescriptor() throws {
+        try self.queue.sync {
+            guard let pipe = self.pipe else {
+                return
+            }
+            try pipe.writeEnd?.close()
+            self.pipe = (readEnd: pipe.readEnd, writeEnd: nil)
+        }
+    }
+}
+
+extension Subprocess.InputProtocol where Self == Subprocess.NoInput {
+    public static var noInput: Self { .init() }
+}
+
+extension Subprocess.InputProtocol where Self == Subprocess.FileDescriptorInput {
+    public static func readFrom(
+        _ fd: FileDescriptor,
+        closeAfterSpawningProcess: Bool
+    ) -> Self {
+        return .init(
+            fileDescriptor: fd,
+            closeAfterSpawningProcess: closeAfterSpawningProcess
+        )
+    }
+}
+
+extension Subprocess.UInt8SequenceInput {
+    public static func sequence(
+        _ sequence: InputSequence
+    ) -> Subprocess.UInt8SequenceInput<InputSequence> where InputSequence.Element == UInt8 {
+        return .init(underlying: sequence)
+    }
+}
+
+extension Subprocess.DataSequenceInput {
+    public static func sequence(
+        _ sequence: InputSequence
+    ) -> Subprocess.DataSequenceInput<InputSequence> where InputSequence.Element == Data {
+        return .init(underlying: sequence)
+    }
+}
+
+extension Subprocess.DataAsyncSequenceInput {
+    public static func asyncSequence(
+        _ asyncSequence: InputSequence
+    ) -> Subprocess.DataAsyncSequenceInput<InputSequence> where InputSequence.Element == Data {
+        return .init(underlying: asyncSequence)
+    }
+}
+
+extension Subprocess.StringInput {
+    public static func string(
+        _ string: InputString,
+        using encoding: String.Encoding = .utf8
+    ) -> Subprocess.StringInput<InputString> {
+        return .init(string: string, encoding: encoding)
+    }
+}
+
+// MARK: - Output
+extension Subprocess {
+    public protocol OutputProtocol: Sendable {
+        associatedtype OutputType
+
+        func getReadFileDescriptor() throws -> FileDescriptor?
+        func getWriteFileDescriptor() throws -> FileDescriptor?
+
+        func closeReadFileDescriptor() throws
+        func closeWriteFileDescriptor() throws
+    }
+
+    public protocol CollectedOutputProtocol: OutputProtocol {
+        var maxCollectionLength: Int { get }
+        func consumeReadFileDescriptor() -> FileDescriptor?
+    }
+
+    internal protocol PipeOutput: CollectedOutputProtocol {
+        var pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
+    }
+
+    public final class DiscardedOutput: OutputProtocol {
+        public typealias OutputType = Void
+
+        private let devnull: LockedState<FileDescriptor?>
+
+         public func getReadFileDescriptor() throws -> FileDescriptor? {
+             return try self.devnull.withLock { fd in
+                 if let devnull = fd {
+                     return devnull
+                 }
+                 let devnull: FileDescriptor = try .openDevNull(withAcessMode: .readOnly)
+                 fd = devnull
+                 return devnull
+             }
         }
 
-        /// Subprocess shold dicard the child process output.
-        /// This option is equivalent to binding the child process
-        /// output to `/dev/null`.
-        public static var discard: CollectedOutputMethod<Void> {
-            return .init(method: .discarded)
-        }
-        /// Subprocess should write the child process output
-        /// to the file descriptor specified.
-        /// - Parameters:
-        ///   - fd: the file descriptor to write to
-        ///   - closeAfterSpawningProcess: whether to close the
-        ///     file descriptor once the process is spawned.
-        public static func writeTo(_ fd: FileDescriptor, closeAfterSpawningProcess: Bool) -> CollectedOutputMethod<Void> {
-            return .init(method: .fileDescriptor(fd, closeAfterSpawningProcess))
-        }
-        /// Subprocess should collect the child process output
-        /// as `Data` with the given limit in bytes. The default
-        /// limit is 128kb.
-        public static func collect(upTo limit: Int = 128 * 1024) -> CollectedOutputMethod<Data> {
-            return .init(method: .collected(limit, nil))
+        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+            return nil
         }
 
-        /// Subprocess should collect the child process output
-        /// as `String` with the given limit in bytes and the
-        /// given `encoding`. The default limit is 128kb and
-        /// the default encoding us UTF8.
-        public static func collectString(
-            upTo limit: Int = 128 * 1024,
-            encoding: String.Encoding = .utf8
-        ) -> CollectedOutputMethod<String?> {
-            return .init(method:.collected(limit, encoding))
-        }
-
-        /// Subprocess should collect the child process output
-        /// as a OutputConvertible type.
-        public static func collect<Output: OutputConvertible>(
-            upTo limit: Int, as: Output.Type
-        ) -> CollectedOutputMethod<Output> {
-            return .init(method: .collected(limit, nil))
-        }
-
-        internal func createExecutionOutput() throws -> ExecutionOutput {
-            switch self.method {
-            case .discarded:
-                // Bind to /dev/null
-                let devnull: FileDescriptor = try .openDevNull(withAcessMode: .writeOnly)
-                return .init(storage: .discarded(devnull))
-            case .fileDescriptor(let fileDescriptor, let closeWhenDone):
-                return .init(storage: .fileDescriptor(fileDescriptor, closeWhenDone))
-            case .collected(let limit, _):
-                let (readFd, writeFd) = try FileDescriptor.pipe()
-                return .init(storage: .collected(limit, readFd, writeFd))
+        public func closeReadFileDescriptor() throws {
+            try self.devnull.withLock { fd in
+                try fd?.close()
+                fd = nil
             }
         }
 
-        internal func targetEncoding() -> String.Encoding? {
-            guard case .collected(_, let encoding) = self.method else {
+        public func closeWriteFileDescriptor() throws {
+            // NOOP
+        }
+
+        public func writeInput(via writer: Subprocess.StandardInputWriter) async throws {
+            // NOOP
+        }
+
+        internal init() {
+            self.devnull = LockedState(initialState: nil)
+        }
+    }
+
+    public final class FileDescriptorOutput: OutputProtocol {
+        public typealias OutputType = Void
+        private let closeAfterSpawningProcess: Bool
+        private let fileDescriptor: LockedState<FileDescriptor?>
+
+        public func getReadFileDescriptor() throws -> FileDescriptor? {
+            return self.fileDescriptor.withLock { $0 }
+        }
+
+        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+            return nil
+        }
+
+        public func closeReadFileDescriptor() throws {
+            if self.closeAfterSpawningProcess {
+                try self.fileDescriptor.withLock { fd in
+                    try fd?.close()
+                    fd = nil
+                }
+            }
+        }
+
+        public func closeWriteFileDescriptor() throws {
+            // NOOP
+        }
+
+        public func writeInput(via writer: Subprocess.StandardInputWriter) async throws {
+            // NOOP
+        }
+
+        internal init(
+            fileDescriptor: FileDescriptor,
+            closeAfterSpawningProcess: Bool
+        ) {
+            self.fileDescriptor = LockedState(initialState: fileDescriptor)
+            self.closeAfterSpawningProcess = closeAfterSpawningProcess
+        }
+    }
+
+    public final class CollectedOutput<Output: Subprocess.OutputConvertible>: PipeOutput {
+        public typealias OutputType = Output
+        public let maxCollectionLength: Int
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+
+        internal init(limit: Int) {
+            self.maxCollectionLength = limit
+            self.pipe = LockedState(initialState: nil)
+        }
+    }
+
+    public struct RedirectedOutput: PipeOutput {
+        public typealias OutputType = _AsyncSequence<Data, any Error>
+        public let maxCollectionLength: Int = .max // not used
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+
+        internal init() {
+            self.pipe = LockedState(initialState: nil)
+        }
+    }
+
+    public struct StringOutput: PipeOutput {
+        public typealias OutputType = String?
+        public let maxCollectionLength: Int
+        internal let encoding: String.Encoding
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+
+        internal init(limit: Int, encoding: String.Encoding) {
+            self.maxCollectionLength = limit
+            self.encoding = encoding
+            self.pipe = LockedState(initialState: nil)
+        }
+    }
+}
+
+extension Subprocess.PipeOutput {
+    public func getReadFileDescriptor() throws -> FileDescriptor? {
+        return try self.pipe.withLock { pipeStore in
+            if let pipe = pipeStore {
+                return pipe.readEnd
+            }
+            // Create pipe now
+            let pipe = try FileDescriptor.pipe()
+            pipeStore = pipe
+            return pipe.readEnd
+        }
+    }
+
+    public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        return try self.pipe.withLock { pipeStore in
+            if let pipe = pipeStore {
+                return pipe.writeEnd
+            }
+            // Create pipe now
+            let pipe = try FileDescriptor.pipe()
+            pipeStore = pipe
+            return pipe.writeEnd
+        }
+    }
+
+    public func closeReadFileDescriptor() throws {
+        try self.pipe.withLock { pipeStore in
+            guard let pipe = pipeStore else {
+                return
+            }
+            try pipe.readEnd?.close()
+            pipeStore = (readEnd: nil, writeEnd: pipe.writeEnd)
+        }
+    }
+
+    public func closeWriteFileDescriptor() throws {
+        try self.pipe.withLock { pipeStore in
+            guard let pipe = pipeStore else {
+                return
+            }
+            try pipe.writeEnd?.close()
+            pipeStore = (readEnd: pipe.readEnd, writeEnd: nil)
+        }
+    }
+
+    public func consumeReadFileDescriptor() -> FileDescriptor? {
+        return self.pipe.withLock { pipeStore in
+            guard let pipe = pipeStore else {
                 return nil
             }
-            return encoding
-        }
-    }
-
-    /// `CollectedOutputMethod` defines how should Subprocess redirect
-    /// output from child process' standard output and standard error.
-    public struct RedirectedOutputMethod: Sendable {
-        internal let method: OutputMethodStorage
-
-        internal init(method: OutputMethodStorage) {
-            self.method = method
-        }
-
-        /// Subprocess shold dicard the child process output.
-        /// This option is equivalent to binding the child process
-        /// output to `/dev/null`.
-        public static var discard: Self {
-            return .init(method: .discarded)
-        }
-        /// Subprocess should redirect the child process output
-        /// to `Subprocess.standardOutput` or `Subprocess.standardError`
-        /// so they can be consumed as an AsyncSequence
-        public static var redirectToSequence: Self {
-            return .init(method: .collected(128 * 1024, nil))
-        }
-        /// Subprocess shold write the child process output
-        /// to the file descriptor specified.
-        /// - Parameters:
-        ///   - fd: the file descriptor to write to
-        ///   - closeAfterSpawningProcess: whether to close the
-        ///     file descriptor once the process is spawned.
-        public static func writeTo(
-            _ fd: FileDescriptor,
-            closeAfterSpawningProcess: Bool
-        ) -> Self {
-            return .init(method: .fileDescriptor(fd, closeAfterSpawningProcess))
-        }
-
-        internal func createExecutionOutput() throws -> ExecutionOutput {
-            switch self.method {
-            case .discarded:
-                // Bind to /dev/null
-                let devnull: FileDescriptor = try .openDevNull(withAcessMode: .writeOnly)
-                return .init(storage: .discarded(devnull))
-            case .fileDescriptor(let fileDescriptor, let closeWhenDone):
-                return .init(storage: .fileDescriptor(fileDescriptor, closeWhenDone))
-            case .collected(let limit, _):
-                let (readFd, writeFd) = try FileDescriptor.pipe()
-                return .init(storage: .collected(limit, readFd, writeFd))
-            }
+            pipeStore = (readEnd: nil, writeEnd: pipe.writeEnd)
+            return pipe.readEnd
         }
     }
 }
 
-// MARK: - Execution IO
-extension Subprocess {
-    internal final class ExecutionInput: Sendable, Hashable {
-        
+extension Subprocess.OutputProtocol where Self == Subprocess.DiscardedOutput {
+    public static var discarded: Self { .init() }
+}
 
-        internal enum Storage: Sendable, Hashable {
-            case noInput(FileDescriptor?)
-            case customWrite(FileDescriptor?, FileDescriptor?)
-            case fileDescriptor(FileDescriptor?, Bool)
-        }
-        
-        let storage: Mutex<Storage>
-
-        internal init(storage: Storage) {
-            self.storage = .init(storage)
-        }
-
-        internal func getReadFileDescriptor() -> FileDescriptor? {
-            return self.storage.withLock {
-                switch $0 {
-                case .noInput(let readFd):
-                    return readFd
-                case .customWrite(let readFd, _):
-                    return readFd
-                case .fileDescriptor(let readFd, _):
-                    return readFd
-                }
-            }
-        }
-
-        internal func getWriteFileDescriptor() -> FileDescriptor? {
-            return self.storage.withLock {
-                switch $0 {
-                case .noInput(_), .fileDescriptor(_, _):
-                    return nil
-                case .customWrite(_, let writeFd):
-                    return writeFd
-                }
-            }
-        }
-
-        internal func closeChildSide() throws {
-            try self.storage.withLock {
-                switch $0 {
-                case .noInput(let devnull):
-                    try devnull?.close()
-                    $0 = .noInput(nil)
-                case .customWrite(let readFd, let writeFd):
-                    try readFd?.close()
-                    $0 = .customWrite(nil, writeFd)
-                case .fileDescriptor(let fd, let closeWhenDone):
-                    // User passed in fd
-                    if closeWhenDone {
-                        try fd?.close()
-                        $0 = .fileDescriptor(nil, closeWhenDone)
-                    }
-                }
-            }
-        }
-
-        internal func closeParentSide() throws {
-            try self.storage.withLock {
-                switch $0 {
-                case .noInput(_), .fileDescriptor(_, _):
-                    break
-                case .customWrite(let readFd, let writeFd):
-                    // The parent fd should have been closed
-                    // in the `body` when writer.finish() is called
-                    // But in case it isn't call it agian
-                    try writeFd?.close()
-                    $0 = .customWrite(readFd, nil)
-                }
-            }
-        }
-
-        internal func closeAll() throws {
-            try self.storage.withLock {
-                switch $0 {
-                case .noInput(let readFd):
-                    try readFd?.close()
-                    $0 = .noInput(nil)
-                case .customWrite(let readFd, let writeFd):
-                    var readFdCloseError: Error?
-                    var writeFdCloseError: Error?
-                    do {
-                        try readFd?.close()
-                    } catch {
-                        readFdCloseError = error
-                    }
-                    do {
-                        try writeFd?.close()
-                    } catch {
-                        writeFdCloseError = error
-                    }
-                    $0 = .customWrite(nil, nil)
-                    if let readFdCloseError {
-                        throw readFdCloseError
-                    }
-                    if let writeFdCloseError {
-                        throw writeFdCloseError
-                    }
-                case .fileDescriptor(let fd, let closeWhenDone):
-                    if closeWhenDone {
-                        try fd?.close()
-                        $0 = .fileDescriptor(nil, closeWhenDone)
-                    }
-                }
-            }
-        }
-
-        public func hash(into hasher: inout Hasher) {
-            self.storage.withLock {
-                hasher.combine($0)
-            }
-        }
-
-        public static func == (
-            lhs: Subprocess.ExecutionInput,
-            rhs: Subprocess.ExecutionInput
-        ) -> Bool {
-            return lhs.storage.withLock { lhsStorage in
-                rhs.storage.withLock { rhsStorage in
-                    return lhsStorage == rhsStorage
-                }
-            }
-        }
+extension Subprocess.OutputProtocol where Self == Subprocess.FileDescriptorOutput {
+    public static func writeTo(
+        _ fd: FileDescriptor,
+        closeAfterSpawningProcess: Bool
+    ) -> Self {
+        return .init(fileDescriptor: fd, closeAfterSpawningProcess: closeAfterSpawningProcess)
     }
+}
 
-    internal final class ExecutionOutput: Sendable {
-        internal enum Storage: Sendable {
-            case discarded(FileDescriptor?)
-            case fileDescriptor(FileDescriptor?, Bool)
-            case collected(Int, FileDescriptor?, FileDescriptor?)
-        }
-        
-        private let storage: Mutex<Storage>
+extension Subprocess.OutputProtocol where Self == Subprocess.StringOutput {
+    public static func collectString(
+        upTo limit: Int = 128 * 1024,
+        encoding: String.Encoding = .utf8
+    ) -> Self {
+        return .init(limit: limit, encoding: encoding)
+    }
+}
 
-        internal init(storage: Storage) {
-            self.storage = .init(storage)
-        }
+extension Subprocess.OutputProtocol where Self == Subprocess.RedirectedOutput {
+    public static var redirectToSequence: Self { .init() }
+}
 
-        internal func getWriteFileDescriptor() -> FileDescriptor? {
-            return self.storage.withLock {
-                switch $0 {
-                case .discarded(let writeFd):
-                    return writeFd
-                case .fileDescriptor(let writeFd, _):
-                    return writeFd
-                case .collected(_, _, let writeFd):
-                    return writeFd
-                }
-            }
-        }
+extension Subprocess.CollectedOutput {
+    public static func collect(upTo limit: Int = 128 * 1024, as: Output.Type) -> Subprocess.CollectedOutput<Output> {
+        return .init(limit: limit)
+    }
+}
 
-        internal func getReadFileDescriptor() -> FileDescriptor? {
-            return self.storage.withLock {
-                switch $0 {
-                case .discarded(_), .fileDescriptor(_, _):
-                    return nil
-                case .collected(_, let readFd, _):
-                    return readFd
-                }
-            }
-        }
-        
-        internal func consumeCollectedFileDescriptor() -> (limit: Int, fd: FileDescriptor?)? {
-            return self.storage.withLock {
-                switch $0 {
-                case .discarded(_), .fileDescriptor(_, _):
-                    // The output has been written somewhere else
-                    return nil
-                case .collected(let limit, let readFd, let writeFd):
-                    $0 = .collected(limit, nil, writeFd)
-                    return (limit, readFd)
-                }
-            }
-        }
-
-        internal func closeChildSide() throws {
-            try self.storage.withLock {
-                switch $0 {
-                case .discarded(let writeFd):
-                    try writeFd?.close()
-                    $0 = .discarded(nil)
-                case .fileDescriptor(let fd, let closeWhenDone):
-                    // User passed fd
-                    if closeWhenDone {
-                        try fd?.close()
-                        $0 = .fileDescriptor(nil, closeWhenDone)
-                    }
-                case .collected(let limit, let readFd, let writeFd):
-                    try writeFd?.close()
-                    $0 = .collected(limit, readFd, nil)
-                }
-            }
-        }
-
-        internal func closeParentSide() throws {
-            try self.storage.withLock {
-                switch $0 {
-                case .discarded(_), .fileDescriptor(_, _):
-                    break
-                case .collected(let limit, let readFd, let writeFd):
-                    try readFd?.close()
-                    $0 = .collected(limit, nil, writeFd)
-                }
-            }
-        }
-
-        internal func closeAll() throws {
-            try self.storage.withLock {
-                switch $0 {
-                case .discarded(let writeFd):
-                    try writeFd?.close()
-                    $0 = .discarded(nil)
-                case .fileDescriptor(let fd, let closeWhenDone):
-                    if closeWhenDone {
-                        try fd?.close()
-                        $0 = .fileDescriptor(nil, closeWhenDone)
-                    }
-                case .collected(let limit, let readFd, let writeFd):
-                    var readFdCloseError: Error?
-                    var writeFdCloseError: Error?
-                    do {
-                        try readFd?.close()
-                    } catch {
-                        readFdCloseError = error
-                    }
-                    do {
-                        try writeFd?.close()
-                    } catch {
-                        writeFdCloseError = error
-                    }
-                    $0 = .collected(limit, nil, nil)
-                    if let readFdCloseError {
-                        throw readFdCloseError
-                    }
-                    if let writeFdCloseError {
-                        throw writeFdCloseError
-                    }
-                }
-            }
-        }
+extension Subprocess.OutputProtocol where Self == Subprocess.CollectedOutput<Data> {
+    public static func collect(upTo limit: Int = 128 * 1024) -> Subprocess.CollectedOutput<Data> {
+        return .init(limit: limit)
     }
 }
 
