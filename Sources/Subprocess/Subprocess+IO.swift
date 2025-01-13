@@ -34,8 +34,7 @@ extension Subprocess {
     internal protocol PipeInputProtocol: InputProtocol, AnyObject {
         // Use DispatchQueue instead of LockedState as synchornization
         // since wirteInput uses DispatchIO
-        var queue: DispatchQueue { get }
-        var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)? { get set }
+        var pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
     }
 
     public final class NoInput: InputProtocol {
@@ -120,25 +119,26 @@ extension Subprocess {
         private let string: InputString
         internal let encoding: String.Encoding
         internal let queue: DispatchQueue
-        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func writeInput() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                self.queue.async {
-                    guard let writeEnd = self.pipe?.writeEnd else {
-                        fatalError("Attempting to write before process is launched")
-                    }
-                    guard let data = self.string.data(using: self.encoding) else {
-                        continuation.resume()
+                let writeEnd = self.pipe.withLock { pipeStore in
+                    return pipeStore?.writeEnd
+                }
+                guard let writeEnd = writeEnd else {
+                    fatalError("Attempting to write before process is launched")
+                }
+                guard let data = self.string.data(using: self.encoding) else {
+                    continuation.resume()
+                    return
+                }
+                writeEnd.write(data) { error in
+                    guard error == 0 else {
+                        continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
                         return
                     }
-                    writeEnd.write(data) { error in
-                        guard error == 0 else {
-                            continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
-                            return
-                        }
-                        continuation.resume()
-                    }
+                    continuation.resume()
                 }
             }
         }
@@ -146,7 +146,7 @@ extension Subprocess {
         internal init(string: InputString, encoding: String.Encoding) {
             self.string = string
             self.encoding = encoding
-            self.pipe = nil
+            self.pipe = LockedState(initialState: nil)
             self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
         }
     }
@@ -156,29 +156,30 @@ extension Subprocess {
     >: PipeInputProtocol, @unchecked Sendable where InputSequence.Element == UInt8 {
         private let sequence: InputSequence
         internal let queue: DispatchQueue
-        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func writeInput() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                self.queue.async {
-                    guard let writeEnd = self.pipe?.writeEnd else {
-                        fatalError("Attempting to write before process is launched")
+                let writeEnd = self.pipe.withLock { pipeStore in
+                    return pipeStore?.writeEnd
+                }
+                guard let writeEnd = writeEnd else {
+                    fatalError("Attempting to write before process is launched")
+                }
+                let array: [UInt8] = self.sequence as? [UInt8] ?? Array(self.sequence)
+                writeEnd.write(array) { error in
+                    guard error == 0 else {
+                        continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                        return
                     }
-                    let array: [UInt8] = self.sequence as? [UInt8] ?? Array(self.sequence)
-                    writeEnd.write(array) { error in
-                        guard error == 0 else {
-                            continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
-                            return
-                        }
-                        continuation.resume()
-                    }
+                    continuation.resume()
                 }
             }
         }
 
         internal init(underlying: InputSequence) {
             self.sequence = underlying
-            self.pipe = nil
+            self.pipe = LockedState(initialState: nil)
             self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
         }
     }
@@ -188,32 +189,34 @@ extension Subprocess {
     >: PipeInputProtocol, @unchecked Sendable where InputSequence.Element == Data {
         private let sequence: InputSequence
         internal let queue: DispatchQueue
-        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func writeInput() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                self.queue.async {
-                    guard let writeEnd = self.pipe?.writeEnd else {
-                        fatalError("Attempting to write before process is launched")
+                var buffer = Data()
+                for chunk in self.sequence {
+                    buffer.append(chunk)
+                }
+                let writeEnd = self.pipe.withLock { pipeStore in
+                    return pipeStore?.writeEnd
+                }
+                guard let writeEnd = writeEnd else {
+                    fatalError("Attempting to write before process is launched")
+                }
+
+                writeEnd.write(buffer) { error in
+                    guard error == 0 else {
+                        continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                        return
                     }
-                    var buffer = Data()
-                    for chunk in self.sequence {
-                        buffer.append(chunk)
-                    }
-                    writeEnd.write(buffer) { error in
-                        guard error == 0 else {
-                            continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
-                            return
-                        }
-                        continuation.resume()
-                    }
+                    continuation.resume()
                 }
             }
         }
 
         internal init(underlying: InputSequence) {
             self.sequence = underlying
-            self.pipe = nil
+            self.pipe = LockedState(initialState: nil)
             self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
         }
     }
@@ -223,21 +226,22 @@ extension Subprocess {
     >: PipeInputProtocol, @unchecked Sendable where InputSequence.Element == Data {
         private let sequence: InputSequence
         internal let queue: DispatchQueue
-        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         private func writeChunk(_ chunk: Data) async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                self.queue.async {
-                    guard let writeEnd = self.pipe?.writeEnd else {
-                        fatalError("Attempting to write before process is launched")
+                let writeEnd = self.pipe.withLock { pipeStore in
+                    return pipeStore?.writeEnd
+                }
+                guard let writeEnd = writeEnd else {
+                    fatalError("Attempting to write before process is launched")
+                }
+                writeEnd.write(chunk) { error in
+                    guard error == 0 else {
+                        continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                        return
                     }
-                    writeEnd.write(chunk) { error in
-                        guard error == 0 else {
-                            continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
-                            return
-                        }
-                        continuation.resume()
-                    }
+                    continuation.resume()
                 }
             }
         }
@@ -250,21 +254,21 @@ extension Subprocess {
 
         internal init(underlying: InputSequence) {
             self.sequence = underlying
-            self.pipe = nil
+            self.pipe = LockedState(initialState: nil)
             self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
         }
     }
 
     public final class CustomWriteInput: PipeInputProtocol, @unchecked Sendable {
         internal let queue: DispatchQueue
-        internal var pipe: (readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func writeInput() async throws {
             // NOOP
         }
 
         internal init() {
-            self.pipe = nil
+            self.pipe = LockedState(initialState: nil)
             self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
         }
     }
@@ -272,44 +276,44 @@ extension Subprocess {
 
 extension Subprocess.PipeInputProtocol {
     public func getReadFileDescriptor() throws -> FileDescriptor? {
-        return try self.queue.sync {
-            if let pipe = self.pipe {
+        return try self.pipe.withLock { pipeStore in
+            if let pipe = pipeStore {
                 return pipe.readEnd
             }
             let pipe = try FileDescriptor.pipe()
-            self.pipe = pipe
+            pipeStore = pipe
             return pipe.readEnd
         }
     }
 
     public func getWriteFileDescriptor() throws -> FileDescriptor? {
-        return try self.queue.sync {
-            if let pipe = self.pipe {
+        return try self.pipe.withLock { pipeStore in
+            if let pipe = pipeStore {
                 return pipe.writeEnd
             }
             let pipe = try FileDescriptor.pipe()
-            self.pipe = pipe
+            pipeStore = pipe
             return pipe.writeEnd
         }
     }
 
     public func closeReadFileDescriptor() throws {
-        try self.queue.sync {
-            guard let pipe = self.pipe else {
+        try self.pipe.withLock { pipeStore in
+            guard let pipe = pipeStore else {
                 return
             }
             try pipe.readEnd?.close()
-            self.pipe = (readEnd: nil, writeEnd: pipe.writeEnd)
+            pipeStore = (readEnd: nil, writeEnd: pipe.writeEnd)
         }
     }
 
     public func closeWriteFileDescriptor() throws {
-        try self.queue.sync {
-            guard let pipe = self.pipe else {
+        try self.pipe.withLock { pipeStore in
+            guard let pipe = pipeStore else {
                 return
             }
             try pipe.writeEnd?.close()
-            self.pipe = (readEnd: pipe.readEnd, writeEnd: nil)
+            pipeStore = (readEnd: pipe.readEnd, writeEnd: nil)
         }
     }
 }

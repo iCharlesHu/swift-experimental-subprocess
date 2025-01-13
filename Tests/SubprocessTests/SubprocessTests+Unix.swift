@@ -277,7 +277,8 @@ extension SubprocessUnixTests {
             output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
-        XCTAssertEqual(catResult.standardOutput, expected)
+        XCTAssertEqual(catResult.standardOutput.count, expected.count)
+        XCTAssertEqual(Array(catResult.standardOutput), Array(expected))
     }
 
     func testInputAsyncSequence() async throws {

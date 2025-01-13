@@ -16,8 +16,6 @@ import FoundationEssentials
 import Foundation
 #endif
 
-import Darwin
-
 public struct Subprocess: Sendable {
     public static func run<
         Input: InputProtocol,
