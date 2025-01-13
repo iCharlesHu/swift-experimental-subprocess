@@ -410,6 +410,9 @@ extension SubprocessUnixTests {
     func testCollectedOutputFileDesriptor() async throws {
         let outputFilePath = FilePath(FileManager.default.temporaryDirectory.path())
             .appending("Test.out")
+        if FileManager.default.fileExists(atPath: outputFilePath.string) {
+            try FileManager.default.removeItem(atPath: outputFilePath.string)
+        }
         let outputFile: FileDescriptor = try .open(
             outputFilePath,
             .readWrite,
@@ -440,6 +443,9 @@ extension SubprocessUnixTests {
     func testCollectedOutputFileDescriptorAutoClose() async throws {
         let outputFilePath = FilePath(FileManager.default.temporaryDirectory.path())
             .appending("Test.out")
+        if FileManager.default.fileExists(atPath: outputFilePath.string) {
+            try FileManager.default.removeItem(atPath: outputFilePath.string)
+        }
         let outputFile: FileDescriptor = try .open(
             outputFilePath,
             .readWrite,
@@ -563,7 +569,7 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .named("/bin/bash"),
             arguments: ["-c", "cat \(theMysteriousIsland.string) 1>&2"],
-            error: .collect(upTo: 2048 * 1024)
+            error: .collect(upTo: 2048 * 1024, as: Data.self)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.standardError, expected)

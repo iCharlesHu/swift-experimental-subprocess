@@ -272,6 +272,7 @@ extension Subprocess {
                     ) { group in
                         group.addTask {
                             try await input.writeInput()
+                            try input.closeWriteFileDescriptor()
                             return nil
                         }
                         group.addTask {

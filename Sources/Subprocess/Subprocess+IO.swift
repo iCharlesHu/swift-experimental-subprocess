@@ -272,14 +272,24 @@ extension Subprocess {
 
 extension Subprocess.PipeInputProtocol {
     public func getReadFileDescriptor() throws -> FileDescriptor? {
-        return self.queue.sync {
-            return self.pipe?.readEnd
+        return try self.queue.sync {
+            if let pipe = self.pipe {
+                return pipe.readEnd
+            }
+            let pipe = try FileDescriptor.pipe()
+            self.pipe = pipe
+            return pipe.readEnd
         }
     }
 
     public func getWriteFileDescriptor() throws -> FileDescriptor? {
-        return self.queue.sync {
-            return self.pipe?.writeEnd
+        return try self.queue.sync {
+            if let pipe = self.pipe {
+                return pipe.writeEnd
+            }
+            let pipe = try FileDescriptor.pipe()
+            self.pipe = pipe
+            return pipe.writeEnd
         }
     }
 
@@ -320,35 +330,29 @@ extension Subprocess.InputProtocol where Self == Subprocess.FileDescriptorInput 
     }
 }
 
-extension Subprocess.UInt8SequenceInput {
-    public static func sequence(
+extension Subprocess.InputProtocol {
+    public static func sequence<InputSequence: Sequence & Sendable>(
         _ sequence: InputSequence
-    ) -> Subprocess.UInt8SequenceInput<InputSequence> where InputSequence.Element == UInt8 {
+    ) -> Self where Self == Subprocess.UInt8SequenceInput<InputSequence> {
+        return Subprocess.UInt8SequenceInput(underlying: sequence)
+    }
+
+    public static func sequence<InputSequence: Sequence & Sendable>(
+        _ sequence: InputSequence
+    ) -> Self where Self == Subprocess.DataSequenceInput<InputSequence> {
         return .init(underlying: sequence)
     }
-}
 
-extension Subprocess.DataSequenceInput {
-    public static func sequence(
-        _ sequence: InputSequence
-    ) -> Subprocess.DataSequenceInput<InputSequence> where InputSequence.Element == Data {
-        return .init(underlying: sequence)
-    }
-}
-
-extension Subprocess.DataAsyncSequenceInput {
-    public static func asyncSequence(
+    public static func asyncSequence<InputSequence: AsyncSequence & Sendable>(
         _ asyncSequence: InputSequence
-    ) -> Subprocess.DataAsyncSequenceInput<InputSequence> where InputSequence.Element == Data {
+    ) -> Self where Self == Subprocess.DataAsyncSequenceInput<InputSequence> {
         return .init(underlying: asyncSequence)
     }
-}
 
-extension Subprocess.StringInput {
-    public static func string(
+    public static func string<InputString: StringProtocol & Sendable>(
         _ string: InputString,
         using encoding: String.Encoding = .utf8
-    ) -> Subprocess.StringInput<InputString> {
+    ) -> Self where Self == Subprocess.StringInput<InputString> {
         return .init(string: string, encoding: encoding)
     }
 }
@@ -405,10 +409,6 @@ extension Subprocess {
             // NOOP
         }
 
-        public func writeInput(via writer: Subprocess.StandardInputWriter) async throws {
-            // NOOP
-        }
-
         internal init() {
             self.devnull = LockedState(initialState: nil)
         }
@@ -420,28 +420,24 @@ extension Subprocess {
         private let fileDescriptor: LockedState<FileDescriptor?>
 
         public func getReadFileDescriptor() throws -> FileDescriptor? {
-            return self.fileDescriptor.withLock { $0 }
-        }
-
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
             return nil
         }
 
+        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+            return self.fileDescriptor.withLock { $0 }
+        }
+
         public func closeReadFileDescriptor() throws {
+            // NOOP
+        }
+
+        public func closeWriteFileDescriptor() throws {
             if self.closeAfterSpawningProcess {
                 try self.fileDescriptor.withLock { fd in
                     try fd?.close()
                     fd = nil
                 }
             }
-        }
-
-        public func closeWriteFileDescriptor() throws {
-            // NOOP
-        }
-
-        public func writeInput(via writer: Subprocess.StandardInputWriter) async throws {
-            // NOOP
         }
 
         internal init(
@@ -570,14 +566,12 @@ extension Subprocess.OutputProtocol where Self == Subprocess.RedirectedOutput {
     public static var redirectToSequence: Self { .init() }
 }
 
-extension Subprocess.CollectedOutput {
-    public static func collect(upTo limit: Int = 128 * 1024, as: Output.Type) -> Subprocess.CollectedOutput<Output> {
+extension Subprocess.OutputProtocol {
+    public static func collect<Output>(upTo limit: Int = 128 * 1024, as: Output.Type) -> Self where Self == Subprocess.CollectedOutput<Output> {
         return .init(limit: limit)
     }
-}
 
-extension Subprocess.OutputProtocol where Self == Subprocess.CollectedOutput<Data> {
-    public static func collect(upTo limit: Int = 128 * 1024) -> Subprocess.CollectedOutput<Data> {
+    public static func collect(upTo limit: Int = 128 * 1024) -> Self where Self == Subprocess.CollectedOutput<Data> {
         return .init(limit: limit)
     }
 }
