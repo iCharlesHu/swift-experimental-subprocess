@@ -38,40 +38,6 @@ public struct Subprocess: Sendable {
             workingDirectory: workingDirectory,
             platformOptions: platformOptions
         )
-            .run(input: input, output: output, error: error) { execution in
-                return execution.processIdentifier
-            }
-        return CollectedResult(
-            processIdentifier: result.value,
-            terminationStatus: result.terminationStatus,
-            standardOutput: nil,
-            standardError: nil,
-            output: output,
-            error: error
-        )
-    }
-
-    public static func run<
-        Input: InputProtocol,
-        Output: CollectedOutputProtocol,
-        Error: CollectedOutputProtocol
-    >(
-        _ executable: Executable,
-        arguments: Arguments = [],
-        environment: Environment = .inherit,
-        workingDirectory: FilePath? = nil,
-        platformOptions: PlatformOptions = PlatformOptions(),
-        input: Input = .noInput,
-        output: Output = .collect(),
-        error: Error = .collect()
-    ) async throws -> CollectedResult<Output, Error> {
-        let result = try await Configuration(
-            executable: executable,
-            arguments: arguments,
-            environment: environment,
-            workingDirectory: workingDirectory,
-            platformOptions: platformOptions
-        )
         .run(input: input, output: output, error: error) { execution in
             let (standardOutput, standardError) = try await execution.captureIOs()
             return (
@@ -83,10 +49,10 @@ public struct Subprocess: Sendable {
         return CollectedResult(
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
-            standardOutput: result.value.standardOutput,
-            standardError: result.value.standardError,
             output: output,
-            error: error
+            error: error,
+            standardOutputData: result.value.standardOutput,
+            standardErrorData: result.value.standardError
         )
     }
 }
@@ -115,11 +81,11 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: Input = .noInput,
-        output: RedirectedOutput = .redirectToSequence,
-        error: RedirectedOutput = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess.Execution<Input, RedirectedOutput, RedirectedOutput>) async throws -> Result)
     ) async throws -> ExecutionResult<Result> {
+        let output = RedirectedOutput()
+        let error = RedirectedOutput()
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -151,11 +117,11 @@ extension Subprocess {
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
-        output: RedirectedOutput = .redirectToSequence,
-        error: RedirectedOutput = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess.Execution<CustomWriteInput, RedirectedOutput, RedirectedOutput>, StandardInputWriter) async throws -> Result)
     ) async throws -> ExecutionResult<Result> {
+        let output = RedirectedOutput()
+        let error = RedirectedOutput()
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -226,7 +192,7 @@ extension Subprocess {
             workingDirectory: workingDirectory,
             platformOptions: platformOptions
         )
-        return try Self.runDeatched(config, input: input, output: output, error: error)
+        return try Self.runDetached(config, input: input, output: output, error: error)
     }
 
     /// Run a executable with given configuration and return its process
@@ -242,7 +208,7 @@ extension Subprocess {
     ///   - output: A file descriptor to bind to the subprocess' standard output.
     ///   - error: A file descriptor to bind to the subprocess' standard error.
     /// - Returns: the process identifier for the subprocess.
-    public static func runDeatched(
+    public static func runDetached(
         _ configuration: Configuration,
         input: FileDescriptor? = nil,
         output: FileDescriptor? = nil,

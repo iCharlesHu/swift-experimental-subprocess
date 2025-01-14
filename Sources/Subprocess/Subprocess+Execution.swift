@@ -46,33 +46,6 @@ extension Subprocess {
         internal let consoleBehavior: PlatformOptions.ConsoleBehavior
 #endif
 
-        /// Send the given signal to the child process.
-        /// - Parameters:
-        ///   - signal: The signal to send.
-        ///   - shouldSendToProcessGroup: Whether this signal should be sent to
-        ///     the entire process group.
-        public func send(signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
-            let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
-            guard kill(pid, signal.rawValue) == 0 else {
-                throw POSIXError(.init(rawValue: errno)!)
-            }
-        }
-
-        internal func tryTerminate() -> Swift.Error? {
-            do {
-                try self.send(signal: .kill)
-            } catch {
-                guard let posixError: POSIXError = error as? POSIXError else {
-                    return error
-                }
-                // Ignore ESRCH (no such process)
-                if posixError.code != .ESRCH {
-                    return error
-                }
-            }
-            return nil
-        }
-
         private func capture(fileDescriptor: FileDescriptor, maxLength: Int) async throws -> Data {
             return try await fileDescriptor.readUntilEOF(upToLength: maxLength)
         }
@@ -133,7 +106,7 @@ extension Subprocess {
     internal typealias CapturedIOs = (standardOutput: Data?, standardError: Data?)
 }
 
-extension Subprocess.Execution where Output : Subprocess.CollectedOutputProtocol {
+extension Subprocess.Execution {
     internal func captureStandardOutput() async throws -> Data? {
         guard let readFd = self.output
             .consumeReadFileDescriptor() else {
@@ -147,9 +120,7 @@ extension Subprocess.Execution where Output : Subprocess.CollectedOutputProtocol
             maxLength: self.output.maxCollectionLength
         )
     }
-}
 
-extension Subprocess.Execution where Error : Subprocess.CollectedOutputProtocol {
     internal func captureStandardError() async throws -> Data? {
         guard let readFd = self.error
             .consumeReadFileDescriptor() else {
@@ -163,9 +134,7 @@ extension Subprocess.Execution where Error : Subprocess.CollectedOutputProtocol 
             maxLength: self.error.maxCollectionLength
         )
     }
-}
 
-extension Subprocess.Execution where Output : Subprocess.CollectedOutputProtocol, Error : Subprocess.CollectedOutputProtocol {
     internal func captureIOs() async throws -> Subprocess.CapturedIOs {
         return try await withThrowingTaskGroup(of: Subprocess.OutputCapturingState.self) { group in
             group.addTask {
@@ -191,3 +160,4 @@ extension Subprocess.Execution where Output : Subprocess.CollectedOutputProtocol
         }
     }
 }
+

@@ -316,8 +316,7 @@ extension SubprocessUnixTests {
         )
         let result = try await Subprocess.run(
             .at("/bin/cat"),
-            input: .sequence(expected),
-            output: .redirectToSequence
+            input: .sequence(expected)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -549,8 +548,7 @@ extension SubprocessUnixTests {
         )
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            arguments: [theMysteriousIsland.string],
-            output: .redirectToSequence
+            arguments: [theMysteriousIsland.string]
         ) { subprocess in
             var buffer = Data()
             for try await chunk in subprocess.standardOutput {
@@ -570,7 +568,7 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .named("/bin/bash"),
             arguments: ["-c", "cat \(theMysteriousIsland.string) 1>&2"],
-            error: .collect(upTo: 2048 * 1024, as: Data.self)
+            error: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.standardError, expected)

@@ -92,6 +92,35 @@ extension Subprocess {
     }
 }
 
+extension Subprocess.Execution {
+    /// Send the given signal to the child process.
+    /// - Parameters:
+    ///   - signal: The signal to send.
+    ///   - shouldSendToProcessGroup: Whether this signal should be sent to
+    ///     the entire process group.
+    public func send(signal: Subprocess.Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
+        let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
+        guard kill(pid, signal.rawValue) == 0 else {
+            throw POSIXError(.init(rawValue: errno)!)
+        }
+    }
+
+    internal func tryTerminate() -> Swift.Error? {
+        do {
+            try self.send(signal: .kill)
+        } catch {
+            guard let posixError: POSIXError = error as? POSIXError else {
+                return error
+            }
+            // Ignore ESRCH (no such process)
+            if posixError.code != .ESRCH {
+                return error
+            }
+        }
+        return nil
+    }
+}
+
 // MARK: - Environment Resolution
 extension Subprocess.Environment {
     internal static let pathEnvironmentVariableName = "PATH"
@@ -392,7 +421,7 @@ extension FileDescriptor {
         return try await self.write(dispatchData)
     }
 
-    internal func write(_ data: [UInt8], completion: @escaping (Int32) -> Void) {
+    internal func write(_ data: [UInt8], completion: @escaping (Error?) -> Void) {
         let dispatchData: DispatchData = data.withUnsafeBytes {
             return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
         }
@@ -406,7 +435,7 @@ extension FileDescriptor {
         return try await self.write(dispatchData)
     }
 
-    internal func write(_ data: Data, completion: @escaping (Int32) -> Void) {
+    internal func write(_ data: Data, completion: @escaping (Error?) -> Void) {
         let dispatchData: DispatchData = data.withUnsafeBytes {
             return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
         }
@@ -415,33 +444,31 @@ extension FileDescriptor {
 
     internal func write(_ dispatchData: DispatchData, queue: DispatchQueue = .global()) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) -> Void in
-            DispatchIO.write(
-                toFileDescriptor: self.rawValue,
-                data: dispatchData,
-                runningHandlerOn: queue
-            ) { _, error in
-                guard error == 0 else {
-                    continuation.resume(
-                        throwing: POSIXError(
-                            .init(rawValue: error) ?? .ENODEV)
-                    )
-                    return
+            self.write(dispatchData) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
                 }
-                continuation.resume()
             }
         }
     }
 
     internal func write(
         _ dispatchData: DispatchData,
-        completion: @escaping (Int32) -> Void
+        queue: DispatchQueue = .global(),
+        completion: @escaping (Error?) -> Void
     ) {
         DispatchIO.write(
             toFileDescriptor: self.rawValue,
             data: dispatchData,
-            runningHandlerOn: .global()
+            runningHandlerOn: queue
         ) { _, error in
-            completion(error)
+            guard error != 0 else {
+                completion(nil)
+                return
+            }
+            completion(POSIXError(.init(rawValue: error) ?? .ENODEV))
         }
     }
 }

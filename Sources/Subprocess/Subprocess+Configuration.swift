@@ -89,7 +89,7 @@ extension Subprocess {
             // Attempt to teardown the subprocess
             if attemptToTerminateSubProcess {
                 #if os(Windows)
-                exitError = process.tryTerminate()
+                exitError = execution.tryTerminate()
                 #else
                 await execution.teardown(
                     using: self.platformOptions.teardownSequence

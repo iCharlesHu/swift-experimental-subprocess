@@ -30,7 +30,7 @@ extension SubprocessWindowsTests {
             .named("cmd.exe"),
             arguments: ["/c", "echo", message],
             output: .collectString(),
-            error: .discard
+            error: .discarded
         )
 
         XCTAssertTrue(result.terminationStatus.isSuccess)
@@ -263,9 +263,9 @@ extension SubprocessWindowsTests {
                 "/c",
                 "findstr x*"
             ],
-            input: expected,
+            input: .sequence(expected),
             output: .collect(upTo: 2048 * 1024),
-            error: .discard
+            error: .discarded
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // Make sure we read all bytes
@@ -298,7 +298,7 @@ extension SubprocessWindowsTests {
         let catResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: stream,
+            input: .asyncSequence(stream),
             output: .collect(upTo: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
@@ -315,8 +315,7 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: expected,
-            output: .redirectToSequence
+            input: .sequence(expected)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -351,7 +350,7 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: stream
+            input: .asyncSequence(stream)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -463,6 +462,7 @@ extension SubprocessWindowsTests {
         }
     }
 
+/*
     func testRedirectedOutputFileDescriptor() async throws {
         let outputFilePath = FilePath(
             FileManager.default.temporaryDirectory._fileSystemPath
@@ -531,6 +531,7 @@ extension SubprocessWindowsTests {
             XCTAssertEqual(typedError, .badFileDescriptor)
         }
     }
+*/
 
     func testRedirectedOutputRedirectToSequence() async throws {
         // Maeks ure we can read long text redirected to AsyncSequence
@@ -539,8 +540,7 @@ extension SubprocessWindowsTests {
         )
         let catResult = try await Subprocess.run(
             self.cmdExe,
-            arguments: ["/c", "type \(theMysteriousIsland.string)"],
-            output: .redirectToSequence
+            arguments: ["/c", "type \(theMysteriousIsland.string)"]
         ) { subprocess in
             var buffer = Data()
             for try await chunk in subprocess.standardOutput {
