@@ -108,6 +108,10 @@ extension Subprocess {
 
 extension Subprocess.Execution {
     internal func captureStandardOutput() async throws -> Data? {
+        guard Output.OutputType.self != Void.self else {
+            return nil
+        }
+
         guard let readFd = self.output
             .consumeReadFileDescriptor() else {
             return nil
@@ -122,6 +126,9 @@ extension Subprocess.Execution {
     }
 
     internal func captureStandardError() async throws -> Data? {
+        guard Error.OutputType.self != Void.self else {
+            return nil
+        }
         guard let readFd = self.error
             .consumeReadFileDescriptor() else {
             return nil

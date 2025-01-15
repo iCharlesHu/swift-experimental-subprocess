@@ -167,7 +167,6 @@ extension Subprocess {
         InputSequence: Sequence & Sendable
     >: InputProtocol, Sendable where InputSequence.Element == UInt8 {
         private let sequence: InputSequence
-        internal let queue: DispatchQueue
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func getReadFileDescriptor() throws -> FileDescriptor? {
@@ -194,8 +193,7 @@ extension Subprocess {
                 guard let writeEnd = writeEnd else {
                     fatalError("Attempting to write before process is launched")
                 }
-                let array: [UInt8] = self.sequence as? [UInt8] ?? Array(self.sequence)
-                writeEnd.write(array) { error in
+                writeEnd.write(self.sequence) { error in
                     if let error = error {
                         continuation.resume(throwing: error)
                     } else {
@@ -208,7 +206,6 @@ extension Subprocess {
         internal init(underlying: InputSequence) {
             self.sequence = underlying
             self.pipe = LockedState(initialState: nil)
-            self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
         }
     }
 

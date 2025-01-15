@@ -1103,7 +1103,9 @@ extension FileDescriptor {
         }
     }
 
-    internal func write(_ data: [UInt8]) async throws {
+    internal func write<WriteSequence: Sequence & Sendable>(
+        _ data: WriteSequence
+    ) async throws where WriteSequence.Element == UInt8 {
         return try await withCheckedThrowingContinuation { continuation in
             self.write(data) { error in
                 if let error = error {
@@ -1115,51 +1117,48 @@ extension FileDescriptor {
         }
     }
 
-    internal func write(_ data: [UInt8], completion: @escaping (Error?) -> Void) {
-        // TODO: Figure out a better way to asynchornously write
-        DispatchQueue.global(qos: .userInitiated).async {
-            data.withUnsafeBytes { ptr in
-                var writtenBytes: DWORD = 0
-                let writeSucceed = WriteFile(
-                    self.platformDescriptor,
-                    ptr.baseAddress,
-                    DWORD(data.count),
-                    &writtenBytes,
-                    nil
+    internal func write<WriteSequence: Sequence & Sendable>(
+        _ sequence: WriteSequence,
+        completion: @escaping (Error?) -> Void
+    ) where WriteSequence.Element == UInt8 {
+        func _write(
+            _ ptr: UnsafeRawBufferPointer,
+            count: Int,
+            completion: @escaping (Error?) -> Void
+        ) {
+            var writtenBytes: DWORD = 0
+            let writeSucceed = WriteFile(
+                self.platformDescriptor,
+                ptr.baseAddress,
+                DWORD(count),
+                &writtenBytes,
+                nil
+            )
+            if !writeSucceed {
+                let error = CocoaError.windowsError(
+                    underlying: GetLastError(),
+                    errorCode: .fileWriteUnknown
                 )
-                if !writeSucceed {
-                    let error = CocoaError.windowsError(
-                        underlying: GetLastError(),
-                        errorCode: .fileWriteUnknown
-                    )
-                    completion(error)
-                } else {
-                    completion(nil)
-                }
+                completion(error)
+            } else {
+                completion(nil)
             }
         }
-    }
-
-    internal func write(_ data: Data, completion: @escaping (Error?) -> Void) {
         // TODO: Figure out a better way to asynchornously write
         DispatchQueue.global(qos: .userInitiated).async {
-            data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
-                var writtenBytes: DWORD = 0
-                let writeSucceed = WriteFile(
-                    self.platformDescriptor,
-                    ptr.baseAddress,
-                    DWORD(data.count),
-                    &writtenBytes,
-                    nil
-                )
-                if !writeSucceed {
-                    let error = CocoaError.windowsError(
-                        underlying: GetLastError(),
-                        errorCode: .fileWriteUnknown
-                    )
-                    completion(error)
-                } else {
-                    completion(nil)
+            if let array = sequence as? [UInt8] {
+                array.withUnsafeBytes { ptr in
+                    _write(ptr, count: array.count, completion: completion)
+                }
+            } else if let data = sequence as? Data {
+                data.withUnsafeBytes { ptr in
+                    _write(ptr, count: data.count, completion: completion)
+                }
+            } else {
+                // Slow case: copy the buffer
+                let array = Array(sequence)
+                array.withUnsafeBytes { ptr in
+                    _write(ptr, count: array.count, completion: completion)
                 }
             }
         }

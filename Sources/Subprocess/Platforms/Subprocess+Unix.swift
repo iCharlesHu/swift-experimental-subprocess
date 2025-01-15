@@ -414,47 +414,44 @@ extension FileDescriptor {
         }
     }
 
-    internal func write(_ data: [UInt8]) async throws {
-        let dispatchData: DispatchData = data.withUnsafeBytes {
-            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
-        }
-        return try await self.write(dispatchData)
-    }
-
-    internal func write(_ data: [UInt8], completion: @escaping (Error?) -> Void) {
-        let dispatchData: DispatchData = data.withUnsafeBytes {
-            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
-        }
-        self.write(dispatchData, completion: completion)
-    }
-
-    internal func write(_ data: Data) async throws {
-        let dispatchData: DispatchData = data.withUnsafeBytes {
-            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
-        }
-        return try await self.write(dispatchData)
-    }
-
-    internal func write(_ data: Data, completion: @escaping (Error?) -> Void) {
-        let dispatchData: DispatchData = data.withUnsafeBytes {
-            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
-        }
-        self.write(dispatchData, completion: completion)
-    }
-
-    internal func write(_ dispatchData: DispatchData, queue: DispatchQueue = .global()) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) -> Void in
-            self.write(dispatchData) { error in
+    internal func write<WriteSequence: Sequence & Sendable>(
+        _ data: WriteSequence
+    ) async throws where WriteSequence.Element == UInt8 {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            self.write(data) { error in
                 if let error = error {
                     continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
+                    return
                 }
+                continuation.resume()
             }
         }
     }
 
-    internal func write(
+    internal func write<WriteSequence: Sequence & Sendable>(
+        _ data: WriteSequence,
+        completion: @escaping (Error?) -> Void
+    ) where WriteSequence.Element == UInt8 {
+        let dispatchData: DispatchData
+        if let array = data as? [UInt8] {
+            dispatchData = array.withUnsafeBytes {
+                return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+            }
+        } else if let data = data as? Data {
+            dispatchData = data.withUnsafeBytes {
+                return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+            }
+        } else {
+            // Slow case: need to copy the buffer
+            let array = Array(data)
+            dispatchData = array.withUnsafeBytes {
+                return DispatchData(bytes: $0)
+            }
+        }
+        self.write(dispatchData, completion: completion)
+    }
+
+    private func write(
         _ dispatchData: DispatchData,
         queue: DispatchQueue = .global(),
         completion: @escaping (Error?) -> Void
