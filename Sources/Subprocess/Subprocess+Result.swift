@@ -81,9 +81,6 @@ extension Subprocess {
         }
 
         /// The collected standard output value for the subprocess.
-        /// Accessing this property will *fatalError* if the
-        /// corresponding `CollectedOutputMethod` is not set to
-        /// `.collect` or `.collect(upTo:)`
         public var standardOutput: Output.OutputType {
             guard let output = self._standardOutput else {
                 fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
@@ -92,9 +89,6 @@ extension Subprocess {
         }
 
         /// The collected standard error value for the subprocess.
-        /// Accessing this property will *fatalError* if the
-        /// corresponding `CollectedOutputMethod` is not set to
-        /// `.collect` or `.collect(upTo:)`
         public var standardError: Error.OutputType {
             guard let error = self._standardError else {
                 fatalError("standardError is only available if the Subprocess was ran with .collect as error ")

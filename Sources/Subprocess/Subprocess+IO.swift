@@ -47,7 +47,7 @@ extension Subprocess {
     /// `NoInput` redirects the standard input of the subprocess
     /// to `/dev/null`, while on Windows, it does not bind any
     /// file handle to the subprocess standard input handle.
-    public final class NoInput: InputProtocol {
+    public struct NoInput: InputProtocol {
         private let devnull: LockedState<FileDescriptor?>
 
         public func getReadFileDescriptor() throws -> FileDescriptor? {
@@ -238,7 +238,7 @@ extension Subprocess {
     /// from a specified sequence of `Data`. This type should be preferred
     /// over `Subprocess.UInt8SequenceInput` when dealing with
     /// large amount input data.
-    public final class DataSequenceInput<
+    public struct DataSequenceInput<
         InputSequence: Sequence & Sendable
     >: InputProtocol where InputSequence.Element == Data {
         private let sequence: InputSequence
@@ -291,9 +291,9 @@ extension Subprocess {
         }
     }
 
-    /// A concrete `Input` type for subprocesses that accepts input
-    /// from a specified async sequence of `Data`.
-    public final class DataAsyncSequenceInput<
+    /// A concrete `Input` type for subprocesses that reads input
+    /// from a given async sequence of `Data`.
+    public struct DataAsyncSequenceInput<
         InputSequence: AsyncSequence & Sendable
     >: InputProtocol where InputSequence.Element == Data {
         private let sequence: InputSequence
@@ -674,7 +674,7 @@ extension Subprocess.OutputProtocol where OutputType == Void {
 
 extension Subprocess.OutputProtocol where Self == Subprocess.DiscardedOutput {
     /// Create a Subprocess output that discards the output
-    public static var discarded: Self { .init() }
+    public static var discard: Self { .init() }
 }
 
 extension Subprocess.OutputProtocol where Self == Subprocess.FileDescriptorOutput {

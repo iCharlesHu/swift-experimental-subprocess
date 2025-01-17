@@ -160,12 +160,10 @@ extension Subprocess {
     ///     of the closure.
     public static func run<Result>(
         _ configuration: Configuration,
-        output: RedirectedOutput = .redirectToSequence,
-        error: RedirectedOutput = .redirectToSequence,
         isolation: isolated (any Actor)? = #isolation,
         _ body: (@escaping (Subprocess.Execution<CustomWriteInput, RedirectedOutput, RedirectedOutput>, StandardInputWriter) async throws -> Result)
     ) async throws -> ExecutionResult<Result> {
-        return try await configuration.run(output: output, error: error, body)
+        return try await configuration.run(output: .redirectToSequence, error: .redirectToSequence, body)
     }
 }
 
@@ -232,20 +230,20 @@ extension Subprocess {
         case (.none, .none, .none):
             return try configuration.spawn(
                 withInput: .noInput,
-                output: .discarded,
-                error: .discarded
+                output: .discard,
+                error: .discard
             ).processIdentifier
         case (.none, .none, .some(let errorFd)):
             return try configuration.spawn(
                 withInput: .noInput,
-                output: .discarded,
+                output: .discard,
                 error: .writeTo(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         case (.none, .some(let outputFd), .none):
             return try configuration.spawn(
                 withInput: .noInput,
                 output: .writeTo(outputFd, closeAfterSpawningProcess: false),
-                error: .discarded
+                error: .discard
             ).processIdentifier
         case (.none, .some(let outputFd), .some(let errorFd)):
             return try configuration.spawn(
@@ -256,20 +254,20 @@ extension Subprocess {
         case (.some(let inputFd), .none, .none):
             return try configuration.spawn(
                 withInput: .readFrom(inputFd, closeAfterSpawningProcess: false),
-                output: .discarded,
-                error: .discarded
+                output: .discard,
+                error: .discard
             ).processIdentifier
         case (.some(let inputFd), .none, .some(let errorFd)):
             return try configuration.spawn(
                 withInput: .readFrom(inputFd, closeAfterSpawningProcess: false),
-                output: .discarded,
+                output: .discard,
                 error: .writeTo(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         case (.some(let inputFd), .some(let outputFd), .none):
             return try configuration.spawn(
                 withInput: .readFrom(inputFd, closeAfterSpawningProcess: false),
                 output: .writeTo(outputFd, closeAfterSpawningProcess: false),
-                error: .discarded
+                error: .discard
             ).processIdentifier
         case (.some(let inputFd), .some(let outputFd), .some(let errorFd)):
             return try configuration.spawn(

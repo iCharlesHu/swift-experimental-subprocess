@@ -34,6 +34,7 @@ extension Subprocess {
         Output: Subprocess.OutputProtocol,
         Error: Subprocess.OutputProtocol
     >: Sendable {
+        /// The process identifier of the current execution
         public let processIdentifier: ProcessIdentifier
 
         internal let input: Input
