@@ -11,9 +11,14 @@
 
 #if canImport(Darwin) || canImport(Glibc)
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
+
 import _CShims
 import XCTest
-import FoundationEssentials
 @testable import SwiftExperimentalSubprocess
 
 import Dispatch
@@ -28,8 +33,7 @@ extension SubprocessUnixTests {
         let message = "Hello, world!"
         let result = try await Subprocess.run(
             .named("echo"),
-            arguments: [message],
-            output: .collectString()
+            arguments: [message]
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -242,7 +246,8 @@ extension SubprocessUnixTests {
     func testInputNoInput() async throws {
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            input: .noInput
+            input: .noInput,
+            output: .collect()
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // We should have read exactly 0 bytes
@@ -779,7 +784,9 @@ extension SubprocessUnixTests {
                 group.addTask {
                     let r = try await Subprocess.run(
                         .at("/bin/bash"),
-                        arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: byteCount)]
+                        arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: byteCount)],
+                        output: .collect(),
+                        error: .collect()
                     )
                     guard r.terminationStatus.isSuccess else {
                         XCTFail("Unexpected exit \(r.terminationStatus) from \(r.processIdentifier)")
@@ -804,7 +811,9 @@ extension SubprocessUnixTests {
                 group.addTask {
                     let r = try await Subprocess.run(
                         .at("/bin/bash"),
-                        arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: 100_000)]
+                        arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: 100_000)],
+                        output: .collect(),
+                        error: .collect()
                     )
                     XCTAssert(r.terminationStatus == .exited(0))
                     XCTAssert(r.standardOutput.count == 100_001, "Standard output actual \(r.standardOutput)")

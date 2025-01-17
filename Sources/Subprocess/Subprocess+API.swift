@@ -45,8 +45,8 @@ public struct Subprocess: Sendable {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: Input = .noInput,
-        output: Output = .collect(),
-        error: Error = .collect()
+        output: Output = .collectString(),
+        error: Error = .discard
     ) async throws -> CollectedResult<Output, Error> {
         let result = try await Configuration(
             executable: executable,
@@ -89,18 +89,18 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
-    public static func run<Result, Input: InputProtocol>(
+    public static func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: OutputProtocol>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         input: Input = .noInput,
+        output: Output = .redirectToSequence,
+        error: Error = .discard,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess.Execution<Input, RedirectedOutput, RedirectedOutput>) async throws -> Result)
-    ) async throws -> ExecutionResult<Result> {
-        let output = RedirectedOutput()
-        let error = RedirectedOutput()
+        _ body: (@escaping (Subprocess.Execution<Input, Output, Error>) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -124,17 +124,17 @@ extension Subprocess {
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
-    public static func run<Result>(
+    public static func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
         _ executable: Executable,
         arguments: Arguments = [],
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess.Execution<CustomWriteInput, RedirectedOutput, RedirectedOutput>, StandardInputWriter) async throws -> Result)
-    ) async throws -> ExecutionResult<Result> {
-        let output = RedirectedOutput()
-        let error = RedirectedOutput()
+        output: Output = .redirectToSequence,
+        error: Error = .discard,
+        _ body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
         return try await Configuration(
             executable: executable,
             arguments: arguments,
@@ -158,12 +158,14 @@ extension Subprocess {
     ///       the running process and write to its standard input.
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
-    public static func run<Result>(
+    public static func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
         _ configuration: Configuration,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess.Execution<CustomWriteInput, RedirectedOutput, RedirectedOutput>, StandardInputWriter) async throws -> Result)
-    ) async throws -> ExecutionResult<Result> {
-        return try await configuration.run(output: .redirectToSequence, error: .redirectToSequence, body)
+        output: Output = .redirectToSequence,
+        error: Error = .discard,
+        _ body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
+    ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
+        return try await configuration.run(output: output, error: error, body)
     }
 }
 

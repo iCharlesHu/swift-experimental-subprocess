@@ -14,9 +14,6 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            url: "https://github.com/apple/swift-foundation",
-            branch: "main"),
-        .package(
             url: "https://github.com/apple/swift-system",
             from: "1.0.0")
         
@@ -28,7 +25,6 @@ let package = Package(
             name: "SwiftExperimentalSubprocess",
             dependencies: [
                 "_CShims",
-                .product(name: "FoundationEssentials", package: "swift-foundation"),
                 .product(name: "SystemPackage", package: "swift-system"),
 
             ],
@@ -42,7 +38,6 @@ let package = Package(
             dependencies: [
                 "_CShims",
                 "SwiftExperimentalSubprocess",
-                .product(name: "FoundationEssentials", package: "swift-foundation"),
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
             resources: [

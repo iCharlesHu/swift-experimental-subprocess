@@ -13,23 +13,22 @@
 import WinSDK
 #endif
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
+
 import SystemPackage
-@testable import FoundationEssentials
 import class Foundation.Bundle
 import struct Foundation.URL
-
-typealias Data = FoundationEssentials.Data
-typealias URL = FoundationEssentials.URL
-typealias CocoaError = FoundationEssentials.CocoaError
-typealias FileManager = FoundationEssentials.FileManager
-typealias POSIXError = FoundationEssentials.POSIXError
 
 internal var prideAndPrejudice: FilePath {
     let path = Bundle.module.url(
         forResource: "PrideAndPrejudice",
         withExtension: "txt",
         subdirectory: "Resources"
-    )!._fileSystemPath
+    )!.absoluteString
     return FilePath(path)
 }
 
@@ -38,7 +37,7 @@ internal var theMysteriousIsland: FilePath {
         forResource: "TheMysteriousIsland",
         withExtension: "txt",
         subdirectory: "Resources"
-    )!._fileSystemPath
+    )!.absoluteString
     return FilePath(path)
 }
 
@@ -47,7 +46,7 @@ internal var getgroupsSwift: FilePath {
         forResource: "getgroups",
         withExtension: "swift",
         subdirectory: "Resources"
-    )!._fileSystemPath
+    )!.absoluteString
     return FilePath(path)
 }
 
@@ -56,13 +55,14 @@ internal var windowsTester: FilePath {
         forResource: "windows-tester",
         withExtension: "ps1",
         subdirectory: "Resources"
-    )!._fileSystemPath
+    )!.absoluteString
     return FilePath(path)
 }
 
 extension Foundation.URL {
-    var _fileSystemPath: String {
 #if canImport(WinSDK)
+    var _fileSystemPath: String {
+
         // Hack to remove leading slash
         var path = FoundationEssentials.URL(
             string: self.absoluteString
@@ -71,12 +71,8 @@ extension Foundation.URL {
             path.removeFirst()
         }
         return path
-#else
-        return FoundationEssentials.URL(
-            string: self.absoluteString
-        )!.fileSystemPath
-#endif
     }
+#endif
 }
 
 internal func randomString(length: Int, lettersOnly: Bool = false) -> String {
