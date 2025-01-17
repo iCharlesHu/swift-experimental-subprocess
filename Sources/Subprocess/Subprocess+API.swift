@@ -16,7 +16,24 @@ import FoundationEssentials
 import Foundation
 #endif
 
+/// `Subprocess` allows you to spawn new processes,
+/// connect to their input/output/error,
+/// and obtain their return codes.
 public struct Subprocess: Sendable {
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a CollectedResult containing the result of the run.
     public static func run<
         Input: InputProtocol,
         Output: OutputProtocol,
@@ -69,8 +86,6 @@ extension Subprocess {
     ///   - platformOptions: The platform specific options to use
     ///     when running the executable.
     ///   - input: The input to send to the executable.
-    ///   - output: The method to use for redirecting the standard output.
-    ///   - error: The method to use for redirecting the standard error.
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
@@ -106,8 +121,6 @@ extension Subprocess {
     ///   - workingDirectory: The working directory in which to run the executable.
     ///   - platformOptions: The platform specific options to use
     ///     when running the executable.
-    ///   - output: The method to use for redirecting the standard output.
-    ///   - error: The method to use for redirecting the standard error.
     ///   - body: The custom execution body to manually control the running process
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.

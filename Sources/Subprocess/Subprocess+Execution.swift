@@ -26,12 +26,9 @@ import Foundation
 #endif
 
 extension Subprocess {
-    /// An object that represents a subprocess of the current process.
-    ///
-    /// Using `Subprocess`, your program can run another program as a subprocess
-    /// and can monitor that program’s execution. A `Subprocess` object creates a
-    /// **separate executable** entity; it’s different from `Thread` because it doesn’t
-    /// share memory space with the process that creates it.
+    /// An object that repersents a subprocess that has been
+    /// executed. You can use this object to send signals to the
+    /// child process as well as stream its output and error.
     public struct Execution<
         Input: Subprocess.InputProtocol,
         Output: Subprocess.OutputProtocol,
