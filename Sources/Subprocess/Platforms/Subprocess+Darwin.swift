@@ -62,14 +62,14 @@ extension Subprocess.Configuration {
         }
         // Input
         var result: Int32 = -1
-        if let inputRead = try input.getReadFileDescriptor() {
+        if let inputRead = try input.readFileDescriptor() {
             result = posix_spawn_file_actions_adddup2(&fileActions, inputRead.rawValue, 0)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
                 throw POSIXError(.init(rawValue: result) ?? .ENODEV)
             }
         }
-        if let inputWrite = try input.getWriteFileDescriptor() {
+        if let inputWrite = try input.writeFileDescriptor() {
             // Close parent side
             result = posix_spawn_file_actions_addclose(&fileActions, inputWrite.rawValue)
             guard result == 0 else {
@@ -78,14 +78,14 @@ extension Subprocess.Configuration {
             }
         }
         // Output
-        if let outputWrite = try output.getWriteFileDescriptor() {
+        if let outputWrite = try output.writeFileDescriptor() {
             result = posix_spawn_file_actions_adddup2(&fileActions, outputWrite.rawValue, 1)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
                 throw POSIXError(.init(rawValue: result) ?? .ENODEV)
             }
         }
-        if let outputRead = try output.getReadFileDescriptor() {
+        if let outputRead = try output.readFileDescriptor() {
             // Close parent side
             result = posix_spawn_file_actions_addclose(&fileActions, outputRead.rawValue)
             guard result == 0 else {
@@ -94,14 +94,14 @@ extension Subprocess.Configuration {
             }
         }
         // Error
-        if let errorWrite = try error.getWriteFileDescriptor() {
+        if let errorWrite = try error.writeFileDescriptor() {
             result = posix_spawn_file_actions_adddup2(&fileActions, errorWrite.rawValue, 2)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
                 throw POSIXError(.init(rawValue: result) ?? .ENODEV)
             }
         }
-        if let errorRead = try error.getReadFileDescriptor() {
+        if let errorRead = try error.readFileDescriptor() {
             // Close parent side
             result = posix_spawn_file_actions_addclose(&fileActions, errorRead.rawValue)
             guard result == 0 else {

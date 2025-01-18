@@ -32,8 +32,8 @@ extension SubprocessUnixTests {
         // Simple test to make sure we can find a common utility
         let message = "Hello, world!"
         let result = try await Subprocess.run(
-            .named("echo"),
-            arguments: [message]
+            .named("cat"),
+            input: .string(message)
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -58,7 +58,7 @@ extension SubprocessUnixTests {
 
     func testExecutableAtPath() async throws {
         let expected = FileManager.default.currentDirectoryPath
-        let result = try await Subprocess.run(.at("/bin/pwd"), output: .collectString())
+        let result = try await Subprocess.run(.at("/bin/pwd"), output: .string)
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
             result.standardOutput?
@@ -90,7 +90,7 @@ extension SubprocessUnixTests {
         let result = try await Subprocess.run(
             .at("/bin/bash"),
             arguments: ["-c", "echo Hello World!"],
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -107,7 +107,7 @@ extension SubprocessUnixTests {
                 executablePathOverride: "apple",
                 remainingValues: ["-c", "echo $0"]
             ),
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -125,7 +125,7 @@ extension SubprocessUnixTests {
                 executablePathOverride: nil,
                 remainingValues: [arguments]
             ),
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -143,7 +143,7 @@ extension SubprocessUnixTests {
             .at("/bin/bash"),
             arguments: ["-c", "printenv PATH"],
             environment: .inherit,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // As a sanity check, make sure there's `/bin` in PATH
@@ -159,7 +159,7 @@ extension SubprocessUnixTests {
             environment: .inherit.updating([
                 "HOME": "/my/new/home"
             ]),
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -175,7 +175,7 @@ extension SubprocessUnixTests {
             environment: .custom([
                 "PATH": "/bin:/usr/bin",
             ]),
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
@@ -196,7 +196,7 @@ extension SubprocessUnixTests {
         let result = try await Subprocess.run(
             .at("/bin/pwd"),
             workingDirectory: nil,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
@@ -215,7 +215,7 @@ extension SubprocessUnixTests {
         let result = try await Subprocess.run(
             .at("/bin/pwd"),
             workingDirectory: workingDirectory,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
@@ -246,8 +246,8 @@ extension SubprocessUnixTests {
     func testInputNoInput() async throws {
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            input: .noInput,
-            output: .collect()
+            input: .none,
+            output: .data
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // We should have read exactly 0 bytes
@@ -263,8 +263,8 @@ extension SubprocessUnixTests {
             theMysteriousIsland, .readOnly)
         let cat = try await Subprocess.run(
             .named("cat"),
-            input: .readFrom(text, closeAfterSpawningProcess: true),
-            output: .collect(upTo: 2048 * 1024)
+            input: .fileDescriptor(text, closeAfterSpawningProcess: true),
+            output: .data(limit: 2048 * 1024)
         )
         XCTAssertTrue(cat.terminationStatus.isSuccess)
         // Make sure we read all bytes
@@ -279,7 +279,7 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
             input: .sequence(expected),
-            output: .collect(upTo: 2048 * 1024)
+            output: .data(limit: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.standardOutput.count, expected.count)
@@ -308,8 +308,8 @@ extension SubprocessUnixTests {
         }
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            input: .asyncSequence(stream),
-            output: .collect(upTo: 2048 * 1024)
+            input: .sequence(stream),
+            output: .data(limit: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.standardOutput, expected)
@@ -355,7 +355,7 @@ extension SubprocessUnixTests {
         }
         let result = try await Subprocess.run(
             .at("/bin/cat"),
-            input: .asyncSequence(stream)
+            input: .sequence(stream)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -387,7 +387,7 @@ extension SubprocessUnixTests {
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
@@ -402,7 +402,7 @@ extension SubprocessUnixTests {
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
-            output: .collectString(upTo: limit)
+            output: .string(limit: limit)
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
@@ -428,7 +428,7 @@ extension SubprocessUnixTests {
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: [expected],
-            output: .writeTo(
+            output: .fileDescriptor(
                 outputFile,
                 closeAfterSpawningProcess: false
             )
@@ -460,7 +460,7 @@ extension SubprocessUnixTests {
         let echoResult = try await Subprocess.run(
             .at("/bin/echo"),
             arguments: ["Hello world"],
-            output: .writeTo(
+            output: .fileDescriptor(
                 outputFile,
                 closeAfterSpawningProcess: true
             )
@@ -553,7 +553,8 @@ extension SubprocessUnixTests {
         )
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            arguments: [theMysteriousIsland.string]
+            arguments: [theMysteriousIsland.string],
+            output: .sequence
         ) { subprocess in
             var buffer = Data()
             for try await chunk in subprocess.standardOutput {
@@ -573,7 +574,7 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .named("/bin/bash"),
             arguments: ["-c", "cat \(theMysteriousIsland.string) 1>&2"],
-            error: .collect(upTo: 2048 * 1024)
+            error: .data(limit: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(catResult.standardError, expected)
@@ -627,7 +628,7 @@ extension SubprocessUnixTests {
             .named("/usr/bin/swift"),
             arguments: [getgroupsSwift.string],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(idResult.terminationStatus.isSuccess)
         let ids = try XCTUnwrap(
@@ -648,7 +649,7 @@ extension SubprocessUnixTests {
             .named("/bin/bash"),
             arguments: ["-c", "ps -o pid,pgid -p $$"],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(psResult.terminationStatus.isSuccess)
         let resultValue = try XCTUnwrap(
@@ -671,7 +672,7 @@ extension SubprocessUnixTests {
             .named("/bin/bash"),
             arguments: ["-c", "ps -o pid,pgid,tpgid -p $$"],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         try assertNewSessionCreated(with: psResult)
     }
@@ -764,7 +765,7 @@ extension SubprocessUnixTests {
         let limitResult = try await Subprocess.run(
             .at("/bin/bash"),
             arguments: ["-c", "ulimit -n"],
-            output: .collectString()
+            output: .string
         )
         guard let limitString = limitResult
             .standardOutput?
@@ -785,8 +786,8 @@ extension SubprocessUnixTests {
                     let r = try await Subprocess.run(
                         .at("/bin/bash"),
                         arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: byteCount)],
-                        output: .collect(),
-                        error: .collect()
+                        output: .data,
+                        error: .data
                     )
                     guard r.terminationStatus.isSuccess else {
                         XCTFail("Unexpected exit \(r.terminationStatus) from \(r.processIdentifier)")
@@ -812,8 +813,8 @@ extension SubprocessUnixTests {
                     let r = try await Subprocess.run(
                         .at("/bin/bash"),
                         arguments: ["-sc", #"echo "$1" && echo "$1" >&2"#, "--", String(repeating: "X", count: 100_000)],
-                        output: .collect(),
-                        error: .collect()
+                        output: .data,
+                        error: .data
                     )
                     XCTAssert(r.terminationStatus == .exited(0))
                     XCTAssert(r.standardOutput.count == 100_001, "Standard output actual \(r.standardOutput)")
@@ -840,7 +841,7 @@ extension SubprocessUnixTests {
             .named("/usr/bin/id"),
             arguments: [argument],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(idResult.terminationStatus.isSuccess)
         let id = try XCTUnwrap(idResult.standardOutput)

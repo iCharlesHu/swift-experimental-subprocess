@@ -271,7 +271,7 @@ extension Subprocess {
                         returning: ExecutionResult.self
                     ) { group in
                         group.addTask {
-                            try await input.writeInput()
+                            try await input.write()
                             try input.closeWriteFileDescriptor()
                             return nil
                         }

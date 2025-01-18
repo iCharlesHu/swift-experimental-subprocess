@@ -28,7 +28,7 @@ internal var prideAndPrejudice: FilePath {
         forResource: "PrideAndPrejudice",
         withExtension: "txt",
         subdirectory: "Resources"
-    )!.absoluteString
+    )!.path(percentEncoded: false)
     return FilePath(path)
 }
 
@@ -37,7 +37,7 @@ internal var theMysteriousIsland: FilePath {
         forResource: "TheMysteriousIsland",
         withExtension: "txt",
         subdirectory: "Resources"
-    )!.absoluteString
+    )!.path(percentEncoded: false)
     return FilePath(path)
 }
 
@@ -46,7 +46,7 @@ internal var getgroupsSwift: FilePath {
         forResource: "getgroups",
         withExtension: "swift",
         subdirectory: "Resources"
-    )!.absoluteString
+    )!.path(percentEncoded: false)
     return FilePath(path)
 }
 
@@ -55,7 +55,7 @@ internal var windowsTester: FilePath {
         forResource: "windows-tester",
         withExtension: "ps1",
         subdirectory: "Resources"
-    )!.absoluteString
+    )!.path(percentEncoded: false)
     return FilePath(path)
 }
 

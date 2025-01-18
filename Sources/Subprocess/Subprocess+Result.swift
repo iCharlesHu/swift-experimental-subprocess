@@ -85,7 +85,7 @@ extension Subprocess {
             guard let output = self._standardOutput else {
                 fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
             }
-            return self.output.convert(from: output)
+            return self.output.output(from: output)
         }
 
         /// The collected standard error value for the subprocess.
@@ -93,7 +93,7 @@ extension Subprocess {
             guard let error = self._standardError else {
                 fatalError("standardError is only available if the Subprocess was ran with .collect as error ")
             }
-            return self.error.convert(from: error)
+            return self.error.output(from: error)
         }
     }
 }
@@ -165,7 +165,7 @@ extension Subprocess {
         public func write<SendableSequence: Sequence<UInt8> & Sendable>(
             _ sequence: SendableSequence
         ) async throws {
-            guard let fd: FileDescriptor = try self.input.getWriteFileDescriptor() else {
+            guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
                 fatalError("Attempting to write to a file descriptor that's already closed")
             }
             if let array = sequence as? Array<UInt8> {

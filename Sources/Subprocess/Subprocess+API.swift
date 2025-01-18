@@ -44,9 +44,9 @@ public struct Subprocess: Sendable {
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
-        input: Input = .noInput,
-        output: Output = .collectString(),
-        error: Error = .discard
+        input: Input = .none,
+        output: Output = .string,
+        error: Error = .discarded
     ) async throws -> CollectedResult<Output, Error> {
         let result = try await Configuration(
             executable: executable,
@@ -95,11 +95,11 @@ extension Subprocess {
         environment: Environment = .inherit,
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
-        input: Input = .noInput,
-        output: Output = .redirectToSequence,
-        error: Error = .discard,
+        input: Input = .none,
+        output: Output = .sequence,
+        error: Error = .discarded,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Subprocess.Execution<Input, Output, Error>) async throws -> Result)
+        body: (@escaping (Subprocess.Execution<Input, Output, Error>) async throws -> Result)
     ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
         return try await Configuration(
             executable: executable,
@@ -131,9 +131,9 @@ extension Subprocess {
         workingDirectory: FilePath? = nil,
         platformOptions: PlatformOptions = PlatformOptions(),
         isolation: isolated (any Actor)? = #isolation,
-        output: Output = .redirectToSequence,
-        error: Error = .discard,
-        _ body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
+        output: Output = .sequence,
+        error: Error = .discarded,
+        body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
     ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
         return try await Configuration(
             executable: executable,
@@ -161,9 +161,9 @@ extension Subprocess {
     public static func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
         _ configuration: Configuration,
         isolation: isolated (any Actor)? = #isolation,
-        output: Output = .redirectToSequence,
-        error: Error = .discard,
-        _ body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
+        output: Output = .sequence,
+        error: Error = .discarded,
+        body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
     ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
         return try await configuration.run(output: output, error: error, body)
     }
@@ -231,51 +231,51 @@ extension Subprocess {
         switch (input, output, error) {
         case (.none, .none, .none):
             return try configuration.spawn(
-                withInput: .noInput,
-                output: .discard,
-                error: .discard
+                withInput: .none,
+                output: .discarded,
+                error: .discarded
             ).processIdentifier
         case (.none, .none, .some(let errorFd)):
             return try configuration.spawn(
-                withInput: .noInput,
-                output: .discard,
-                error: .writeTo(errorFd, closeAfterSpawningProcess: false)
+                withInput: .none,
+                output: .discarded,
+                error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         case (.none, .some(let outputFd), .none):
             return try configuration.spawn(
-                withInput: .noInput,
-                output: .writeTo(outputFd, closeAfterSpawningProcess: false),
-                error: .discard
+                withInput: .none,
+                output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
+                error: .discarded
             ).processIdentifier
         case (.none, .some(let outputFd), .some(let errorFd)):
             return try configuration.spawn(
-                withInput: .noInput,
-                output: .writeTo(outputFd, closeAfterSpawningProcess: false),
-                error: .writeTo(errorFd, closeAfterSpawningProcess: false)
+                withInput: .none,
+                output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
+                error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         case (.some(let inputFd), .none, .none):
             return try configuration.spawn(
-                withInput: .readFrom(inputFd, closeAfterSpawningProcess: false),
-                output: .discard,
-                error: .discard
+                withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
+                output: .discarded,
+                error: .discarded
             ).processIdentifier
         case (.some(let inputFd), .none, .some(let errorFd)):
             return try configuration.spawn(
-                withInput: .readFrom(inputFd, closeAfterSpawningProcess: false),
-                output: .discard,
-                error: .writeTo(errorFd, closeAfterSpawningProcess: false)
+                withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
+                output: .discarded,
+                error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         case (.some(let inputFd), .some(let outputFd), .none):
             return try configuration.spawn(
-                withInput: .readFrom(inputFd, closeAfterSpawningProcess: false),
-                output: .writeTo(outputFd, closeAfterSpawningProcess: false),
-                error: .discard
+                withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
+                output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
+                error: .discarded
             ).processIdentifier
         case (.some(let inputFd), .some(let outputFd), .some(let errorFd)):
             return try configuration.spawn(
-                withInput: .readFrom(inputFd, closeAfterSpawningProcess: false),
-                output: .writeTo(outputFd, closeAfterSpawningProcess: false),
-                error: .writeTo(errorFd, closeAfterSpawningProcess: false)
+                withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
+                output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
+                error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         }
     }

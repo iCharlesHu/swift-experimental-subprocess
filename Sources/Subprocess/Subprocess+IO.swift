@@ -28,9 +28,9 @@ extension Subprocess {
     /// by the `Subprocess` library to specify the input handling requirements.
     public protocol InputProtocol: Sendable {
         /// Lazily create and return the FileDescriptor for reading
-        func getReadFileDescriptor() throws -> FileDescriptor?
-        /// Lazily create and return the FileDescriptor for reading
-        func getWriteFileDescriptor() throws -> FileDescriptor?
+        func readFileDescriptor() throws -> FileDescriptor?
+        /// Lazily create and return the FileDescriptor for writing
+        func writeFileDescriptor() throws -> FileDescriptor?
 
         /// Close the FileDescriptor for reading
         func closeReadFileDescriptor() throws
@@ -39,7 +39,7 @@ extension Subprocess {
 
         /// Asynchronously write the input to the subprocess using the
         /// write file descriptor
-        func writeInput() async throws
+        func write() async throws
     }
 
     /// A concrete `Input` type for subprocesses that indicates
@@ -50,7 +50,7 @@ extension Subprocess {
     public struct NoInput: InputProtocol {
         private let devnull: LockedState<FileDescriptor?>
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.devnull.withLock { fd in
                 if let devnull = fd {
                     return devnull
@@ -61,7 +61,7 @@ extension Subprocess {
             }
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return nil
         }
 
@@ -76,7 +76,7 @@ extension Subprocess {
             // NOOP
         }
 
-        public func writeInput() async throws {
+        public func write() async throws {
             // NOOP
         }
 
@@ -94,11 +94,11 @@ extension Subprocess {
         private let closeAfterSpawningProcess: Bool
         private let fileDescriptor: LockedState<FileDescriptor?>
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return self.fileDescriptor.withLock { $0 }
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return nil
         }
 
@@ -115,7 +115,7 @@ extension Subprocess {
             // NOOP
         }
 
-        public func writeInput() async throws {
+        public func write() async throws {
             // NOOP
         }
 
@@ -140,7 +140,7 @@ extension Subprocess {
         internal let queue: DispatchQueue
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
-        public func writeInput() async throws {
+        public func write() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 let writeEnd = self.pipe.withLock { pipeStore in
                     return pipeStore?.writeEnd
@@ -162,11 +162,11 @@ extension Subprocess {
             }
         }
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getReadFileDescriptor()
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getWriteFileDescriptor()
         }
 
@@ -194,11 +194,11 @@ extension Subprocess {
         private let sequence: InputSequence
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getReadFileDescriptor()
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getWriteFileDescriptor()
         }
 
@@ -210,7 +210,7 @@ extension Subprocess {
             try self.pipe.closeWriteFileDescriptor()
         }
 
-        public func writeInput() async throws {
+        public func write() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 let writeEnd = self.pipe.withLock { pipeStore in
                     return pipeStore?.writeEnd
@@ -245,11 +245,11 @@ extension Subprocess {
         internal let queue: DispatchQueue
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getReadFileDescriptor()
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getWriteFileDescriptor()
         }
 
@@ -261,7 +261,7 @@ extension Subprocess {
             try self.pipe.closeWriteFileDescriptor()
         }
 
-        public func writeInput() async throws {
+        public func write() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 var buffer = Data()
                 for chunk in self.sequence {
@@ -317,17 +317,17 @@ extension Subprocess {
             }
         }
 
-        public func writeInput() async throws {
+        public func write() async throws {
             for try await chunk in self.sequence {
                 try await self.writeChunk(chunk)
             }
         }
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getReadFileDescriptor()
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getWriteFileDescriptor()
         }
 
@@ -350,15 +350,15 @@ extension Subprocess {
     public struct CustomWriteInput: InputProtocol {
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
-        public func writeInput() async throws {
+        public func write() async throws {
             // NOOP
         }
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getReadFileDescriptor()
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getWriteFileDescriptor()
         }
 
@@ -378,14 +378,14 @@ extension Subprocess {
 
 extension Subprocess.InputProtocol where Self == Subprocess.NoInput {
     /// Create a Subprocess input that specfies there is no input
-    public static var noInput: Self { .init() }
+    public static var none: Self { .init() }
 }
 
 extension Subprocess.InputProtocol where Self == Subprocess.FileDescriptorInput {
     /// Create a Subprocess input from a `FileDescriptor` and
     /// specify whether the `FileDescriptor` should be closed
     /// after the process is spawned.
-    public static func readFrom(
+    public static func fileDescriptor(
         _ fd: FileDescriptor,
         closeAfterSpawningProcess: Bool
     ) -> Self {
@@ -413,7 +413,7 @@ extension Subprocess.InputProtocol {
     }
 
     /// Create a Subprocess input from a `AsyncSequence` of `Data`.
-    public static func asyncSequence<InputSequence: AsyncSequence & Sendable>(
+    public static func sequence<InputSequence: AsyncSequence & Sendable>(
         _ asyncSequence: InputSequence
     ) -> Self where Self == Subprocess.DataAsyncSequenceInput<InputSequence> {
         return .init(underlying: asyncSequence)
@@ -438,9 +438,9 @@ extension Subprocess {
     public protocol OutputProtocol: Sendable {
         associatedtype OutputType
         /// Lazily create and return the FileDescriptor for reading
-        func getReadFileDescriptor() throws -> FileDescriptor?
+        func readFileDescriptor() throws -> FileDescriptor?
         /// Lazily create and return the FileDescriptor for writing
-        func getWriteFileDescriptor() throws -> FileDescriptor?
+        func writeFileDescriptor() throws -> FileDescriptor?
         /// Return the read `FileDescriptor` and remove it from the output
         /// such that the next call to `consumeReadFileDescriptor` will
         /// return `nil`.
@@ -452,9 +452,9 @@ extension Subprocess {
         func closeWriteFileDescriptor() throws
 
         /// Convert the output from Data to expected output type
-        func convert(from data: Data) -> OutputType
+        func output(from data: Data) -> OutputType
         /// The max amount of data to collect for this output.
-        var maxCollectionLength: Int { get }
+        var maxSize: Int { get }
     }
 
     /// A concrete `Output` type for subprocesses that indicates that
@@ -468,7 +468,7 @@ extension Subprocess {
 
         private let devnull: LockedState<FileDescriptor?>
 
-         public func getReadFileDescriptor() throws -> FileDescriptor? {
+         public func readFileDescriptor() throws -> FileDescriptor? {
              return try self.devnull.withLock { fd in
                  if let devnull = fd {
                      return devnull
@@ -489,7 +489,7 @@ extension Subprocess {
             }
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return nil
         }
 
@@ -520,11 +520,11 @@ extension Subprocess {
         private let closeAfterSpawningProcess: Bool
         private let fileDescriptor: LockedState<FileDescriptor?>
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return nil
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return self.fileDescriptor.withLock { $0 }
         }
 
@@ -555,18 +555,18 @@ extension Subprocess {
     }
 
     /// A concrete `Output` type for subprocesses that redirects
-    /// the child output to the `.standardOutput` or `.standardError`
+    /// the child output to the `.standardOutput` (a sequence) or `.standardError`
     /// property of `Subprocess.Execution`. This output type is
     /// only applicable to the `run()` family that takes a custom closure.
-    public struct RedirectedOutput: OutputProtocol {
+    public struct SequenceOutput: OutputProtocol {
         public typealias OutputType = Void
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getReadFileDescriptor()
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getWriteFileDescriptor()
         }
 
@@ -592,18 +592,18 @@ extension Subprocess {
     /// the `run()` method that returns a `CollectedResult`
     public struct DataOutput: OutputProtocol {
         public typealias OutputType = Data
-        public let maxCollectionLength: Int
+        public let maxSize: Int
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
-        public func convert(from data: Data) -> Data {
+        public func output(from data: Data) -> Data {
             return data
         }
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getReadFileDescriptor()
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getWriteFileDescriptor()
         }
 
@@ -620,7 +620,7 @@ extension Subprocess {
         }
 
         internal init(limit: Int) {
-            self.maxCollectionLength = limit
+            self.maxSize = limit
             self.pipe = LockedState(initialState: nil)
         }
     }
@@ -631,19 +631,19 @@ extension Subprocess {
     /// returns a `CollectedResult`.
     public struct StringOutput: OutputProtocol {
         public typealias OutputType = String?
-        public let maxCollectionLength: Int
+        public let maxSize: Int
         internal let encoding: String.Encoding
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
-        public func convert(from data: Data) -> String? {
+        public func output(from data: Data) -> String? {
             return String(data: data, encoding: self.encoding)
         }
 
-        public func getReadFileDescriptor() throws -> FileDescriptor? {
+        public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getReadFileDescriptor()
         }
 
-        public func getWriteFileDescriptor() throws -> FileDescriptor? {
+        public func writeFileDescriptor() throws -> FileDescriptor? {
             return try self.pipe.getWriteFileDescriptor()
         }
 
@@ -660,7 +660,7 @@ extension Subprocess {
         }
 
         internal init(limit: Int, encoding: String.Encoding) {
-            self.maxCollectionLength = limit
+            self.maxSize = limit
             self.encoding = encoding
             self.pipe = LockedState(initialState: nil)
         }
@@ -668,19 +668,19 @@ extension Subprocess {
 }
 
 extension Subprocess.OutputProtocol where OutputType == Void {
-    public func convert(from data: Data) -> Void { /* noop */ }
-    public var maxCollectionLength: Int { 0 }
+    public func output(from data: Data) -> Void { /* noop */ }
+    public var maxSize: Int { 0 }
 }
 
 extension Subprocess.OutputProtocol where Self == Subprocess.DiscardedOutput {
     /// Create a Subprocess output that discards the output
-    public static var discard: Self { .init() }
+    public static var discarded: Self { .init() }
 }
 
 extension Subprocess.OutputProtocol where Self == Subprocess.FileDescriptorOutput {
     /// Create a Subprocess output that writes output to a `FileDescriptor`
     /// and optionally close the `FileDescriptor` once process spawned.
-    public static func writeTo(
+    public static func fileDescriptor(
         _ fd: FileDescriptor,
         closeAfterSpawningProcess: Bool
     ) -> Self {
@@ -689,10 +689,14 @@ extension Subprocess.OutputProtocol where Self == Subprocess.FileDescriptorOutpu
 }
 
 extension Subprocess.OutputProtocol where Self == Subprocess.StringOutput {
+    public static var string: Self {
+        return .string(limit: 128 * 1024)
+    }
+
     /// Create a `Subprocess` output that collects output as
     /// `String` using the given encoding.
-    public static func collectString(
-        upTo limit: Int = 128 * 1024,
+    public static func string(
+        limit: Int,
         encoding: String.Encoding = .utf8
     ) -> Self {
         return .init(limit: limit, encoding: encoding)
@@ -700,17 +704,21 @@ extension Subprocess.OutputProtocol where Self == Subprocess.StringOutput {
 }
 
 extension Subprocess.OutputProtocol where Self == Subprocess.DataOutput {
+    public static var data: Self {
+        return .data(limit: 128 * 1024)
+    }
+
     /// Create a `Subprocess` output that collects output as `Data`
-    public static func collect(upTo limit: Int = 128 * 1024) -> Self  {
+    public static func data(limit: Int) -> Self  {
         return .init(limit: limit)
     }
 }
 
-extension Subprocess.OutputProtocol where Self == Subprocess.RedirectedOutput {
+extension Subprocess.OutputProtocol where Self == Subprocess.SequenceOutput {
     /// Create a `Subprocess` output that redirects the output
     /// to the `.standardOutput` (or `.standardError`) property
     /// of `Subprocess.Execution` as `AsyncSequence<Data>`.
-    public static var redirectToSequence: Self { .init() }
+    public static var sequence: Self { .init() }
 }
 
 // MARK: Internal

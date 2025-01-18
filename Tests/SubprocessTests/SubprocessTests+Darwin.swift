@@ -33,7 +33,7 @@ final class SubprocessDarwinTests : XCTestCase {
             .named("/bin/bash"),
             arguments: ["-c", "ps -o pid,pgid,tpgid -p $$"],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         try assertNewSessionCreated(with: psResult)
     }
@@ -50,7 +50,7 @@ final class SubprocessDarwinTests : XCTestCase {
         let pwdResult = try await Subprocess.run(
             .at("/bin/pwd"),
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(pwdResult.terminationStatus.isSuccess)
         let currentDir = try XCTUnwrap(

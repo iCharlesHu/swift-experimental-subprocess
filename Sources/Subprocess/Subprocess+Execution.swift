@@ -50,7 +50,7 @@ extension Subprocess {
     }
 }
 
-extension Subprocess.Execution where Output == Subprocess.RedirectedOutput {
+extension Subprocess.Execution where Output == Subprocess.SequenceOutput {
     /// The standard output of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.output` wasn't set to `.redirectToSequence` when the subprocess was spawned;
@@ -65,7 +65,7 @@ extension Subprocess.Execution where Output == Subprocess.RedirectedOutput {
     }
 }
 
-extension Subprocess.Execution where Error == Subprocess.RedirectedOutput {
+extension Subprocess.Execution where Error == Subprocess.SequenceOutput {
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.error` wasn't set to `.redirectToSequence` when the subprocess was spawned;
@@ -119,7 +119,7 @@ extension Subprocess.Execution {
         }
         return try await self.capture(
             fileDescriptor: readFd,
-            maxLength: self.output.maxCollectionLength
+            maxLength: self.output.maxSize
         )
     }
 
@@ -136,7 +136,7 @@ extension Subprocess.Execution {
         }
         return try await self.capture(
             fileDescriptor: readFd,
-            maxLength: self.error.maxCollectionLength
+            maxLength: self.error.maxSize
         )
     }
 
