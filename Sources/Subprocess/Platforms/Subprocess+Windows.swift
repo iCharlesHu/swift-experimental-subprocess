@@ -794,10 +794,10 @@ extension Subprocess.Configuration {
         }
         // Bind IOs
         // Input
-        if let inputRead = try input.getReadFileDescriptor() {
+        if let inputRead = try input.readFileDescriptor() {
             info.hStdInput = inputRead.platformDescriptor
         }
-        if let inputWrite = try input.getWriteFileDescriptor() {
+        if let inputWrite = try input.writeFileDescriptor() {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 inputWrite.platformDescriptor,
@@ -806,10 +806,10 @@ extension Subprocess.Configuration {
             )
         }
         // Output
-        if let outputWrite = try output.getWriteFileDescriptor() {
+        if let outputWrite = try output.writeFileDescriptor() {
             info.hStdOutput = outputWrite.platformDescriptor
         }
-        if let outputRead = try output.getReadFileDescriptor() {
+        if let outputRead = try output.readFileDescriptor() {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 outputRead.platformDescriptor,
@@ -818,10 +818,10 @@ extension Subprocess.Configuration {
             )
         }
         // Error
-        if let errorWrite = try error.getWriteFileDescriptor() {
+        if let errorWrite = try error.writeFileDescriptor() {
             info.hStdError = errorWrite.platformDescriptor
         }
-        if let errorRead = try error.getReadFileDescriptor() {
+        if let errorRead = try error.readFileDescriptor() {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 errorRead.platformDescriptor,

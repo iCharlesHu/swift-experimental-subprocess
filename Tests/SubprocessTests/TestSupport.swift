@@ -28,7 +28,7 @@ internal var prideAndPrejudice: FilePath {
         forResource: "PrideAndPrejudice",
         withExtension: "txt",
         subdirectory: "Resources"
-    )!.path(percentEncoded: false)
+    )!._fileSystemPath
     return FilePath(path)
 }
 
@@ -37,7 +37,7 @@ internal var theMysteriousIsland: FilePath {
         forResource: "TheMysteriousIsland",
         withExtension: "txt",
         subdirectory: "Resources"
-    )!.path(percentEncoded: false)
+    )!._fileSystemPath
     return FilePath(path)
 }
 
@@ -46,7 +46,7 @@ internal var getgroupsSwift: FilePath {
         forResource: "getgroups",
         withExtension: "swift",
         subdirectory: "Resources"
-    )!.path(percentEncoded: false)
+    )!._fileSystemPath
     return FilePath(path)
 }
 
@@ -55,24 +55,23 @@ internal var windowsTester: FilePath {
         forResource: "windows-tester",
         withExtension: "ps1",
         subdirectory: "Resources"
-    )!.path(percentEncoded: false)
+    )!._fileSystemPath
     return FilePath(path)
 }
 
 extension Foundation.URL {
-#if canImport(WinSDK)
     var _fileSystemPath: String {
-
-        // Hack to remove leading slash
-        var path = FoundationEssentials.URL(
-            string: self.absoluteString
-        )!.fileSystemPath
-        if path.hasPrefix("/") {
+#if canImport(WinSDK)
+        var path = self.path(percentEncoded: false)
+        if path.starts(with: "/") {
             path.removeFirst()
+            return path
         }
         return path
-    }
+#else
+        return self.path(percentEncoded: false)
 #endif
+    }
 }
 
 internal func randomString(length: Int, lettersOnly: Bool = false) -> String {
@@ -83,5 +82,21 @@ internal func randomString(length: Int, lettersOnly: Bool = false) -> String {
         letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     }
     return String((0..<length).map{ _ in letters.randomElement()! })
+}
+
+internal func directory(_ lhs: String, isSameAs rhs: String) -> Bool {
+    guard lhs != rhs else {
+        return true
+    }
+    var canonicalLhs: String = (try? FileManager.default.destinationOfSymbolicLink(atPath: lhs)) ?? lhs
+    var canonicalRhs: String = (try? FileManager.default.destinationOfSymbolicLink(atPath: rhs)) ?? rhs
+    if !canonicalLhs.starts(with: "/") {
+        canonicalLhs = "/\(canonicalLhs)"
+    }
+    if !canonicalRhs.starts(with: "/") {
+        canonicalRhs = "/\(canonicalRhs)"
+    }
+
+    return canonicalLhs == canonicalRhs
 }
 

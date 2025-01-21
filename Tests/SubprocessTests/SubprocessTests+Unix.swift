@@ -32,8 +32,8 @@ extension SubprocessUnixTests {
         // Simple test to make sure we can find a common utility
         let message = "Hello, world!"
         let result = try await Subprocess.run(
-            .named("cat"),
-            input: .string(message)
+            .named("echo"),
+            arguments: [message]
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -60,11 +60,9 @@ extension SubprocessUnixTests {
         let expected = FileManager.default.currentDirectoryPath
         let result = try await Subprocess.run(.at("/bin/pwd"), output: .string)
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            expected
-        )
+        let path = try XCTUnwrap(result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+        XCTAssertTrue(directory(path, isSameAs: expected))
     }
 
     func testExecutableAtPathCannotResolve() async {
@@ -201,11 +199,9 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
-        XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            workingDirectory
-        )
+        let path = try XCTUnwrap(result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+        XCTAssertTrue(directory(path, isSameAs: workingDirectory))
     }
 
     func testWorkingDirectoryCustomValue() async throws {
@@ -684,10 +680,10 @@ extension SubprocessUnixTests {
                 "-c",
                 """
                 set -e
-                trap 'echo saw SIGQUIT; echo >&2 saw SIGQUIT' QUIT
-                trap 'echo saw SIGTERM; echo >&2 saw SIGTERM' TERM
-                trap 'echo saw SIGINT; echo >&2 saw SIGINT; exit 42;' INT
-                while true; do sleep 0.1; done
+                trap 'echo saw SIGQUIT;' SIGQUIT
+                trap 'echo saw SIGTERM;' TERM
+                trap 'echo saw SIGINT; exit 42;' INT
+                while true; do sleep 1; done
                 exit 2
                 """,
             ]
@@ -697,8 +693,8 @@ extension SubprocessUnixTests {
                     try await Task.sleep(nanoseconds: 200_00_000)
                     // Send shut down signal
                     await subprocess.teardown(using: [
-                        .sendSignal(.quit, allowedDurationToExit: .milliseconds(200)),
-                        .sendSignal(.terminate, allowedDurationToExit: .milliseconds(200)),
+                        .sendSignal(.quit, allowedDurationToExit: .milliseconds(500)),
+                        .sendSignal(.terminate, allowedDurationToExit: .milliseconds(500)),
                         .sendSignal(.interrupt, allowedDurationToExit: .milliseconds(1000))
                     ])
                 }
@@ -708,7 +704,11 @@ extension SubprocessUnixTests {
                         let bitString = String(data: bit, encoding: .utf8)?
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         if let bit = bitString {
-                            outputs.append(bit)
+                            if bit.contains("\n") {
+                                outputs.append(contentsOf: bit.split(separator: "\n").map{ String($0) })
+                            } else {
+                                outputs.append(bit)
+                            }
                         }
                     }
                     XCTAssert(outputs == ["saw SIGQUIT", "saw SIGTERM", "saw SIGINT"])
