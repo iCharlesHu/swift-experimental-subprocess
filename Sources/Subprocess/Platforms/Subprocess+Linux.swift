@@ -21,11 +21,15 @@ import _CShims
 extension Subprocess.Configuration {
     internal typealias StringOrRawBytes = Subprocess.StringOrRawBytes
 
-    internal func spawn(
-        withInput input: Subprocess.ExecutionInput,
-        output: Subprocess.ExecutionOutput,
-        error: Subprocess.ExecutionOutput
-    ) throws -> Subprocess {
+    internal func spawn<
+        Input: Subprocess.InputProtocol,
+        Output: Subprocess.OutputProtocol,
+        Error: Subprocess.OutputProtocol
+    >(
+        withInput input: Input,
+        output: Output,
+        error: Error
+    ) throws -> Subprocess.Execution<Input, Output, Error> {
         _setupMonitorSignalHandler()
 
         let (executablePath,
@@ -48,12 +52,12 @@ extension Subprocess.Configuration {
         }
 
         let fileDescriptors: [CInt] = [
-            input.getReadFileDescriptor()?.rawValue ?? -1,
-            input.getWriteFileDescriptor()?.rawValue ?? -1,
-            output.getWriteFileDescriptor()?.rawValue ?? -1,
-            output.getReadFileDescriptor()?.rawValue ?? -1,
-            error.getWriteFileDescriptor()?.rawValue ?? -1,
-            error.getReadFileDescriptor()?.rawValue ?? -1
+            try input.readFileDescriptor()?.rawValue ?? -1,
+            try input.writeFileDescriptor()?.rawValue ?? -1,
+            try output.writeFileDescriptor()?.rawValue ?? -1,
+            try output.readFileDescriptor()?.rawValue ?? -1,
+            try error.writeFileDescriptor()?.rawValue ?? -1,
+            try error.readFileDescriptor()?.rawValue ?? -1
         ]
 
         var workingDirectory: String?
@@ -86,11 +90,11 @@ extension Subprocess.Configuration {
             try self.cleanupAll(input: input, output: output, error: error)
             throw POSIXError(.init(rawValue: spawnError) ?? .ENODEV)
         }
-        return Subprocess(
+        return Subprocess.Execution(
             processIdentifier: .init(value: pid),
-            executionInput: input,
-            executionOutput: output,
-            executionError: error
+            input: input,
+            output: output,
+            error: error
         )
     }
 }

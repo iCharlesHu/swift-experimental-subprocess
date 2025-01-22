@@ -128,18 +128,6 @@ package struct LockedState<State> {
             }
         }
     }
-}
-
-extension LockedState where State == Void {
-    package init() {
-        self.init(initialState: ())
-    }
-
-    package func withLock<R: Sendable>(_ body: @Sendable () throws -> R) rethrows -> R {
-        return try withLock { _ in
-            try body()
-        }
-    }
 
     package func lock() {
         _buffer.withUnsafeMutablePointerToElements { lock in
@@ -150,6 +138,18 @@ extension LockedState where State == Void {
     package func unlock() {
         _buffer.withUnsafeMutablePointerToElements { lock in
             _Lock.unlock(lock)
+        }
+    }
+}
+
+extension LockedState where State == Void {
+    package init() {
+        self.init(initialState: ())
+    }
+
+    package func withLock<R: Sendable>(_ body: @Sendable () throws -> R) rethrows -> R {
+        return try withLock { _ in
+            try body()
         }
     }
 }

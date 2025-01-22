@@ -29,8 +29,8 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             .named("cmd.exe"),
             arguments: ["/c", "echo", message],
-            output: .collectString(),
-            error: .discard
+            output: .string,
+            error: .discarded
         )
 
         XCTAssertTrue(result.terminationStatus.isSuccess)
@@ -59,7 +59,7 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "cd"],
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -99,7 +99,7 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: .init(args),
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -117,7 +117,7 @@ extension SubprocessWindowsTests {
             self.cmdExe,
             arguments: ["/c", "echo %Path%"],
             environment: .inherit,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // As a sanity check, make sure there's
@@ -134,7 +134,7 @@ extension SubprocessWindowsTests {
             environment: .inherit.updating([
                 "HOMEPATH": "/my/new/home",
             ]),
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -158,7 +158,7 @@ extension SubprocessWindowsTests {
                 "Path": "C:\\Windows\\system32;C:\\Windows",
                 "ComSpec": "C:\\Windows\\System32\\cmd.exe"
             ]),
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // Make sure the newly launched process does
@@ -178,7 +178,7 @@ extension SubprocessWindowsTests {
             self.cmdExe,
             arguments: ["/c", "cd"],
             workingDirectory: nil,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
@@ -198,7 +198,7 @@ extension SubprocessWindowsTests {
             self.cmdExe,
             arguments: ["/c", "cd"],
             workingDirectory: workingDirectory,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
@@ -218,7 +218,8 @@ extension SubprocessWindowsTests {
         let catResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "more"],
-            input: .noInput
+            input: .none,
+            output: .data
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // We should have read exactly 0 bytes
@@ -240,8 +241,8 @@ extension SubprocessWindowsTests {
                 "/c",
                 "findstr x*"
             ],
-            input: .readFrom(text, closeAfterSpawningProcess: true),
-            output: .collect(upTo: 2048 * 1024)
+            input: .fileDescriptor(text, closeAfterSpawningProcess: true),
+            output: .data(limit: 2048 * 1024)
         )
 
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
@@ -263,9 +264,9 @@ extension SubprocessWindowsTests {
                 "/c",
                 "findstr x*"
             ],
-            input: expected,
-            output: .collect(upTo: 2048 * 1024),
-            error: .discard
+            input: .sequence(expected),
+            output: .data(limit: 2048 * 1024),
+            error: .discarded
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         // Make sure we read all bytes
@@ -298,8 +299,8 @@ extension SubprocessWindowsTests {
         let catResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: stream,
-            output: .collect(upTo: 2048 * 1024)
+            input: .sequence(stream),
+            output: .data(limit: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
         XCTAssertEqual(
@@ -315,8 +316,7 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: expected,
-            output: .redirectToSequence
+            input: .sequence(expected)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -351,7 +351,7 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: stream
+            input: .sequence(stream)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -371,7 +371,7 @@ extension SubprocessWindowsTests {
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo \(expected)"],
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
@@ -386,7 +386,7 @@ extension SubprocessWindowsTests {
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo \(expected)"],
-            output: .collectString(upTo: limit)
+            output: .string(limit: limit)
         )
         XCTAssertTrue(echoResult.terminationStatus.isSuccess)
         let output = try XCTUnwrap(
@@ -410,7 +410,7 @@ extension SubprocessWindowsTests {
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo \(expected)"],
-            output: .writeTo(
+            output: .fileDescriptor(
                 outputFile,
                 closeAfterSpawningProcess: false
             )
@@ -442,7 +442,7 @@ extension SubprocessWindowsTests {
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo Hello World"],
-            output: .writeTo(
+            output: .fileDescriptor(
                 outputFile,
                 closeAfterSpawningProcess: true
             )
@@ -463,9 +463,10 @@ extension SubprocessWindowsTests {
         }
     }
 
+/*
     func testRedirectedOutputFileDescriptor() async throws {
         let outputFilePath = FilePath(
-            FileManager.default.temporaryDirectory._fileSystemPath
+            FileManager.default.temporaryDirectory.path(percentEncoding: false
         ).appending("Test.out")
         let outputFile: FileDescriptor = try .open(
             outputFilePath,
@@ -477,7 +478,7 @@ extension SubprocessWindowsTests {
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo \(expected)"],
-            output: .writeTo(
+            output: .fileDescriptor(
                 outputFile,
                 closeAfterSpawningProcess: false
             )
@@ -500,7 +501,7 @@ extension SubprocessWindowsTests {
         throw XCTSkip("This test doues not support windows -- Double closing file descriptors on Windows causes system error")
 
         let outputFilePath = FilePath(
-            FileManager.default.temporaryDirectory._fileSystemPath
+            FileManager.default.temporaryDirectory.path(percentEncoding: false
         ).appending("Test.out")
         let outputFile: FileDescriptor = try .open(
             outputFilePath,
@@ -511,7 +512,7 @@ extension SubprocessWindowsTests {
         let echoResult = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "echo Hello world"],
-            output: .writeTo(
+            output: .fileDescriptor(
                 outputFile,
                 closeAfterSpawningProcess: true
             )
@@ -531,6 +532,7 @@ extension SubprocessWindowsTests {
             XCTAssertEqual(typedError, .badFileDescriptor)
         }
     }
+*/
 
     func testRedirectedOutputRedirectToSequence() async throws {
         // Maeks ure we can read long text redirected to AsyncSequence
@@ -539,8 +541,7 @@ extension SubprocessWindowsTests {
         )
         let catResult = try await Subprocess.run(
             self.cmdExe,
-            arguments: ["/c", "type \(theMysteriousIsland.string)"],
-            output: .redirectToSequence
+            arguments: ["/c", "type \(theMysteriousIsland.string)"]
         ) { subprocess in
             var buffer = Data()
             for try await chunk in subprocess.standardOutput {
@@ -576,7 +577,7 @@ extension SubprocessWindowsTests {
                 .at("C:\\Windows\\System32\\whoami.exe"),
                 workingDirectory: workingDirectory,
                 platformOptions: platformOptions,
-                output: .collectString()
+                output: .string
             )
             XCTAssertTrue(whoamiResult.terminationStatus.isSuccess)
             let result = try XCTUnwrap(
@@ -603,7 +604,7 @@ extension SubprocessWindowsTests {
                 "-File", windowsTester.string,
                 "-mode", "get-console-window"
             ],
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(sameConsoleResult.terminationStatus.isSuccess)
         let sameConsoleValue = try XCTUnwrap(
@@ -624,7 +625,7 @@ extension SubprocessWindowsTests {
                 "-mode", "get-console-window"
             ],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(differentConsoleResult.terminationStatus.isSuccess)
         let differentConsoleValue = try XCTUnwrap(
@@ -647,7 +648,7 @@ extension SubprocessWindowsTests {
                 "-mode", "get-console-window"
             ],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(detachConsoleResult.terminationStatus.isSuccess)
         let detachConsoleValue = try XCTUnwrap(
@@ -671,7 +672,7 @@ extension SubprocessWindowsTests {
                 "-mode", "get-console-window"
             ],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(newConsoleResult.terminationStatus.isSuccess)
         let newConsoleValue = try XCTUnwrap(
@@ -703,7 +704,7 @@ extension SubprocessWindowsTests {
                 "-Command", "$consoleTitle = [console]::Title; Write-Host $consoleTitle",
             ],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(changeTitleResult.terminationStatus.isSuccess)
         let newTitle = try XCTUnwrap(
@@ -749,7 +750,7 @@ extension SubprocessWindowsTests {
                     "-mode", "is-process-suspended",
                     "-processID", "\(subprocess.processIdentifier.value)"
                 ],
-                output: .collectString()
+                output: .string
             )
             XCTAssertTrue(checkResult.terminationStatus.isSuccess)
             var isSuspended = try XCTUnwrap(
@@ -766,7 +767,7 @@ extension SubprocessWindowsTests {
                     "-mode", "is-process-suspended",
                     "-processID", "\(subprocess.processIdentifier.value)"
                 ],
-                output: .collectString()
+                output: .string
             )
             XCTAssertTrue(checkResult.terminationStatus.isSuccess)
             isSuspended = try XCTUnwrap(

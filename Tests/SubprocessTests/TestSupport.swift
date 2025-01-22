@@ -13,16 +13,15 @@
 import WinSDK
 #endif
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
+
 import SystemPackage
-@testable import FoundationEssentials
 import class Foundation.Bundle
 import struct Foundation.URL
-
-typealias Data = FoundationEssentials.Data
-typealias URL = FoundationEssentials.URL
-typealias CocoaError = FoundationEssentials.CocoaError
-typealias FileManager = FoundationEssentials.FileManager
-typealias POSIXError = FoundationEssentials.POSIXError
 
 internal var prideAndPrejudice: FilePath {
     let path = Bundle.module.url(
@@ -63,18 +62,14 @@ internal var windowsTester: FilePath {
 extension Foundation.URL {
     var _fileSystemPath: String {
 #if canImport(WinSDK)
-        // Hack to remove leading slash
-        var path = FoundationEssentials.URL(
-            string: self.absoluteString
-        )!.fileSystemPath
-        if path.hasPrefix("/") {
+        var path = self.path(percentEncoded: false)
+        if path.starts(with: "/") {
             path.removeFirst()
+            return path
         }
         return path
 #else
-        return FoundationEssentials.URL(
-            string: self.absoluteString
-        )!.fileSystemPath
+        return self.path(percentEncoded: false)
 #endif
     }
 }
@@ -87,5 +82,21 @@ internal func randomString(length: Int, lettersOnly: Bool = false) -> String {
         letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     }
     return String((0..<length).map{ _ in letters.randomElement()! })
+}
+
+internal func directory(_ lhs: String, isSameAs rhs: String) -> Bool {
+    guard lhs != rhs else {
+        return true
+    }
+    var canonicalLhs: String = (try? FileManager.default.destinationOfSymbolicLink(atPath: lhs)) ?? lhs
+    var canonicalRhs: String = (try? FileManager.default.destinationOfSymbolicLink(atPath: rhs)) ?? rhs
+    if !canonicalLhs.starts(with: "/") {
+        canonicalLhs = "/\(canonicalLhs)"
+    }
+    if !canonicalRhs.starts(with: "/") {
+        canonicalRhs = "/\(canonicalRhs)"
+    }
+
+    return canonicalLhs == canonicalRhs
 }
 

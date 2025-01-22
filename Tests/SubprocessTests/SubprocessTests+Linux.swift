@@ -28,7 +28,7 @@ final class SubprocessLinuxTests: XCTestCase {
             .named("/usr/bin/id"),
             arguments: ["-g"],
             platformOptions: platformOptions,
-            output: .collectString()
+            output: .string
         )
         XCTAssertTrue(idResult.terminationStatus.isSuccess)
         let id = try XCTUnwrap(idResult.standardOutput)
