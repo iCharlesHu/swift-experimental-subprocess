@@ -18,11 +18,15 @@ import FoundationEssentials
 
 // Windows specific implementation
 extension Subprocess.Configuration {
-    internal func spawn(
-        withInput input: Subprocess.ExecutionInput,
-        output: Subprocess.ExecutionOutput,
-        error: Subprocess.ExecutionOutput
-    ) throws -> Subprocess {
+    internal func spawn<
+        Input: Subprocess.InputProtocol,
+        Output: Subprocess.OutputProtocol,
+        Error: Subprocess.OutputProtocol
+    >(
+        withInput input: Input,
+        output: Output,
+        error: Error
+    ) throws -> Subprocess.Execution<Input, Output, Error> {
         // Spawn differently depending on whether
         // we need to spawn as a user
         if let userCredentials = self.platformOptions.userCredentials {
@@ -41,11 +45,15 @@ extension Subprocess.Configuration {
         }
     }
 
-    internal func spawnDirect(
-        withInput input: Subprocess.ExecutionInput,
-        output: Subprocess.ExecutionOutput,
-        error: Subprocess.ExecutionOutput
-    ) throws -> Subprocess {
+    internal func spawnDirect<
+        Input: Subprocess.InputProtocol,
+        Output: Subprocess.OutputProtocol,
+        Error: Subprocess.OutputProtocol
+    >(
+        withInput input: Input,
+        output: Output,
+        error: Error
+    ) throws -> Subprocess.Execution<Input, Output, Error> {
         let (
             applicationName,
             commandAndArgs,
@@ -129,21 +137,25 @@ extension Subprocess.Configuration {
             value: processInfo.dwProcessId,
             threadID: processInfo.dwThreadId
         )
-        return Subprocess(
+        return Subprocess.Execution(
             processIdentifier: pid,
-            executionInput: input,
-            executionOutput: output,
-            executionError: error,
+            input: input,
+            output: output,
+            error: error,
             consoleBehavior: self.platformOptions.consoleBehavior
         )
     }
 
-    internal func spawnAsUser(
-        withInput input: Subprocess.ExecutionInput,
-        output: Subprocess.ExecutionOutput,
-        error: Subprocess.ExecutionOutput,
+    internal func spawnAsUser<
+        Input: Subprocess.InputProtocol,
+        Output: Subprocess.OutputProtocol,
+        Error: Subprocess.OutputProtocol
+    >(
+        withInput input: Input,
+        output: Output,
+        error: Error,
         userCredentials: Subprocess.PlatformOptions.UserCredentials
-    ) throws -> Subprocess {
+    ) throws -> Subprocess.Execution<Input, Output, Error> {
         let (
             applicationName,
             commandAndArgs,
@@ -240,11 +252,11 @@ extension Subprocess.Configuration {
             value: processInfo.dwProcessId,
             threadID: processInfo.dwThreadId
         )
-        return Subprocess(
+        return Subprocess.Execution(
             processIdentifier: pid,
-            executionInput: input,
-            executionOutput: output,
-            executionError: error,
+            input: input,
+            output: output,
+            error: error,
             consoleBehavior: self.platformOptions.consoleBehavior
         )
     }
@@ -479,7 +491,7 @@ internal func monitorProcessTermination(
 }
 
 // MARK: - Subprocess Control
-extension Subprocess {
+extension Subprocess.Execution {
     /// Terminate the current subprocess with the given exit code
     /// - Parameter exitCode: The exit code to use for the subprocess.
     public func terminate(withExitCode exitCode: DWORD) throws {
@@ -577,7 +589,7 @@ extension Subprocess {
         }
     }
 
-    internal func tryTerminate() -> Error? {
+    internal func tryTerminate() -> Swift.Error? {
         do {
             try self.terminate(withExitCode: 0)
         } catch {
@@ -763,10 +775,14 @@ extension Subprocess.Configuration {
         return DWORD(flags)
     }
 
-    private func generateStartupInfo(
-        withInput input: Subprocess.ExecutionInput,
-        output: Subprocess.ExecutionOutput,
-        error: Subprocess.ExecutionOutput
+    private func generateStartupInfo<
+        Input: Subprocess.InputProtocol,
+        Output: Subprocess.OutputProtocol,
+        Error: Subprocess.OutputProtocol
+    >(
+        withInput input: Input,
+        output: Output,
+        error: Error
     ) throws -> STARTUPINFOW {
         var info: STARTUPINFOW = STARTUPINFOW()
         info.cb = DWORD(MemoryLayout<STARTUPINFOW>.size)
@@ -778,10 +794,10 @@ extension Subprocess.Configuration {
         }
         // Bind IOs
         // Input
-        if let inputRead = input.getReadFileDescriptor() {
+        if let inputRead = try input.readFileDescriptor() {
             info.hStdInput = inputRead.platformDescriptor
         }
-        if let inputWrite = input.getWriteFileDescriptor() {
+        if let inputWrite = try input.writeFileDescriptor() {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 inputWrite.platformDescriptor,
@@ -790,10 +806,10 @@ extension Subprocess.Configuration {
             )
         }
         // Output
-        if let outputWrite = output.getWriteFileDescriptor() {
+        if let outputWrite = try output.writeFileDescriptor() {
             info.hStdOutput = outputWrite.platformDescriptor
         }
-        if let outputRead = output.getReadFileDescriptor() {
+        if let outputRead = try output.readFileDescriptor() {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 outputRead.platformDescriptor,
@@ -802,10 +818,10 @@ extension Subprocess.Configuration {
             )
         }
         // Error
-        if let errorWrite = error.getWriteFileDescriptor() {
+        if let errorWrite = try error.writeFileDescriptor() {
             info.hStdError = errorWrite.platformDescriptor
         }
-        if let errorRead = error.getReadFileDescriptor() {
+        if let errorRead = try error.readFileDescriptor() {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 errorRead.platformDescriptor,
@@ -1087,30 +1103,62 @@ extension FileDescriptor {
         }
     }
 
-    internal func write<S: Sequence>(_ data: S) async throws where S.Element == UInt8 {
+    internal func write<WriteSequence: Sequence & Sendable>(
+        _ data: WriteSequence
+    ) async throws where WriteSequence.Element == UInt8 {
+        return try await withCheckedThrowingContinuation { continuation in
+            self.write(data) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume()
+            }
+        }
+    }
+
+    internal func write<WriteSequence: Sequence & Sendable>(
+        _ sequence: WriteSequence,
+        completion: @escaping (Error?) -> Void
+    ) where WriteSequence.Element == UInt8 {
+        func _write(
+            _ ptr: UnsafeRawBufferPointer,
+            count: Int,
+            completion: @escaping (Error?) -> Void
+        ) {
+            var writtenBytes: DWORD = 0
+            let writeSucceed = WriteFile(
+                self.platformDescriptor,
+                ptr.baseAddress,
+                DWORD(count),
+                &writtenBytes,
+                nil
+            )
+            if !writeSucceed {
+                let error = CocoaError.windowsError(
+                    underlying: GetLastError(),
+                    errorCode: .fileWriteUnknown
+                )
+                completion(error)
+            } else {
+                completion(nil)
+            }
+        }
         // TODO: Figure out a better way to asynchornously write
-        try await withCheckedThrowingContinuation { (
-            continuation: CheckedContinuation<Void, Error>
-        ) -> Void in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let buffer = Array(data)
-                buffer.withUnsafeBytes { ptr in
-                    var writtenBytes: DWORD = 0
-                    let writeSucceed = WriteFile(
-                        self.platformDescriptor,
-                        ptr.baseAddress,
-                        DWORD(buffer.count),
-                        &writtenBytes,
-                        nil
-                    )
-                    if !writeSucceed {
-                        continuation.resume(throwing: CocoaError.windowsError(
-                            underlying: GetLastError(),
-                            errorCode: .fileWriteUnknown)
-                        )
-                    } else {
-                        continuation.resume()
-                    }
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let array = sequence as? [UInt8] {
+                array.withUnsafeBytes { ptr in
+                    _write(ptr, count: array.count, completion: completion)
+                }
+            } else if let data = sequence as? Data {
+                data.withUnsafeBytes { ptr in
+                    _write(ptr, count: data.count, completion: completion)
+                }
+            } else {
+                // Slow case: copy the buffer
+                let array = Array(sequence)
+                array.withUnsafeBytes { ptr in
+                    _write(ptr, count: array.count, completion: completion)
                 }
             }
         }

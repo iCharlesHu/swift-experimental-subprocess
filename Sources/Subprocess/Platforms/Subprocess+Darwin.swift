@@ -31,11 +31,15 @@ import _CShims
 extension Subprocess.Configuration {
     internal typealias StringOrRawBytes = Subprocess.StringOrRawBytes
 
-    internal func spawn(
-        withInput input: Subprocess.ExecutionInput,
-        output: Subprocess.ExecutionOutput,
-        error: Subprocess.ExecutionOutput
-    ) throws -> Subprocess {
+    internal func spawn<
+        Input: Subprocess.InputProtocol,
+        Output: Subprocess.OutputProtocol,
+        Error: Subprocess.OutputProtocol
+    >(
+        withInput input: Input,
+        output: Output,
+        error: Error
+    ) throws -> Subprocess.Execution<Input, Output, Error> {
         let (executablePath,
             env, argv,
             intendedWorkingDir,
@@ -58,14 +62,14 @@ extension Subprocess.Configuration {
         }
         // Input
         var result: Int32 = -1
-        if let inputRead = input.getReadFileDescriptor() {
+        if let inputRead = try input.readFileDescriptor() {
             result = posix_spawn_file_actions_adddup2(&fileActions, inputRead.rawValue, 0)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
                 throw POSIXError(.init(rawValue: result) ?? .ENODEV)
             }
         }
-        if let inputWrite = input.getWriteFileDescriptor() {
+        if let inputWrite = try input.writeFileDescriptor() {
             // Close parent side
             result = posix_spawn_file_actions_addclose(&fileActions, inputWrite.rawValue)
             guard result == 0 else {
@@ -74,14 +78,14 @@ extension Subprocess.Configuration {
             }
         }
         // Output
-        if let outputWrite = output.getWriteFileDescriptor() {
+        if let outputWrite = try output.writeFileDescriptor() {
             result = posix_spawn_file_actions_adddup2(&fileActions, outputWrite.rawValue, 1)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
                 throw POSIXError(.init(rawValue: result) ?? .ENODEV)
             }
         }
-        if let outputRead = output.getReadFileDescriptor() {
+        if let outputRead = try output.readFileDescriptor() {
             // Close parent side
             result = posix_spawn_file_actions_addclose(&fileActions, outputRead.rawValue)
             guard result == 0 else {
@@ -90,14 +94,14 @@ extension Subprocess.Configuration {
             }
         }
         // Error
-        if let errorWrite = error.getWriteFileDescriptor() {
+        if let errorWrite = try error.writeFileDescriptor() {
             result = posix_spawn_file_actions_adddup2(&fileActions, errorWrite.rawValue, 2)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
                 throw POSIXError(.init(rawValue: result) ?? .ENODEV)
             }
         }
-        if let errorRead = error.getReadFileDescriptor() {
+        if let errorRead = try error.readFileDescriptor() {
             // Close parent side
             result = posix_spawn_file_actions_addclose(&fileActions, errorRead.rawValue)
             guard result == 0 else {
@@ -178,11 +182,11 @@ extension Subprocess.Configuration {
             try self.cleanupAll(input: input, output: output, error: error)
             throw POSIXError(.init(rawValue: spawnError) ?? .ENODEV)
         }
-        return Subprocess(
+        return Subprocess.Execution(
             processIdentifier: .init(value: pid),
-            executionInput: input,
-            executionOutput: output,
-            executionError: error
+            input: input,
+            output: output,
+            error: error
         )
     }
 }

@@ -46,19 +46,20 @@ extension Subprocess {
             )
         }
     }
+
+    internal enum TeardownStepCompletion {
+        case processHasExited
+        case processStillAlive
+        case killedTheProcess
+    }
 }
 
-extension Subprocess {
-    internal func runTeardownSequence(_ sequence: [TeardownStep]) async {
+extension Subprocess.Execution {
+    internal func runTeardownSequence(_ sequence: [Subprocess.TeardownStep]) async {
         // First insert the `.kill` step
-        let finalSequence = sequence + [TeardownStep(storage: .kill)]
+        let finalSequence = sequence + [Subprocess.TeardownStep(storage: .kill)]
         for step in finalSequence {
-            enum TeardownStepCompletion {
-                case processHasExited
-                case processStillAlive
-                case killedTheProcess
-            }
-            let stepCompletion: TeardownStepCompletion
+            let stepCompletion: Subprocess.TeardownStepCompletion
 
             guard self.isAlive() else {
                 return
@@ -66,7 +67,7 @@ extension Subprocess {
 
             switch step.storage {
             case .sendSignal(let signal, let allowedDuration):
-                stepCompletion = await withTaskGroup(of: TeardownStepCompletion.self) { group in
+                stepCompletion = await withTaskGroup(of: Subprocess.TeardownStepCompletion.self) { group in
                     group.addTask {
                         do {
                             try await Task.sleep(for: allowedDuration)
@@ -96,7 +97,7 @@ extension Subprocess {
     }
 }
 
-extension Subprocess {
+extension Subprocess.Execution {
     private func isAlive() -> Bool {
         return kill(self.processIdentifier.value, 0) == 0
     }

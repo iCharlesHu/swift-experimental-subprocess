@@ -90,20 +90,22 @@ extension Subprocess {
         /// its controlling terminal changes its size (a window change).
         public static var windowSizeChange: Self { .init(rawValue: SIGWINCH) }
     }
+}
 
+extension Subprocess.Execution {
     /// Send the given signal to the child process.
     /// - Parameters:
     ///   - signal: The signal to send.
     ///   - shouldSendToProcessGroup: Whether this signal should be sent to
     ///     the entire process group.
-    public func send(signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
+    public func send(signal: Subprocess.Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
         let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
         guard kill(pid, signal.rawValue) == 0 else {
             throw POSIXError(.init(rawValue: errno)!)
         }
     }
 
-    internal func tryTerminate() -> Error? {
+    internal func tryTerminate() -> Swift.Error? {
         do {
             try self.send(signal: .kill)
         } catch {
@@ -412,36 +414,58 @@ extension FileDescriptor {
         }
     }
 
-    internal func write(_ data: [UInt8]) async throws {
-        let dispatchData: DispatchData = data.withUnsafeBytes {
-            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
-        }
-        return try await self.write(dispatchData)
-    }
-
-    internal func write(_ data: Data) async throws {
-        let dispatchData: DispatchData = data.withUnsafeBytes {
-            return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
-        }
-        return try await self.write(dispatchData)
-    }
-
-    internal func write(_ dispatchData: DispatchData) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) -> Void in
-            DispatchIO.write(
-                toFileDescriptor: self.rawValue,
-                data: dispatchData,
-                runningHandlerOn: .global()
-            ) { _, error in
-                guard error == 0 else {
-                    continuation.resume(
-                        throwing: POSIXError(
-                            .init(rawValue: error) ?? .ENODEV)
-                    )
+    internal func write<WriteSequence: Sequence & Sendable>(
+        _ data: WriteSequence
+    ) async throws where WriteSequence.Element == UInt8 {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            self.write(data) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
                     return
                 }
                 continuation.resume()
             }
+        }
+    }
+
+    internal func write<WriteSequence: Sequence & Sendable>(
+        _ data: WriteSequence,
+        completion: @escaping (Error?) -> Void
+    ) where WriteSequence.Element == UInt8 {
+        let dispatchData: DispatchData
+        if let array = data as? [UInt8] {
+            dispatchData = array.withUnsafeBytes {
+                return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+            }
+        } else if let data = data as? Data {
+            dispatchData = data.withUnsafeBytes {
+                return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+            }
+        } else {
+            // Slow case: need to copy the buffer
+            let array = Array(data)
+            dispatchData = array.withUnsafeBytes {
+                return DispatchData(bytes: $0)
+            }
+        }
+        self.write(dispatchData, completion: completion)
+    }
+
+    private func write(
+        _ dispatchData: DispatchData,
+        queue: DispatchQueue = .global(),
+        completion: @escaping (Error?) -> Void
+    ) {
+        DispatchIO.write(
+            toFileDescriptor: self.rawValue,
+            data: dispatchData,
+            runningHandlerOn: queue
+        ) { _, error in
+            guard error != 0 else {
+                completion(nil)
+                return
+            }
+            completion(POSIXError(.init(rawValue: error) ?? .ENODEV))
         }
     }
 }

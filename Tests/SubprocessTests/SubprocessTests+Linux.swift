@@ -27,10 +27,11 @@ final class SubprocessLinuxTests: XCTestCase {
         let idResult = try await Subprocess.run(
             .named("/usr/bin/id"),
             arguments: ["-g"],
-            platformOptions: platformOptions
+            platformOptions: platformOptions,
+            output: .string
         )
         XCTAssertTrue(idResult.terminationStatus.isSuccess)
-        let id = try XCTUnwrap(idResult.standardOutput.stringUsingUTF8)
+        let id = try XCTUnwrap(idResult.standardOutput)
         XCTAssertEqual(
             id.trimmingCharacters(in: .whitespacesAndNewlines),
             "\(4321)"
