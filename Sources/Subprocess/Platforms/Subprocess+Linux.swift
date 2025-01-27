@@ -92,7 +92,6 @@ extension Subprocess.Configuration {
         }
         return Subprocess.Execution(
             processIdentifier: .init(value: pid),
-            input: input,
             output: output,
             error: error
         )

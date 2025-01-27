@@ -451,7 +451,7 @@ extension FileDescriptor {
         self.write(dispatchData, completion: completion)
     }
 
-    private func write(
+    internal func write(
         _ dispatchData: DispatchData,
         queue: DispatchQueue = .global(),
         completion: @escaping (Error?) -> Void

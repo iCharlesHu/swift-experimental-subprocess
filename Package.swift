@@ -30,7 +30,11 @@ let package = Package(
             ],
             path: "Sources/Subprocess",
             swiftSettings: [
-                .enableExperimentalFeature("StrictConcurrency")
+                .enableExperimentalFeature("StrictConcurrency"),
+                .enableExperimentalFeature("NonescapableTypes"),
+                .enableExperimentalFeature("LifetimeDependence"),
+                .enableExperimentalFeature("SuppressedAssociatedTypes"),
+                .enableExperimentalFeature("Span")
             ]
         ),
         .testTarget(
@@ -42,6 +46,9 @@ let package = Package(
             ],
             resources: [
                 .copy("SubprocessTests/Resources")
+            ],
+            swiftSettings: [
+                .enableExperimentalFeature("Span")
             ]
         ),
 
