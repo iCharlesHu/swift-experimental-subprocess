@@ -72,6 +72,30 @@ public struct Subprocess: Sendable {
             standardErrorData: result.value.standardError
         )
     }
+
+    @available(macOS 9999, *)
+    public static func run<
+        InputElement: BitwiseCopyable,
+        Output: OutputProtocol,
+        Error: OutputProtocol
+    >(
+        _ executable: Executable,
+        arguments: Arguments = [],
+        environment: Environment = .inherit,
+        workingDirectory: FilePath? = nil,
+        platformOptions: PlatformOptions = PlatformOptions(),
+        input: borrowing Span<InputElement>,
+        output: Output = .string,
+        error: Error = .discarded
+    ) async throws -> CollectedResult<Output, Error> {
+        return try await Configuration(
+            executable: executable,
+            arguments: arguments,
+            environment: environment,
+            workingDirectory: workingDirectory,
+            platformOptions: platformOptions
+        ).run(input: input, output: output, error: error)
+    }
 }
 
 // MARK: Custom Execution Body

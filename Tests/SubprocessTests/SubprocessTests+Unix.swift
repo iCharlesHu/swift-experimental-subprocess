@@ -36,9 +36,11 @@ extension SubprocessUnixTests {
             arguments: [message]
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             message
         )
     }
@@ -60,8 +62,10 @@ extension SubprocessUnixTests {
         let expected = FileManager.default.currentDirectoryPath
         let result = try await Subprocess.run(.at("/bin/pwd"), output: .string)
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        let path = try XCTUnwrap(result.standardOutput?
-            .trimmingCharacters(in: .whitespacesAndNewlines))
+        // rdar://138670128
+        let maybePath = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = try XCTUnwrap(maybePath)
         XCTAssertTrue(directory(path, isSameAs: expected))
     }
 
@@ -91,9 +95,11 @@ extension SubprocessUnixTests {
             output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "Hello World!"
         )
     }
@@ -108,9 +114,11 @@ extension SubprocessUnixTests {
             output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "apple"
         )
     }
@@ -126,9 +134,11 @@ extension SubprocessUnixTests {
             output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "Data Content"
         )
     }
@@ -146,7 +156,9 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // As a sanity check, make sure there's `/bin` in PATH
         // since we inherited the environment variables
-        let pathValue = try XCTUnwrap(result.standardOutput)
+        // rdar://138670128
+        let maybeOutput = result.standardOutput
+        let pathValue = try XCTUnwrap(maybeOutput)
         XCTAssertTrue(pathValue.contains("/bin"))
     }
 
@@ -160,9 +172,11 @@ extension SubprocessUnixTests {
             output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "/my/new/home"
         )
     }
@@ -178,9 +192,11 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "PATH=/bin:/usr/bin"
         )
     }
@@ -199,8 +215,10 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
-        let path = try XCTUnwrap(result.standardOutput?
-            .trimmingCharacters(in: .whitespacesAndNewlines))
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = try XCTUnwrap(output)
         XCTAssertTrue(directory(path, isSameAs: workingDirectory))
     }
 
@@ -275,6 +293,23 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
             input: .sequence(expected),
+            output: .data(limit: 2048 * 1024)
+        )
+        XCTAssertTrue(catResult.terminationStatus.isSuccess)
+        XCTAssertEqual(catResult.standardOutput.count, expected.count)
+        XCTAssertEqual(Array(catResult.standardOutput), Array(expected))
+    }
+
+    @available(macOS 9999, *)
+    func testInputSpan() async throws {
+        let expected: Data = try Data(
+            contentsOf: URL(filePath: theMysteriousIsland.string)
+        )
+        let ptr = expected.withUnsafeBytes { return $0 }
+        let span: Span<UInt8> = Span(_unsafeBytes: ptr)
+        let catResult = try await Subprocess.run(
+            .at("/bin/cat"),
+            input: span,
             output: .data(limit: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
@@ -377,6 +412,26 @@ extension SubprocessUnixTests {
         _ = echoResult.standardOutput // this line shold fatalError
     }
 #endif
+
+    @available(macOS 9999, *)
+    func testSpanOutput() async throws {
+        let result = try await Subprocess.run(
+            .at("/bin/echo"),
+            arguments: ["Subprocess Rules!"],
+            output: .span
+        )
+        let span = result.standardOutput
+        let output = span.withUnsafeBytes { ptr -> String? in
+            guard let address = ptr.baseAddress?.assumingMemoryBound(to: CChar.self) else {
+                return nil
+            }
+            return String(utf8String: address)
+        }
+        XCTAssertEqual(
+            output?.trimmingCharacters(in: .whitespacesAndNewlines),
+            "Subprocess Rules!"
+        )
+    }
 
     func testCollectedOutput() async throws {
         let expected = randomString(length: 32)

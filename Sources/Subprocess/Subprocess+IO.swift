@@ -242,7 +242,6 @@ extension Subprocess {
         InputSequence: Sequence & Sendable
     >: InputProtocol where InputSequence.Element == Data {
         private let sequence: InputSequence
-        internal let queue: DispatchQueue
         internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func readFileDescriptor() throws -> FileDescriptor? {
@@ -287,7 +286,6 @@ extension Subprocess {
         internal init(underlying: InputSequence) {
             self.sequence = underlying
             self.pipe = LockedState(initialState: nil)
-            self.queue = DispatchQueue(label: "Subprocess.\(Self.self)Queue")
         }
     }
 
@@ -436,7 +434,7 @@ extension Subprocess {
     /// it is recommended to utilize the default implementations provided
     /// by the `Subprocess` library to specify the output handling requirements.
     public protocol OutputProtocol: Sendable {
-        associatedtype OutputType
+        associatedtype OutputType: ~Escapable
         /// Lazily create and return the FileDescriptor for reading
         func readFileDescriptor() throws -> FileDescriptor?
         /// Lazily create and return the FileDescriptor for writing
@@ -665,6 +663,47 @@ extension Subprocess {
             self.pipe = LockedState(initialState: nil)
         }
     }
+
+    @available(macOS 9999, *)
+    public struct SpanOutput: OutputProtocol {
+        public typealias OutputType = RawSpan
+
+        internal let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+
+        public var maxSize: Int { .max }
+
+        public func output(from data: Data) -> RawSpan {
+            // return data.bytes
+            let ptr = data.withUnsafeBytes { ptr in
+                return ptr
+            }
+            return RawSpan(_unsafeBytes: ptr)
+        }
+
+        public func readFileDescriptor() throws -> FileDescriptor? {
+            return try self.pipe.getReadFileDescriptor()
+        }
+
+        public func writeFileDescriptor() throws -> FileDescriptor? {
+            return try self.pipe.getWriteFileDescriptor()
+        }
+
+        public func closeReadFileDescriptor() throws {
+            try self.pipe.closeReadFileDescriptor()
+        }
+
+        public func closeWriteFileDescriptor() throws {
+            try self.pipe.closeWriteFileDescriptor()
+        }
+
+        public func consumeReadFileDescriptor() -> FileDescriptor? {
+            return self.pipe.consumeReadFileDescriptor()
+        }
+
+        init() {
+            self.pipe = LockedState(initialState: nil)
+        }
+    }
 }
 
 extension Subprocess.OutputProtocol where OutputType == Void {
@@ -719,6 +758,11 @@ extension Subprocess.OutputProtocol where Self == Subprocess.SequenceOutput {
     /// to the `.standardOutput` (or `.standardError`) property
     /// of `Subprocess.Execution` as `AsyncSequence<Data>`.
     public static var sequence: Self { .init() }
+}
+
+@available(macOS 9999, *)
+extension Subprocess.OutputProtocol where Self == Subprocess.SpanOutput {
+    public static var span: Self { .init() }
 }
 
 // MARK: Internal

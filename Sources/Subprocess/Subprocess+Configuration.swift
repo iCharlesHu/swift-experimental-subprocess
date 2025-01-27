@@ -240,6 +240,78 @@ extension Subprocess {
             }
         }
 
+        @available(macOS 9999, *)
+        internal func run<
+            InputElement: BitwiseCopyable,
+            Output: Subprocess.OutputProtocol,
+            Error: Subprocess.OutputProtocol
+        >(
+            input: borrowing Span<InputElement>,
+            output: Output,
+            error: Error,
+            isolation: isolated (any Actor)? = #isolation
+        ) async throws -> CollectedResult<Output, Error> {
+            let writerInput = CustomWriteInput()
+            let execution = try self.spawn(
+                withInput: writerInput,
+                output: output,
+                error: error
+            )
+            // After spawn, clean up child side
+            try await self.cleanup(
+                execution: execution,
+                childSide: true,
+                parentSide: false,
+                attemptToTerminateSubProcess: false
+            )
+            return try await withAsyncTaskCancellationHandler {
+                // Spawn parallel tasks to monitor exit status
+                // and capture outputs. Input writing must happen
+                // in this scope for Span
+                async let terminationStatus = try monitorProcessTermination(
+                    forProcessWithIdentifier: execution.processIdentifier
+                )
+                async let (standardOutput, standardError) = await execution.captureIOs()
+                // Write input in the same scope
+                guard let writeFd = try writerInput.writeFileDescriptor() else {
+                    fatalError("Trying to write to an input that has been closed")
+                }
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Swift.Error>) in
+                    input.withUnsafeBytes { ptr in
+                        let dispatchData = DispatchData(bytesNoCopy: ptr, deallocator: .custom(nil, { /* noop */ }))
+
+                        writeFd.write(dispatchData) { error in
+                            if let error = error {
+                                continuation.resume(throwing: error)
+                            } else {
+                                continuation.resume()
+                            }
+                        }
+                    }
+
+                }
+                try writerInput.closeWriteFileDescriptor()
+                return CollectedResult(
+                    processIdentifier: execution.processIdentifier,
+                    terminationStatus: try await terminationStatus,
+                    output: output,
+                    error: error,
+                    standardOutputData: try await standardOutput,
+                    standardErrorData: try await standardError
+                )
+            } onCancel: {
+                // Attempt to terminate the child process
+                // Since the task has already been cancelled,
+                // this is the best we can do
+                try? await self.cleanup(
+                    execution: execution,
+                    childSide: true,
+                    parentSide: true,
+                    attemptToTerminateSubProcess: true
+                )
+            }
+        }
+
         internal func run<
             Result,
             Input: Subprocess.InputProtocol,
@@ -738,7 +810,7 @@ public enum QualityOfService: Int, Sendable {
 }
 
 internal func withAsyncTaskCancellationHandler<Result>(
-    _ body: @escaping () async throws -> Result,
+    _ body: () async throws -> Result,
     onCancel handler: @Sendable @escaping () async -> Void,
     isolation: isolated (any Actor)? = #isolation
 ) async rethrows -> Result {

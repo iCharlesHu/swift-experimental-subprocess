@@ -19,7 +19,7 @@ import Foundation
 
 import Darwin
 import Dispatch
-import SystemPackage
+import System
 
 #if FOUNDATION_FRAMEWORK
 @_implementationOnly import _FoundationCShims
