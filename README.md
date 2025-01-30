@@ -431,7 +431,7 @@ extension Subprocess {
     ///   - output: A file descriptor to bind to the subprocess' standard output.
     ///   - error: A file descriptor to bind to the subprocess' standard error.
     /// - Returns: the process identifier for the subprocess.
-    public static func runDeatched(
+    public static func runDetached(
         _ configuration: Configuration,
         input: FileDescriptor? = nil,
         output: FileDescriptor? = nil,
