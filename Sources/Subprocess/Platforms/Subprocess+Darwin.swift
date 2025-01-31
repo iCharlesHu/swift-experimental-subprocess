@@ -28,6 +28,7 @@ import _CShims
 #endif
 
 // Darwin specific implementation
+@available(macOS 9999, *)
 extension Subprocess.Configuration {
     internal typealias StringOrRawBytes = Subprocess.StringOrRawBytes
 
@@ -39,7 +40,7 @@ extension Subprocess.Configuration {
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Subprocess.Execution<Input, Output, Error> {
+    ) throws -> Subprocess.Execution<Output, Error> {
         let (executablePath,
             env, argv,
             intendedWorkingDir,
@@ -184,7 +185,6 @@ extension Subprocess.Configuration {
         }
         return Subprocess.Execution(
             processIdentifier: .init(value: pid),
-            input: input,
             output: output,
             error: error
         )
@@ -197,6 +197,7 @@ extension String {
 }
 
 // MARK: - Platform Specific Options
+@available(macOS 9999, *)
 extension Subprocess {
     /// The collection of platform-specific settings
     /// to configure the subprocess when running
@@ -251,6 +252,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.PlatformOptions: Hashable {
     public static func == (lhs: Subprocess.PlatformOptions, rhs: Subprocess.PlatformOptions) -> Bool {
         // Since we can't compare closure equality,
@@ -288,6 +290,7 @@ extension Subprocess.PlatformOptions: Hashable {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
@@ -315,6 +318,7 @@ PlatformOptions(
 }
 
 // MARK: - Process Monitoring
+@available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
