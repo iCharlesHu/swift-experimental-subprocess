@@ -195,6 +195,12 @@ Let's break down the example above:
 
 ## Detailed Design
 
+The latest API documentation can be viewed by running the following command:
+
+```
+swift package --disable-sandbox preview-documentation --target SwiftExperimentalSubprocess
+```
+
 ### The New `Subprocess` Type
 
 We propose a new `struct Subprocess`. Developers primarily interact with `Subprocess` via the static `run` methods which asynchronously executes a subprocess.
