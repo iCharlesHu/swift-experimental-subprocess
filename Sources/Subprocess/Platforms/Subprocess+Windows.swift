@@ -13,10 +13,11 @@
 
 import WinSDK
 import Dispatch
-import SystemPackage
+import System
 import FoundationEssentials
 
 // Windows specific implementation
+@available(macOS 9999, *)
 extension Subprocess.Configuration {
     internal func spawn<
         Input: Subprocess.InputProtocol,
@@ -263,6 +264,7 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - Platform Specific Options
+@available(macOS 9999, *)
 extension Subprocess {
     /// The collection of platform-specific settings
     /// to configure the subprocess when running
@@ -378,6 +380,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.PlatformOptions: Hashable {
     public static func == (
         lhs: Subprocess.PlatformOptions,
@@ -409,6 +412,7 @@ extension Subprocess.PlatformOptions: Hashable {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
@@ -433,6 +437,7 @@ PlatformOptions(
 }
 
 // MARK: - Process Monitoring
+@available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
@@ -491,6 +496,7 @@ internal func monitorProcessTermination(
 }
 
 // MARK: - Subprocess Control
+@available(macOS 9999, *)
 extension Subprocess.Execution {
     /// Terminate the current subprocess with the given exit code
     /// - Parameter exitCode: The exit code to use for the subprocess.
@@ -600,6 +606,7 @@ extension Subprocess.Execution {
 }
 
 // MARK: - Executable Searching
+@available(macOS 9999, *)
 extension Subprocess.Executable {
     // Technically not needed for CreateProcess since
     // it takes process name. It's here to support
@@ -642,6 +649,7 @@ extension Subprocess.Executable {
 }
 
 // MARK: - Environment Resolution
+@available(macOS 9999, *)
 extension Subprocess.Environment {
     internal static let pathEnvironmentVariableName = "Path"
 
@@ -664,6 +672,7 @@ extension Subprocess.Environment {
 }
 
 // MARK: - ProcessIdentifier
+@available(macOS 9999, *)
 extension Subprocess {
     /// A platform independent identifier for a subprocess.
     public struct ProcessIdentifier: Sendable, Hashable, Codable {
@@ -682,6 +691,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         return "(processID: \(self.value), threadID: \(self.threadID))"
@@ -693,6 +703,7 @@ extension Subprocess.ProcessIdentifier: CustomStringConvertible, CustomDebugStri
 }
 
 // MARK: - Private Utils
+@available(macOS 9999, *)
 extension Subprocess.Configuration {
     private func preSpawn() throws -> (
         applicationName: String?,
@@ -952,11 +963,13 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - PlatformFileDescriptor Type
+@available(macOS 9999, *)
 extension Subprocess {
     internal typealias PlatformFileDescriptor = HANDLE
 }
 
 // MARK: - Read Buffer Size
+@available(macOS 9999, *)
 extension Subprocess {
     @inline(__always)
     internal static var readBufferSize: Int {

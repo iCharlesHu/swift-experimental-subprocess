@@ -19,7 +19,7 @@ import FoundationEssentials
 import Foundation
 #endif
 
-import SystemPackage
+import System
 import class Foundation.Bundle
 import struct Foundation.URL
 

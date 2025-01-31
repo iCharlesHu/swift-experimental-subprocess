@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import SystemPackage
+import System
 
 #if canImport(Darwin)
 import Darwin
@@ -25,31 +25,27 @@ import FoundationEssentials
 import Foundation
 #endif
 
+@available(macOS 9999, *)
 extension Subprocess {
     /// An object that repersents a subprocess that has been
     /// executed. You can use this object to send signals to the
     /// child process as well as stream its output and error.
     public struct Execution<
-        Input: Subprocess.InputProtocol,
         Output: Subprocess.OutputProtocol,
         Error: Subprocess.OutputProtocol
     >: Sendable {
         /// The process identifier of the current execution
         public let processIdentifier: ProcessIdentifier
 
-        internal let input: Input
         internal let output: Output
         internal let error: Error
 #if os(Windows)
         internal let consoleBehavior: PlatformOptions.ConsoleBehavior
 #endif
-
-        private func capture(fileDescriptor: FileDescriptor, maxLength: Int) async throws -> Data {
-            return try await fileDescriptor.readUntilEOF(upToLength: maxLength)
-        }
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Execution where Output == Subprocess.SequenceOutput {
     /// The standard output of the subprocess.
     /// Accessing this property will **fatalError** if
@@ -65,6 +61,7 @@ extension Subprocess.Execution where Output == Subprocess.SequenceOutput {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Execution where Error == Subprocess.SequenceOutput {
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
@@ -82,6 +79,7 @@ extension Subprocess.Execution where Error == Subprocess.SequenceOutput {
 
 // MARK: - Teardown
 #if canImport(Darwin) || canImport(Glibc)
+@available(macOS 9999, *)
 extension Subprocess.Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal
@@ -95,71 +93,35 @@ extension Subprocess.Execution {
 #endif
 
 // MARK: - Output Capture
+@available(macOS 9999, *)
 extension Subprocess {
-    internal enum OutputCapturingState {
-        case standardOutputCaptured(Data?)
-        case standardErrorCaptured(Data?)
+    internal enum OutputCapturingState<Output: Sendable, Error: Sendable>: Sendable {
+        case standardOutputCaptured(Output)
+        case standardErrorCaptured(Error)
     }
 
-    internal typealias CapturedIOs = (standardOutput: Data?, standardError: Data?)
+    internal typealias CapturedIOs<
+        Output: Sendable, Error: Sendable
+    > = (standardOutput: Output, standardError: Error)
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Execution {
-
-    internal func captureStandardOutput() async throws -> Data? {
-        let isCollectedOutput = Output.self == Subprocess.DataOutput.self ||
-            Output.self == Subprocess.StringOutput.self ||
-            String(describing: Output.self) == "SpanOutput"
-        guard isCollectedOutput else {
-            return nil
-        }
-        guard let readFd = self.output
-            .consumeReadFileDescriptor() else {
-            return nil
-        }
-        defer {
-            try? readFd.close()
-        }
-        return try await self.capture(
-            fileDescriptor: readFd,
-            maxLength: self.output.maxSize
-        )
-    }
-
-    internal func captureStandardError() async throws -> Data? {
-        let isCollectedOutput = Output.self == Subprocess.DataOutput.self ||
-            Output.self == Subprocess.StringOutput.self ||
-            String(describing: Output.self) == "SpanOutput"
-        guard isCollectedOutput else {
-            return nil
-        }
-
-        guard let readFd = self.error
-            .consumeReadFileDescriptor() else {
-            return nil
-        }
-        defer {
-            try? readFd.close()
-        }
-        return try await self.capture(
-            fileDescriptor: readFd,
-            maxLength: self.error.maxSize
-        )
-    }
-
-    internal func captureIOs() async throws -> Subprocess.CapturedIOs {
-        return try await withThrowingTaskGroup(of: Subprocess.OutputCapturingState.self) { group in
+    internal func captureIOs() async throws -> Subprocess.CapturedIOs<Output.OutputType, Error.OutputType> {
+        return try await withThrowingTaskGroup(
+            of: Subprocess.OutputCapturingState<Output.OutputType, Error.OutputType>.self
+        ) { group in
             group.addTask {
-                let stdout = try await self.captureStandardOutput()
+                let stdout = try await self.output.captureOutput()
                 return .standardOutputCaptured(stdout)
             }
             group.addTask {
-                let stderr = try await self.captureStandardError()
+                let stderr = try await self.error.captureOutput()
                 return .standardErrorCaptured(stderr)
             }
 
-            var stdout: Data?
-            var stderror: Data?
+            var stdout: Output.OutputType!
+            var stderror: Error.OutputType!
             while let state = try await group.next() {
                 switch state {
                 case .standardOutputCaptured(let output):
@@ -168,7 +130,10 @@ extension Subprocess.Execution {
                     stderror = error
                 }
             }
-            return (standardOutput: stdout, standardError: stderror)
+            return (
+                standardOutput: stdout,
+                standardError: stderror,
+            )
         }
     }
 }

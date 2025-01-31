@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import SystemPackage
+import System
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #elseif canImport(Foundation)
@@ -19,6 +19,7 @@ import Foundation
 /// `Subprocess` allows you to spawn new processes,
 /// connect to their input/output/error,
 /// and obtain their return codes.
+@available(macOS 9999, *)
 public struct Subprocess: Sendable {
     /// Run a executable with given parameters and a custom closure
     /// to manage the running subprocess' lifetime and its IOs.
@@ -56,20 +57,21 @@ public struct Subprocess: Sendable {
             platformOptions: platformOptions
         )
         .run(input: input, output: output, error: error) { execution in
-            let (standardOutput, standardError) = try await execution.captureIOs()
+            let (
+                standardOutput,
+                standardError,
+            ) = try await execution.captureIOs()
             return (
                 processIdentifier: execution.processIdentifier,
                 standardOutput: standardOutput,
-                standardError: standardError
+                standardError: standardError,
             )
         }
         return CollectedResult(
             processIdentifier: result.value.processIdentifier,
             terminationStatus: result.terminationStatus,
-            output: output,
-            error: error,
-            standardOutputData: result.value.standardOutput,
-            standardErrorData: result.value.standardError
+            standardOutput: result.value.standardOutput,
+            standardError: result.value.standardError,
         )
     }
 
@@ -99,6 +101,7 @@ public struct Subprocess: Sendable {
 }
 
 // MARK: Custom Execution Body
+@available(macOS 9999, *)
 extension Subprocess {
     /// Run a executable with given parameters and a custom closure
     /// to manage the running subprocess' lifetime and its IOs.
@@ -123,7 +126,7 @@ extension Subprocess {
         output: Output = .sequence,
         error: Error = .discarded,
         isolation: isolated (any Actor)? = #isolation,
-        body: (@escaping (Subprocess.Execution<Input, Output, Error>) async throws -> Result)
+        body: (@escaping (Subprocess.Execution<Output, Error>) async throws -> Result)
     ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
         return try await Configuration(
             executable: executable,
@@ -157,7 +160,7 @@ extension Subprocess {
         isolation: isolated (any Actor)? = #isolation,
         output: Output = .sequence,
         error: Error = .discarded,
-        body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
+        body: (@escaping (Subprocess.Execution<Output, Error>, StandardInputWriter) async throws -> Result)
     ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
         return try await Configuration(
             executable: executable,
@@ -171,6 +174,7 @@ extension Subprocess {
 }
 
 // MARK: - Configuration Based
+@available(macOS 9999, *)
 extension Subprocess {
     /// Run a executable with given parameters specified by a
     /// `Subprocess.Configuration`
@@ -187,13 +191,14 @@ extension Subprocess {
         isolation: isolated (any Actor)? = #isolation,
         output: Output = .sequence,
         error: Error = .discarded,
-        body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
+        body: (@escaping (Subprocess.Execution<Output, Error>, StandardInputWriter) async throws -> Result)
     ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
         return try await configuration.run(output: output, error: error, body)
     }
 }
 
 // MARK: - Detached
+@available(macOS 9999, *)
 extension Subprocess {
     /// Run a executable with given parameters and return its process
     /// identifier immediately without monitoring the state of the

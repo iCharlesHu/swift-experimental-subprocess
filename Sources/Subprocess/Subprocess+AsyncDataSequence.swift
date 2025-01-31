@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import SystemPackage
+import System
 import Dispatch
 
 #if canImport(FoundationEssentials)
@@ -18,6 +18,7 @@ import FoundationEssentials
 import Foundation
 #endif
 
+@available(macOS 9999, *)
 extension Subprocess {
     public struct AsyncDataSequence: AsyncSequence, Sendable, _AsyncSequence {
         public typealias Error = any Swift.Error

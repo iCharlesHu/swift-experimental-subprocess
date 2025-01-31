@@ -30,9 +30,10 @@ import _CShims
 #endif
 
 import Dispatch
-import SystemPackage
+import System
 
 // MARK: - Signals
+@available(macOS 9999, *)
 extension Subprocess {
     /// Signals are standardized messages sent to a running program
     /// to trigger specific behavior, such as quitting or error handling.
@@ -92,6 +93,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Execution {
     /// Send the given signal to the child process.
     /// - Parameters:
@@ -122,6 +124,7 @@ extension Subprocess.Execution {
 }
 
 // MARK: - Environment Resolution
+@available(macOS 9999, *)
 extension Subprocess.Environment {
     internal static let pathEnvironmentVariableName = "PATH"
 
@@ -208,6 +211,7 @@ extension Subprocess.Environment {
 }
 
 // MARK: Args Creation
+@available(macOS 9999, *)
 extension Subprocess.Arguments {
     // This method follows the standard "create" rule: `args` needs to be
     // manually deallocated
@@ -225,6 +229,7 @@ extension Subprocess.Arguments {
 }
 
 // MARK: - ProcessIdentifier
+@available(macOS 9999, *)
 extension Subprocess {
     /// A platform independent identifier for a subprocess.
     public struct ProcessIdentifier: Sendable, Hashable, Codable {
@@ -237,6 +242,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.ProcessIdentifier : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String { "\(self.value)" }
 
@@ -244,6 +250,7 @@ extension Subprocess.ProcessIdentifier : CustomStringConvertible, CustomDebugStr
 }
 
 // MARK: -  Executable Searching
+@available(macOS 9999, *)
 extension Subprocess.Executable {
     internal static var defaultSearchPaths: Set<String> {
         return Set([
@@ -287,6 +294,7 @@ extension Subprocess.Executable {
 }
 
 // MARK: - Configuration
+@available(macOS 9999, *)
 extension Subprocess.Configuration {
     internal func preSpawn() throws -> (
         executablePath: String,
@@ -350,6 +358,7 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - FileDescriptor extensions
+@available(macOS 9999, *)
 extension FileDescriptor {
     internal static func openDevNull(
         withAcessMode mode: FileDescriptor.AccessMode
@@ -382,8 +391,49 @@ extension FileDescriptor {
         }
     }
 
+    internal func readUntilEOF(
+        upToLength maxLength: Int, resultHandler: @escaping (DispatchData, (any Error)?) -> Void
+    ) {
+        let dispatchIO = DispatchIO(
+            type: .stream,
+            fileDescriptor: self.rawValue,
+            queue: .global(),
+        ) { error in }
+        var buffer: DispatchData?
+        dispatchIO.read(
+            offset: 0,
+            length: maxLength,
+            queue: .global()
+        ) { done, data, error in
+            guard error == 0, let chunkData = data else {
+                dispatchIO.close()
+                return
+            }
+            // Easy case: if we are done and buffer is nil, this means
+            // there is only one chunk of data
+            if done && buffer == nil {
+                dispatchIO.close()
+                buffer = chunkData
+                resultHandler(chunkData, nil)
+                return
+            }
+
+            if buffer == nil {
+                buffer = chunkData
+            } else {
+                buffer?.append(chunkData)
+            }
+
+            if done {
+                dispatchIO.close()
+                resultHandler(buffer!, nil)
+                return
+            }
+        }
+    }
+
     internal func readUntilEOF(upToLength maxLength: Int) async throws -> Data {
-        return try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, any Error>) in
             let dispatchIO = DispatchIO(
                 type: .stream,
                 fileDescriptor: self.rawValue,
@@ -470,11 +520,13 @@ extension FileDescriptor {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess {
     internal typealias PlatformFileDescriptor = FileDescriptor
 }
 
 // MARK: - Read Buffer Size
+@available(macOS 9999, *)
 extension Subprocess {
     @inline(__always)
     internal static var readBufferSize: Int {

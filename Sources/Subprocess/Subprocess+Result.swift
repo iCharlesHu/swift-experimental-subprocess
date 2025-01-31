@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import SystemPackage
+import System
 import Dispatch
 
 #if canImport(FoundationEssentials)
@@ -19,6 +19,7 @@ import Foundation
 #endif
 
 // MARK: - Result
+@available(macOS 9999, *)
 extension Subprocess {
     /// A simple wrapper around the generic result returned by the
     /// `run` closures with the corresponding `TerminationStatus`
@@ -40,69 +41,78 @@ extension Subprocess {
     public struct CollectedResult<
         Output: Subprocess.OutputProtocol,
         Error:Subprocess.OutputProtocol
-    >: Sendable, Hashable {
+    >: Sendable {
         /// The process identifier for the executed subprocess
         public let processIdentifier: ProcessIdentifier
         /// The termination status of the executed subprocess
         public let terminationStatus: TerminationStatus
-        private let _standardOutput: Data?
-        private let _standardError: Data?
-        private let output: Output
-        private let error: Error
+        public let standardOutput: Output.OutputType
+        public let standardError: Error.OutputType
 
         internal init(
             processIdentifier: ProcessIdentifier,
             terminationStatus: TerminationStatus,
-            output: Output,
-            error: Error,
-            standardOutputData: Data?,
-            standardErrorData: Data?
+            standardOutput: Output.OutputType,
+            standardError: Error.OutputType
         ) {
             self.processIdentifier = processIdentifier
             self.terminationStatus = terminationStatus
-            self._standardOutput = standardOutputData
-            self._standardError = standardErrorData
-            self.output = output
-            self.error = error
-        }
-
-        public func hash(into hasher: inout Hasher) {
-            hasher.combine(self.processIdentifier)
-            hasher.combine(self.terminationStatus)
-            hasher.combine(self._standardOutput)
-            hasher.combine(self._standardError)
-        }
-
-        public static func ==(lhs: Self, rhs: Self) -> Bool {
-            return lhs.processIdentifier == rhs.processIdentifier
-            && lhs.terminationStatus == rhs.terminationStatus
-            && lhs._standardOutput == rhs._standardOutput
-            && lhs._standardError == rhs._standardError
-        }
-
-        /// The collected standard output value for the subprocess.
-        public var standardOutput: Output.OutputType {
-            guard let output = self._standardOutput else {
-                fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
-            }
-            return self.output.output(from: output)
-        }
-
-        /// The collected standard error value for the subprocess.
-        public var standardError: Error.OutputType {
-            guard let error = self._standardError else {
-                fatalError("standardError is only available if the Subprocess was ran with .collect as error ")
-            }
-            return self.error.output(from: error)
+            self.standardOutput = standardOutput
+            self.standardError = standardError
         }
     }
 }
+
+// MARK: - CollectedResult Conformances
+@available(macOS 9999, *)
+extension Subprocess.CollectedResult: Equatable where Output.OutputType: Equatable, Error.OutputType: Equatable {}
+
+@available(macOS 9999, *)
+extension Subprocess.CollectedResult: Hashable where Output.OutputType: Hashable, Error.OutputType: Hashable {}
+
+@available(macOS 9999, *)
+extension Subprocess.CollectedResult: Codable where Output.OutputType: Codable, Error.OutputType: Codable {}
+
+@available(macOS 9999, *)
+extension Subprocess.CollectedResult: CustomStringConvertible where Output.OutputType: CustomStringConvertible, Error.OutputType: CustomStringConvertible {
+    public var description: String {
+        return """
+Subprocess.CollectedResult(
+    processIdentifier: \(self.processIdentifier),
+    terminationStatus: \(self.terminationStatus.description),
+    standardOutput: \(self.standardOutput.description)
+    standardError: \(self.standardError.description)
+)
+"""
+    }
+}
+
+@available(macOS 9999, *)
+extension Subprocess.CollectedResult: CustomDebugStringConvertible where Output.OutputType: CustomDebugStringConvertible, Error.OutputType: CustomDebugStringConvertible {
+    public var debugDescription: String {
+        return """
+Subprocess.CollectedResult(
+    processIdentifier: \(self.processIdentifier),
+    terminationStatus: \(self.terminationStatus.description),
+    standardOutput: \(self.standardOutput.debugDescription)
+    standardError: \(self.standardError.debugDescription)
+)
+"""
+    }
+}
+
+
+// MARK: - ExecutionResult Conformances
+@available(macOS 9999, *)
 extension Subprocess.ExecutionResult: Equatable where Result : Equatable {}
 
+@available(macOS 9999, *)
 extension Subprocess.ExecutionResult: Hashable where Result : Hashable {}
 
+@available(macOS 9999, *)
 extension Subprocess.ExecutionResult: Codable where Result : Codable {}
 
+@available(macOS 9999, *)
 extension Subprocess.ExecutionResult: CustomStringConvertible where Result : CustomStringConvertible {
     public var description: String {
         return """
@@ -114,6 +124,7 @@ Subprocess.ExecutionResult(
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.ExecutionResult: CustomDebugStringConvertible where Result : CustomDebugStringConvertible {
     public var debugDescription: String {
         return """
@@ -125,31 +136,8 @@ Subprocess.ExecutionResult(
     }
 }
 
-extension Subprocess.CollectedResult : CustomStringConvertible, CustomDebugStringConvertible {
-    public var description: String {
-        return """
-Subprocess.CollectedResult(
-    processIdentifier: \(self.processIdentifier.description),
-    terminationStatus: \(self.terminationStatus.description),
-    standardOutput: \(self._standardOutput?.description ?? "not captured"),
-    standardError: \(self._standardError?.description ?? "not captured")
-)
-"""
-    }
-
-    public var debugDescription: String {
-        return """
-Subprocess.CollectedResult(
-    processIdentifier: \(self.processIdentifier.debugDescription),
-    terminationStatus: \(self.terminationStatus.debugDescription),
-    standardOutput: \(self._standardOutput?.debugDescription ?? "not captured"),
-    standardError: \(self._standardError?.debugDescription ?? "not captured")
-)
-"""
-    }
-}
-
 // MARK: - StandardInputWriter
+@available(macOS 9999, *)
 extension Subprocess {
     /// A writer that writes to the standard input of the subprocess.
     public final actor StandardInputWriter: Sendable {

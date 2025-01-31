@@ -13,11 +13,12 @@
 
 import Glibc
 import Dispatch
-import SystemPackage
+import System
 import FoundationEssentials
 import _CShims
 
 // Linux specific implementations
+@available(macOS 9999, *)
 extension Subprocess.Configuration {
     internal typealias StringOrRawBytes = Subprocess.StringOrRawBytes
 
@@ -99,6 +100,7 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - Platform Specific Options
+@available(macOS 9999, *)
 extension Subprocess {
     /// The collection of platform-specific settings
     /// to configure the subprocess when running
@@ -143,6 +145,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.PlatformOptions: Hashable {
     public static func ==(
         lhs: Subprocess.PlatformOptions,
@@ -179,6 +182,7 @@ extension Subprocess.PlatformOptions: Hashable {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
@@ -209,6 +213,7 @@ extension String {
 }
 
 // MARK: - Process Monitoring
+@available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
