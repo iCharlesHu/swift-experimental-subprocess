@@ -54,11 +54,13 @@ extension Data {
 extension DataProtocol {
     var bytes: RawSpan {
         _read {
-            guard self.regions.isEmpty else {
-                fatalError("Empty DispatchData read")
+            if self.regions.isEmpty {
+              let empty = UnsafeRawBufferPointer(start: nil, count: 0)
+              let span = RawSpan(_unsafeBytes: empty)
+              yield _overrideLifetime(of: span, to: self)
             }
-            // Easy case: there is only one region in the data
-            if self.regions.count == 1 {
+            else if self.regions.count == 1 {
+                // Easy case: there is only one region in the data
                 let ptr = self.regions.first!.withUnsafeBytes { ptr in
                     return ptr
                 }
