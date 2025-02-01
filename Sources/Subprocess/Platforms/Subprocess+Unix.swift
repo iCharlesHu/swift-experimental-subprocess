@@ -392,7 +392,7 @@ extension FileDescriptor {
     }
 
     internal func readUntilEOF(
-        upToLength maxLength: Int, resultHandler: @escaping (DispatchData, (any Error)?) -> Void
+        upToLength maxLength: Int, resultHandler: @escaping (Swift.Result<DispatchData, any Error>) -> Void
     ) {
         let dispatchIO = DispatchIO(
             type: .stream,
@@ -407,6 +407,7 @@ extension FileDescriptor {
         ) { done, data, error in
             guard error == 0, let chunkData = data else {
                 dispatchIO.close()
+                resultHandler(.failure(POSIXError(.init(rawValue: error) ?? .ENODEV)))
                 return
             }
             // Easy case: if we are done and buffer is nil, this means
@@ -414,7 +415,7 @@ extension FileDescriptor {
             if done && buffer == nil {
                 dispatchIO.close()
                 buffer = chunkData
-                resultHandler(chunkData, nil)
+                resultHandler(.success(chunkData))
                 return
             }
 
@@ -426,7 +427,7 @@ extension FileDescriptor {
 
             if done {
                 dispatchIO.close()
-                resultHandler(buffer!, nil)
+                resultHandler(.success(buffer!))
                 return
             }
         }

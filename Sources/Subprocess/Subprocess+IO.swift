@@ -712,12 +712,17 @@ extension Subprocess.PipeBasedOutputProtocol {
             guard let readFd = self.consumeReadFileDescriptor() else {
                 fatalError("Trying to capture Subprocess output that has already been closed.")
             }
-            readFd.readUntilEOF(upToLength: self.maxSize) { (data: DispatchData, error) in
+            readFd.readUntilEOF(upToLength: self.maxSize) { result in
                 do {
-                    let span = data.bytes
-                    let output = try self.output(from: span)
-                    try readFd.close()
-                    continuation.resume(returning: output)
+                    switch result {
+                    case .success(let data):
+                        let output = try self.output(from: data.bytes)
+                        try readFd.close()
+                        continuation.resume(returning: output)
+                    case .failure(let error):
+                        try readFd.close()
+                        continuation.resume(throwing: error)
+                    }
                 } catch {
                     try? readFd.close()
                     continuation.resume(throwing: error)
