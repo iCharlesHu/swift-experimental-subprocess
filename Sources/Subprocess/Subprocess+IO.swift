@@ -597,6 +597,14 @@ extension Subprocess {
 }
 
 @available(macOS 9999, *)
+extension Subprocess.OutputProtocol {
+    public func output(from data: DispatchData) throws -> OutputType {
+        //FIXME: remove workaround for rdar://143992296
+        try output(from: data.bytes)
+    }
+}
+
+@available(macOS 9999, *)
 extension Subprocess.OutputProtocol where Self == Subprocess.DiscardedOutput {
     /// Create a Subprocess output that discards the output
     public static var discarded: Self { .init() }
@@ -716,7 +724,8 @@ extension Subprocess.PipeBasedOutputProtocol {
                 do {
                     switch result {
                     case .success(let data):
-                        let output = try self.output(from: data.bytes)
+                        //FIXME: remove workaround for rdar://143992296
+                        let output = try self.output(from: data)
                         try readFd.close()
                         continuation.resume(returning: output)
                     case .failure(let error):
