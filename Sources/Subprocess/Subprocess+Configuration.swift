@@ -62,10 +62,6 @@ extension Subprocess {
             self.platformOptions = platformOptions
         }
 
-        internal func cleanup(outputClosure: () throws -> Void, errorClosure: () throws -> Void) {
-            
-        }
-
         /// Close each input individually, and throw the first error if there's multiple errors thrown
         @Sendable
         private func cleanup<
