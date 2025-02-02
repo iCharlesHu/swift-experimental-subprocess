@@ -148,6 +148,48 @@ extension Subprocess {
 
 // MARK: - Configuration Based
 extension Subprocess {
+    /// Run a executable with given parameters and a custom closure
+    /// to manage the running subprocess' lifetime and its IOs.
+    /// - Parameters:
+    ///   - executable: The executable to run.
+    ///   - arguments: The arguments to pass to the executable.
+    ///   - environment: The environment in which to run the executable.
+    ///   - workingDirectory: The working directory in which to run the executable.
+    ///   - platformOptions: The platform specific options to use
+    ///     when running the executable.
+    ///   - input: The input to send to the executable.
+    ///   - output: The method to use for redirecting the standard output.
+    ///   - error: The method to use for redirecting the standard error.
+    ///   - body: The custom execution body to manually control the running process
+    /// - Returns a CollectedResult containing the result of the run.
+    public static func run<
+        Input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
+    >(
+        _ configuration: ConfigurationBuilder,
+        input: Input = .none,
+        output: Output = .string,
+        error: Error = .discarded
+    ) async throws -> CollectedResult<Output, Error> {
+        let result = try await configuration.config().run(input: input, output: output, error: error) { execution in
+            let (standardOutput, standardError) = try await execution.captureIOs()
+            return (
+                processIdentifier: execution.processIdentifier,
+                standardOutput: standardOutput,
+                standardError: standardError
+            )
+        }
+        return CollectedResult(
+            processIdentifier: result.value.processIdentifier,
+            terminationStatus: result.terminationStatus,
+            output: output,
+            error: error,
+            standardOutputData: result.value.standardOutput,
+            standardErrorData: result.value.standardError
+        )
+    }
+
     /// Run a executable with given parameters specified by a
     /// `Subprocess.Configuration`
     /// - Parameters:
@@ -159,13 +201,13 @@ extension Subprocess {
     /// - Returns a ExecutableResult type containing the return value
     ///     of the closure.
     public static func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
-        _ configuration: Configuration,
+        _ configuration: ConfigurationBuilder,
         isolation: isolated (any Actor)? = #isolation,
         output: Output = .sequence,
         error: Error = .discarded,
         body: (@escaping (Subprocess.Execution<CustomWriteInput, Output, Error>, StandardInputWriter) async throws -> Result)
     ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
-        return try await configuration.run(output: output, error: error, body)
+        return try await configuration.config().run(output: output, error: error, body)
     }
 }
 
@@ -222,7 +264,7 @@ extension Subprocess {
     ///   - error: A file descriptor to bind to the subprocess' standard error.
     /// - Returns: the process identifier for the subprocess.
     public static func runDetached(
-        _ configuration: Configuration,
+        _ configuration: ConfigurationBuilder,
         input: FileDescriptor? = nil,
         output: FileDescriptor? = nil,
         error: FileDescriptor? = nil
@@ -230,49 +272,49 @@ extension Subprocess {
         // Create input
         switch (input, output, error) {
         case (.none, .none, .none):
-            return try configuration.spawn(
+            return try configuration.config().spawn(
                 withInput: .none,
                 output: .discarded,
                 error: .discarded
             ).processIdentifier
         case (.none, .none, .some(let errorFd)):
-            return try configuration.spawn(
+            return try configuration.config().spawn(
                 withInput: .none,
                 output: .discarded,
                 error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         case (.none, .some(let outputFd), .none):
-            return try configuration.spawn(
+            return try configuration.config().spawn(
                 withInput: .none,
                 output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
                 error: .discarded
             ).processIdentifier
         case (.none, .some(let outputFd), .some(let errorFd)):
-            return try configuration.spawn(
+            return try configuration.config().spawn(
                 withInput: .none,
                 output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
                 error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         case (.some(let inputFd), .none, .none):
-            return try configuration.spawn(
+            return try configuration.config().spawn(
                 withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
                 output: .discarded,
                 error: .discarded
             ).processIdentifier
         case (.some(let inputFd), .none, .some(let errorFd)):
-            return try configuration.spawn(
+            return try configuration.config().spawn(
                 withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
                 output: .discarded,
                 error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
             ).processIdentifier
         case (.some(let inputFd), .some(let outputFd), .none):
-            return try configuration.spawn(
+            return try configuration.config().spawn(
                 withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
                 output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
                 error: .discarded
             ).processIdentifier
         case (.some(let inputFd), .some(let outputFd), .some(let errorFd)):
-            return try configuration.spawn(
+            return try configuration.config().spawn(
                 withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
                 output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
                 error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)

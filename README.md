@@ -718,6 +718,24 @@ extension Subprocess.Configuration : CustomStringConvertible, CustomDebugStringC
 
 **Note:** the `.workingDirectory` property defaults to the current working directory of the calling process.
 
+You can run a Configuration directly with a run method like this:
+
+```
+let result = try await Subprocess.run(
+    Configuration(
+        executing: .named("ls"),
+        arguments: ["-l", "/some/dir"]
+    )
+)
+```
+
+Or you can use a type that conforms to the ConfigurationBuilder that can build a configuration based on a higher-level abstraction. Configuration builders can offer a level of type-safety (free from simple typos and incorrect options), content-assistance from your IDE, and testability.
+
+```
+let result = try await Subprocess.run(
+    Ls(.long, paths: "/some/dir")
+)
+```
 
 ### `Subprocess.StandardInputWriter`
 

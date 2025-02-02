@@ -26,10 +26,13 @@ import Foundation
 #endif
 
 extension Subprocess {
+    public protocol ConfigurationBuilder {
+        func config() -> Configuration
+    }
+
     /// A collection of configurations parameters to use when
     /// spawning a subprocess.
-    public struct Configuration: Sendable, Hashable {
-
+    public struct Configuration: Sendable, Hashable, ConfigurationBuilder {
         internal enum RunState<Result: Sendable>: Sendable {
             case workBody(Result)
             case monitorChildProcess(TerminationStatus)
@@ -318,6 +321,10 @@ extension Subprocess {
                     attemptToTerminateSubProcess: true
                 )
             }
+        }
+
+        public func config() -> Configuration {
+            return self
         }
     }
 }
