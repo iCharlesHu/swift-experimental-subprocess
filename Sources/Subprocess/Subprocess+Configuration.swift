@@ -353,7 +353,7 @@ extension Subprocess {
     /// `Subprocess.Executable` defines how should the executable
     /// be looked up for execution.
     public struct Executable: Sendable, Hashable {
-        internal enum Configuration: Sendable, Hashable {
+        public enum Configuration: Sendable, Hashable {
             case executable(String)
             case path(FilePath)
         }
@@ -381,6 +381,9 @@ extension Subprocess {
                 return FilePath(path)
             }
             return nil
+        }
+        public func configuration() -> Configuration {
+            return self.storage
         }
     }
 }
@@ -423,6 +426,10 @@ extension Subprocess {
         public init(_ array: [String]) {
             self.storage = array.map { .string($0) }
             self.executablePathOverride = nil
+        }
+
+        public func args() -> [String] {
+            return self.storage.map( { $0.description } )
         }
 
 #if !os(Windows) // Windows does NOT support arg0 override
