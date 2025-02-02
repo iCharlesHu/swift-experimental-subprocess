@@ -19,7 +19,7 @@ import Foundation
 /// `Subprocess` allows you to spawn new processes,
 /// connect to their input/output/error,
 /// and obtain their return codes.
-public struct Subprocess: Sendable {
+public struct Subprocess: Sendable, Subprocessable {
     /// Run a executable with given parameters and a custom closure
     /// to manage the running subprocess' lifetime and its IOs.
     /// - Parameters:

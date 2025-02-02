@@ -1634,6 +1634,36 @@ extension Subprocess.TerminationStatus : CustomStringConvertible, CustomDebugStr
 
 If the task running `Subprocess.run` is cancelled while the child process is running, `Subprocess` will attempt to release all the resources it acquired (i.e. file descriptors) and then terminate the child process according to the `TeardownSequence`.
 
+### Overrides and Mocks
+
+Subprocess conforms to a protocol Subprocessable that altnerate implementations can use for the purpose of overrides and testing.
+
+```
+// An API function that uses Subprocess to spawn worker processes
+func listFiles<SP: Subprocessable>(_ subprocessable: SP.Type = Subprocess.self, dir: String) async throws -> [String] {
+    let result = try await SP.run(
+        .named("ls"),
+        arguments: [dir],
+        environment: .inherit,
+        workingDirectory: nil,
+        platformOptions: Subprocess.PlatformOptions(),
+        input: .none,
+        output: .string,
+        error: .discarded
+    )
+
+    let output = result.standardOutput
+    guard let output else { return [] }
+    return output.split(separator: "\n").map(String.init)
+}
+```
+
+A caller can use the default, Subprocess, or specify their own implementation.
+
+```
+let files1 = try await listFiles(dir: "/some/dir") // Run the ls command using Subprocess
+let files2 = try await listFiles(MyCustomSubprocess.self, dir: "/some/dir") // Run the ls command using custom implementation
+```
 
 ## Impact on Existing Code
 
