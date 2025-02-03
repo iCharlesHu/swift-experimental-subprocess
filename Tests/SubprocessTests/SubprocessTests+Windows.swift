@@ -13,7 +13,7 @@
 
 import WinSDK
 import XCTest
-import SystemPackage
+import System
 @testable import SwiftExperimentalSubprocess
 
 final class SubprocessWindowsTests: XCTestCase {
@@ -21,6 +21,7 @@ final class SubprocessWindowsTests: XCTestCase {
 }
 
 // MARK: - Executable Tests
+@available(macOS 9999, *)
 extension SubprocessWindowsTests {
     func testExecutableNamed() async throws {
         // Simple test to make sure we can run a common utility

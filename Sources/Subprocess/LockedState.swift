@@ -25,7 +25,7 @@ import Musl
 import WinSDK
 #endif
 
-package struct LockedState<State> {
+public struct LockedState<State> {
 
     // Internal implementation for a cheap lock to aid sharing code across platforms
     private struct _Lock {

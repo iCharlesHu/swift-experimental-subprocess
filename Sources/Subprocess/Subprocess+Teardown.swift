@@ -19,6 +19,7 @@ import FoundationEssentials
 import Foundation
 #endif
 
+@available(macOS 9999, *)
 extension Subprocess {
     /// A step in the graceful shutdown teardown sequence.
     /// It consists of a signal to send to the child process and the
@@ -54,6 +55,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Execution {
     internal func runTeardownSequence(_ sequence: [Subprocess.TeardownStep]) async {
         // First insert the `.kill` step
@@ -97,6 +99,7 @@ extension Subprocess.Execution {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Execution {
     private func isAlive() -> Bool {
         return kill(self.processIdentifier.value, 0) == 0

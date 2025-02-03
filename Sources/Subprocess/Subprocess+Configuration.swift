@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-@preconcurrency import SystemPackage
+import System
 
 #if canImport(Darwin)
 import Darwin
@@ -25,6 +25,7 @@ import FoundationEssentials
 import Foundation
 #endif
 
+@available(macOS 9999, *)
 extension Subprocess {
     /// A collection of configurations parameters to use when
     /// spawning a subprocess.
@@ -68,7 +69,8 @@ extension Subprocess {
             Output: Subprocess.OutputProtocol,
             Error: Subprocess.OutputProtocol
         >(
-            execution: Subprocess.Execution<Input, Output, Error>,
+            execution: Subprocess.Execution<Output, Error>,
+            input: Input,
             childSide: Bool, parentSide: Bool,
             attemptToTerminateSubProcess: Bool
         ) async throws {
@@ -102,13 +104,13 @@ extension Subprocess {
             var errorError: Swift.Error? // lol
 
             if childSide {
-                inputError = safeClose(execution.input.closeReadFileDescriptor)
+                inputError = safeClose(input.closeReadFileDescriptor)
                 outputError = safeClose(execution.output.closeWriteFileDescriptor)
                 errorError = safeClose(execution.error.closeWriteFileDescriptor)
             }
 
             if parentSide {
-                inputError = safeClose(execution.input.closeWriteFileDescriptor)
+                inputError = safeClose(input.closeWriteFileDescriptor)
                 outputError = safeClose(execution.output.closeReadFileDescriptor)
                 errorError = safeClose(execution.error.closeReadFileDescriptor)
             }
@@ -186,7 +188,7 @@ extension Subprocess {
             error: Error,
             isolation: isolated (any Actor)? = #isolation,
             _ body: @escaping (
-                Subprocess.Execution<CustomWriteInput, Output, Error>,
+                Subprocess.Execution<Output, Error>,
                 StandardInputWriter
             ) async throws -> Result
         ) async throws -> ExecutionResult<Result> {
@@ -199,6 +201,7 @@ extension Subprocess {
             // After spawn, cleanup child side fds
             try await self.cleanup(
                 execution: execution,
+                input: input,
                 childSide: true,
                 parentSide: false,
                 attemptToTerminateSubProcess: false
@@ -211,6 +214,7 @@ extension Subprocess {
                     // Clean up parent side when body finishes
                     try await self.cleanup(
                         execution: execution,
+                        input: input,
                         childSide: false,
                         parentSide: true,
                         attemptToTerminateSubProcess: false
@@ -221,6 +225,7 @@ extension Subprocess {
                     // Cleanup everything
                     try await self.cleanup(
                         execution: execution,
+                        input: input,
                         childSide: false,
                         parentSide: true,
                         attemptToTerminateSubProcess: false
@@ -233,6 +238,83 @@ extension Subprocess {
                 // this is the best we can do
                 try? await self.cleanup(
                     execution: execution,
+                    input: input,
+                    childSide: true,
+                    parentSide: true,
+                    attemptToTerminateSubProcess: true
+                )
+            }
+        }
+
+        @available(macOS 9999, *)
+        internal func run<
+            InputElement: BitwiseCopyable,
+            Output: Subprocess.OutputProtocol,
+            Error: Subprocess.OutputProtocol
+        >(
+            input: borrowing Span<InputElement>,
+            output: Output,
+            error: Error,
+            isolation: isolated (any Actor)? = #isolation
+        ) async throws -> CollectedResult<Output, Error> {
+            let writerInput = CustomWriteInput()
+            let execution = try self.spawn(
+                withInput: writerInput,
+                output: output,
+                error: error
+            )
+            // After spawn, clean up child side
+            try await self.cleanup(
+                execution: execution,
+                input: writerInput,
+                childSide: true,
+                parentSide: false,
+                attemptToTerminateSubProcess: false
+            )
+            return try await withAsyncTaskCancellationHandler {
+                // Spawn parallel tasks to monitor exit status
+                // and capture outputs. Input writing must happen
+                // in this scope for Span
+                async let terminationStatus = try monitorProcessTermination(
+                    forProcessWithIdentifier: execution.processIdentifier
+                )
+                async let (
+                    standardOutput,
+                    standardError,
+                ) = try await execution.captureIOs()
+                // Write input in the same scope
+                guard let writeFd = try writerInput.writeFileDescriptor() else {
+                    fatalError("Trying to write to an input that has been closed")
+                }
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Swift.Error>) in
+                    input.withUnsafeBytes { ptr in
+                        let dispatchData = DispatchData(bytesNoCopy: ptr, deallocator: .custom(nil, { /* noop */ }))
+
+                        writeFd.write(dispatchData) { error in
+                            if let error = error {
+                                continuation.resume(throwing: error)
+                            } else {
+                                continuation.resume()
+                            }
+                        }
+                    }
+
+                }
+                try writerInput.closeWriteFileDescriptor()
+
+                return CollectedResult(
+                    processIdentifier: execution.processIdentifier,
+                    terminationStatus: try await terminationStatus,
+                    standardOutput: try await standardOutput,
+                    standardError: try await standardError
+                )
+            } onCancel: {
+                // Attempt to terminate the child process
+                // Since the task has already been cancelled,
+                // this is the best we can do
+                try? await self.cleanup(
+                    execution: execution,
+                    input: writerInput,
                     childSide: true,
                     parentSide: true,
                     attemptToTerminateSubProcess: true
@@ -250,7 +332,7 @@ extension Subprocess {
             output: Output,
             error: Error,
             isolation: isolated (any Actor)? = #isolation,
-            _ body: (@escaping (Subprocess.Execution<Input, Output, Error>) async throws -> Result)
+            _ body: (@escaping (Subprocess.Execution<Output, Error>) async throws -> Result)
         ) async throws -> ExecutionResult<Result> {
             let execution = try self.spawn(
                 withInput: input,
@@ -260,10 +342,12 @@ extension Subprocess {
             // After spawn, clean up child side
             try await self.cleanup(
                 execution: execution,
+                input: input,
                 childSide: true,
                 parentSide: false,
                 attemptToTerminateSubProcess: false
             )
+
             return try await withAsyncTaskCancellationHandler {
                 do {
                     return try await withThrowingTaskGroup(
@@ -286,6 +370,7 @@ extension Subprocess {
                         // After body finishes, cleanup parent side
                         try await self.cleanup(
                             execution: execution,
+                            input: input,
                             childSide: false,
                             parentSide: true,
                             attemptToTerminateSubProcess: false
@@ -301,6 +386,7 @@ extension Subprocess {
                 } catch {
                     try await self.cleanup(
                         execution: execution,
+                        input: input,
                         childSide: false,
                         parentSide: true,
                         attemptToTerminateSubProcess: false
@@ -313,6 +399,7 @@ extension Subprocess {
                 // this is the best we can do
                 try? await self.cleanup(
                     execution: execution,
+                    input: input,
                     childSide: true,
                     parentSide: true,
                     attemptToTerminateSubProcess: true
@@ -322,6 +409,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Configuration : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         return """
@@ -349,6 +437,7 @@ Subprocess.Configuration(
 }
 
 // MARK: - Executable
+@available(macOS 9999, *)
 extension Subprocess {
     /// `Subprocess.Executable` defines how should the executable
     /// be looked up for execution.
@@ -385,6 +474,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Executable : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch storage {
@@ -406,6 +496,7 @@ extension Subprocess.Executable : CustomStringConvertible, CustomDebugStringConv
 }
 
 // MARK: - Arguments
+@available(macOS 9999, *)
 extension Subprocess {
     /// A collection of arguments to pass to the subprocess.
     public struct Arguments: Sendable, ExpressibleByArrayLiteral, Hashable {
@@ -468,6 +559,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Arguments : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         var result: [String] = self.storage.map(\.description)
@@ -482,6 +574,7 @@ extension Subprocess.Arguments : CustomStringConvertible, CustomDebugStringConve
 }
 
 // MARK: - Environment
+@available(macOS 9999, *)
 extension Subprocess {
     /// A set of environment variables to use when executing the subprocess.
     public struct Environment: Sendable, Hashable {
@@ -522,6 +615,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.Environment : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch self.config {
@@ -537,6 +631,7 @@ extension Subprocess.Environment : CustomStringConvertible, CustomDebugStringCon
     }
 }
 
+@available(macOS 9999, *)
 fileprivate extension Dictionary where Key == String, Value == String {
     func wrapToStringOrRawBytes() -> [Subprocess.StringOrRawBytes : Subprocess.StringOrRawBytes] {
         var result = Dictionary<
@@ -550,6 +645,7 @@ fileprivate extension Dictionary where Key == String, Value == String {
     }
 }
 
+@available(macOS 9999, *)
 fileprivate extension Dictionary where Key == Data, Value == Data {
     func wrapToStringOrRawBytes() -> [Subprocess.StringOrRawBytes : Subprocess.StringOrRawBytes] {
         var result = Dictionary<
@@ -563,6 +659,7 @@ fileprivate extension Dictionary where Key == Data, Value == Data {
     }
 }
 
+@available(macOS 9999, *)
 fileprivate extension Dictionary where Key == Subprocess.StringOrRawBytes, Value == Subprocess.StringOrRawBytes {
     var dictionaryDescription: String {
         var result = "[\n"
@@ -583,6 +680,7 @@ fileprivate extension Data {
 }
 
 // MARK: - TerminationStatus
+@available(macOS 9999, *)
 extension Subprocess {
     /// An exit status of a subprocess.
     @frozen
@@ -609,6 +707,7 @@ extension Subprocess {
     }
 }
 
+@available(macOS 9999, *)
 extension Subprocess.TerminationStatus : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch self {
@@ -625,6 +724,7 @@ extension Subprocess.TerminationStatus : CustomStringConvertible, CustomDebugStr
 }
 
 // MARK: - Internal
+@available(macOS 9999, *)
 extension Subprocess {
     internal enum StringOrRawBytes: Sendable, Hashable {
         case string(String)
@@ -738,7 +838,7 @@ public enum QualityOfService: Int, Sendable {
 }
 
 internal func withAsyncTaskCancellationHandler<Result>(
-    _ body: @escaping () async throws -> Result,
+    _ body: () async throws -> Result,
     onCancel handler: @Sendable @escaping () async -> Void,
     isolation: isolated (any Actor)? = #isolation
 ) async rethrows -> Result {

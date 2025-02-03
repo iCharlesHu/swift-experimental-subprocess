@@ -13,10 +13,11 @@
 
 import _CShims
 import XCTest
-import SystemPackage
+import System
 @testable import SwiftExperimentalSubprocess
 
 // MARK: PlatformOptions Tests
+@available(macOS 9999, *)
 final class SubprocessDarwinTests : XCTestCase {
     func testSubprocessPlatformOptionsProcessConfiguratorUpdateSpawnAttr() async throws {
         var platformOptions = Subprocess.PlatformOptions()
