@@ -46,7 +46,7 @@ extension Subprocess {
     public protocol PipeBasedInputProtocol: InputProtocol {
         /// The underlying pipe used by this input in order to
         /// write input to child process
-        var pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
+        var pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
     }
 
     /// A concrete `Input` type for subprocesses that indicates
@@ -54,8 +54,8 @@ extension Subprocess {
     /// `NoInput` redirects the standard input of the subprocess
     /// to `/dev/null`, while on Windows, it does not bind any
     /// file handle to the subprocess standard input handle.
-    public struct NoInput: InputProtocol {
-        private let devnull: LockedState<FileDescriptor?>
+    public final class NoInput: InputProtocol {
+        private let devnull: Mutex<FileDescriptor?>
 
         public func readFileDescriptor() throws -> FileDescriptor? {
             return try self.devnull.withLock { fd in
@@ -88,7 +88,7 @@ extension Subprocess {
         }
 
         internal init() {
-            self.devnull = LockedState(initialState: nil)
+            self.devnull = Mutex(nil)
         }
     }
 
@@ -99,7 +99,7 @@ extension Subprocess {
     /// after the subprocess is spawned.
     public final class FileDescriptorInput: InputProtocol {
         private let closeAfterSpawningProcess: Bool
-        private let fileDescriptor: LockedState<FileDescriptor?>
+        private let fileDescriptor: Mutex<FileDescriptor?>
 
         public func readFileDescriptor() throws -> FileDescriptor? {
             return self.fileDescriptor.withLock { $0 }
@@ -130,7 +130,7 @@ extension Subprocess {
             fileDescriptor: FileDescriptor,
             closeAfterSpawningProcess: Bool
         ) {
-            self.fileDescriptor = LockedState(initialState: fileDescriptor)
+            self.fileDescriptor = Mutex(fileDescriptor)
             self.closeAfterSpawningProcess = closeAfterSpawningProcess
         }
     }
@@ -144,7 +144,7 @@ extension Subprocess {
     >: PipeBasedInputProtocol {
         private let string: InputString
         internal let encoding: String.Encoding
-        public let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+        public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func write() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
@@ -171,7 +171,7 @@ extension Subprocess {
         internal init(string: InputString, encoding: String.Encoding) {
             self.string = string
             self.encoding = encoding
-            self.pipe = LockedState(initialState: nil)
+            self.pipe = Mutex(nil)
         }
     }
     
@@ -181,7 +181,7 @@ extension Subprocess {
         InputSequence: Sequence & Sendable
     >: PipeBasedInputProtocol, Sendable where InputSequence.Element == UInt8 {
         private let sequence: InputSequence
-        public let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+        public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func write() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
@@ -203,7 +203,7 @@ extension Subprocess {
 
         internal init(underlying: InputSequence) {
             self.sequence = underlying
-            self.pipe = LockedState(initialState: nil)
+            self.pipe = Mutex(nil)
         }
     }
 
@@ -211,11 +211,11 @@ extension Subprocess {
     /// from a specified sequence of `Data`. This type should be preferred
     /// over `Subprocess.UInt8SequenceInput` when dealing with
     /// large amount input data.
-    public struct DataSequenceInput<
+    public final class DataSequenceInput<
         InputSequence: Sequence & Sendable
     >: PipeBasedInputProtocol where InputSequence.Element == Data {
         private let sequence: InputSequence
-        public let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+        public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func write() async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
@@ -242,7 +242,7 @@ extension Subprocess {
 
         internal init(underlying: InputSequence) {
             self.sequence = underlying
-            self.pipe = LockedState(initialState: nil)
+            self.pipe = Mutex(nil)
         }
     }
 
@@ -252,7 +252,7 @@ extension Subprocess {
         InputSequence: AsyncSequence & Sendable
     >: PipeBasedInputProtocol where InputSequence.Element == Data {
         private let sequence: InputSequence
-        public let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+        public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         private func writeChunk(_ chunk: Data) async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
@@ -280,21 +280,21 @@ extension Subprocess {
 
         internal init(underlying: InputSequence) {
             self.sequence = underlying
-            self.pipe = LockedState(initialState: nil)
+            self.pipe = Mutex(nil)
         }
     }
 
     /// A concrete `Input` type for subprocess that indicates that
     /// the Subprocess should read its input from `StandardInputWriter`.
     public final class CustomWriteInput: PipeBasedInputProtocol {
-        public let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+        public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func write() async throws {
             // NOOP
         }
 
         internal init() {
-            self.pipe = LockedState(initialState: nil)
+            self.pipe = Mutex(nil)
         }
     }
 }
@@ -438,7 +438,7 @@ extension Subprocess {
     public protocol PipeBasedOutputProtocol: OutputProtocol {
         /// The underlying pipe used by this output in order to
         /// read from the child process
-        var pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
+        var pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
     }
 
     /// A concrete `Output` type for subprocesses that indicates that
@@ -450,7 +450,7 @@ extension Subprocess {
     public final class DiscardedOutput: OutputProtocol {
         public typealias OutputType = Void
 
-        private let devnull: LockedState<FileDescriptor?>
+        private let devnull: Mutex<FileDescriptor?>
 
          public func readFileDescriptor() throws -> FileDescriptor? {
              return try self.devnull.withLock { fd in
@@ -489,7 +489,7 @@ extension Subprocess {
         }
 
         internal init() {
-            self.devnull = LockedState(initialState: nil)
+            self.devnull = Mutex(nil)
         }
     }
 
@@ -502,7 +502,7 @@ extension Subprocess {
         public typealias OutputType = Void
 
         private let closeAfterSpawningProcess: Bool
-        private let fileDescriptor: LockedState<FileDescriptor?>
+        private let fileDescriptor: Mutex<FileDescriptor?>
 
         public func readFileDescriptor() throws -> FileDescriptor? {
             return nil
@@ -533,7 +533,7 @@ extension Subprocess {
             fileDescriptor: FileDescriptor,
             closeAfterSpawningProcess: Bool
         ) {
-            self.fileDescriptor = LockedState(initialState: fileDescriptor)
+            self.fileDescriptor = Mutex(fileDescriptor)
             self.closeAfterSpawningProcess = closeAfterSpawningProcess
         }
     }
@@ -544,10 +544,10 @@ extension Subprocess {
     /// only applicable to the `run()` family that takes a custom closure.
     public final class SequenceOutput: PipeBasedOutputProtocol {
         public typealias OutputType = Void
-        public let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+        public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         internal init() {
-            self.pipe = LockedState(initialState: nil)
+            self.pipe = Mutex(nil)
         }
     }
 
@@ -557,7 +557,7 @@ extension Subprocess {
     public final class DataOutput: PipeBasedOutputProtocol {
         public typealias OutputType = Data
         public let maxSize: Int
-        public let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+        public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func output(from span: RawSpan) throws -> Data {
             return Data(span)
@@ -565,7 +565,7 @@ extension Subprocess {
 
         internal init(limit: Int) {
             self.maxSize = limit
-            self.pipe = LockedState(initialState: nil)
+            self.pipe = Mutex(nil)
         }
     }
 
@@ -577,7 +577,7 @@ extension Subprocess {
         public typealias OutputType = String?
         public let maxSize: Int
         internal let encoding: String.Encoding
-        public let pipe: LockedState<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+        public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
         public func output(from span: RawSpan) throws -> String? {
             // FIXME: Span to String
@@ -591,7 +591,7 @@ extension Subprocess {
         internal init(limit: Int, encoding: String.Encoding) {
             self.maxSize = limit
             self.encoding = encoding
-            self.pipe = LockedState(initialState: nil)
+            self.pipe = Mutex(nil)
         }
     }
 }
@@ -600,7 +600,7 @@ extension Subprocess {
 extension Subprocess.OutputProtocol {
     public func output(from data: DispatchData) throws -> OutputType {
         //FIXME: remove workaround for rdar://143992296
-        try output(from: data.bytes)
+        return try self.output(from: data.bytes)
     }
 }
 

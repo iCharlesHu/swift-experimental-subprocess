@@ -237,9 +237,9 @@ private enum ContinuationOrStatus {
     case status(Subprocess.TerminationStatus)
 }
 
-private let _childProcessContinuations: LockedState<
+private let _childProcessContinuations: Mutex<
     [pid_t: ContinuationOrStatus]
-> = LockedState(initialState: [:])
+> = Mutex([:])
 
 private var signalSource: (any DispatchSourceSignal)? = nil
 private let setup: () = {
