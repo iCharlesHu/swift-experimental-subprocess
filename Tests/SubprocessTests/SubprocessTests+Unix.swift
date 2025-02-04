@@ -19,7 +19,7 @@ import Foundation
 
 import _CShims
 import XCTest
-@testable import SwiftExperimentalSubprocess
+@testable import Subprocess
 
 import Dispatch
 import System
