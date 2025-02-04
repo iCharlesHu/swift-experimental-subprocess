@@ -14,7 +14,7 @@
 import WinSDK
 import XCTest
 import System
-@testable import SwiftExperimentalSubprocess
+@testable import Subprocess
 
 final class SubprocessWindowsTests: XCTestCase {
     private let cmdExe: Subprocess.Executable = .at("C:\\Windows\\System32\\cmd.exe")

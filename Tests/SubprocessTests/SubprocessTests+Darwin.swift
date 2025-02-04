@@ -14,7 +14,7 @@
 import _CShims
 import XCTest
 import System
-@testable import SwiftExperimentalSubprocess
+@testable import Subprocess
 
 // MARK: PlatformOptions Tests
 @available(macOS 9999, *)

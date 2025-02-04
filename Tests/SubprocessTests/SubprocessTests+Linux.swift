@@ -12,7 +12,7 @@
 #if canImport(Glibc)
 
 import XCTest
-@testable import SwiftExperimentalSubprocess
+@testable import Subprocess
 
 // MARK: PlatformOption Tests
 final class SubprocessLinuxTests: XCTestCase {
