@@ -732,7 +732,7 @@ extension SubprocessUnixTests {
         ) { subprocess in
             return try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    try await Task.sleep(nanoseconds: 200_00_000)
+                    try await Task.sleep(for: .milliseconds(200))
                     // Send shut down signal
                     await subprocess.teardown(using: [
                         .sendSignal(.quit, allowedDurationToExit: .milliseconds(500)),
@@ -922,6 +922,40 @@ internal func assertNewSessionCreated<Output: Subprocess.OutputProtocol>(
     let tpgid = try XCTUnwrap(Int(psValue[5]))
     XCTAssertEqual(pid, pgid)
     XCTAssertTrue(tpgid <= 0)
+}
+
+extension FileDescriptor {
+    internal func readUntilEOF(upToLength maxLength: Int) async throws -> Data {
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, any Error>) in
+            let dispatchIO = DispatchIO(
+                type: .stream,
+                fileDescriptor: self.rawValue,
+                queue: .global()
+            ) { error in
+                if error != 0 {
+                    continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                }
+            }
+            var buffer: Data = Data()
+            dispatchIO.read(
+                offset: 0,
+                length: maxLength,
+                queue: .global()
+            ) { done, data, error in
+                guard error == 0 else {
+                    continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                    return
+                }
+                if let data = data {
+                    buffer += Data(data)
+                }
+                if done {
+                    dispatchIO.close()
+                    continuation.resume(returning: buffer)
+                }
+            }
+        }
+    }
 }
 
 #endif // canImport(Darwin) || canImport(Glibc)
