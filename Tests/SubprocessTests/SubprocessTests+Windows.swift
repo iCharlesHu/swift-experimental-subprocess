@@ -13,7 +13,11 @@
 
 import WinSDK
 import XCTest
+#if canImport(System)
 import System
+#else
+@preconcurrency import SystemPackage
+#endif
 @testable import Subprocess
 
 final class SubprocessWindowsTests: XCTestCase {

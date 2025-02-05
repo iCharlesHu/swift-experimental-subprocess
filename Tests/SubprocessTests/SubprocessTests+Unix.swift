@@ -22,7 +22,11 @@ import XCTest
 @testable import Subprocess
 
 import Dispatch
+#if canImport(System)
 import System
+#else
+@preconcurrency import SystemPackage
+#endif
 
 final class SubprocessUnixTests: XCTestCase { }
 
@@ -627,7 +631,7 @@ extension SubprocessUnixTests {
             throw XCTSkip("This test requires root privileges")
         }
         let expectedUserID = uid_t(Int.random(in: 1000 ... 2000))
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.userID = expectedUserID
         try await self.assertID(
             withArgument: "-u",
@@ -642,7 +646,7 @@ extension SubprocessUnixTests {
             throw XCTSkip("This test requires root privileges")
         }
         let expectedGroupID = gid_t(Int.random(in: 1000 ... 2000))
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.groupID = expectedGroupID
         try await self.assertID(
             withArgument: "-g",
@@ -660,7 +664,7 @@ extension SubprocessUnixTests {
         for _ in 0 ..< Int.random(in: 5 ... 10) {
             expectedGroups.insert(gid_t(Int.random(in: 1000 ... 2000)))
         }
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.supplementaryGroups = Array(expectedGroups)
         let idResult = try await Subprocess.run(
             .named("/usr/bin/swift"),
@@ -680,7 +684,7 @@ extension SubprocessUnixTests {
         guard getuid() == 0 else {
             throw XCTSkip("This test requires root privileges")
         }
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         // Sets the process group ID to 0, which creates a new session
         platformOptions.processGroupID = 0
         let psResult = try await Subprocess.run(
@@ -702,7 +706,7 @@ extension SubprocessUnixTests {
 
     func testSubprocessPlatformOptionsCreateSession() async throws {
         // platformOptions.createSession implies calls to setsid
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.createSession = true
         // Check the proces ID (pid), pross group ID (pgid), and
         // controling terminal's process group ID (tpgid)
@@ -767,7 +771,7 @@ extension SubprocessUnixTests {
 extension SubprocessUnixTests {
     func testRunDetached() async throws {
         let (readFd, writeFd) = try FileDescriptor.pipe()
-        let pid = try Subprocess.runDetached(
+        let pid = try runDetached(
             .at("/bin/bash"),
             arguments: ["-c", "echo $$"],
             output: writeFd
@@ -796,7 +800,7 @@ extension SubprocessUnixTests {
             XCTFail("Wrong termination status repored")
             return
         }
-        XCTAssertEqual(exception, Subprocess.Signal.terminate.rawValue)
+        XCTAssertEqual(exception, Signal.terminate.rawValue)
     }
 }
 
@@ -879,7 +883,7 @@ extension SubprocessUnixTests {
 extension SubprocessUnixTests {
     private func assertID(
         withArgument argument: String,
-        platformOptions: Subprocess.PlatformOptions,
+        platformOptions: PlatformOptions,
         isEqualTo expected: gid_t
     ) async throws {
         let idResult = try await Subprocess.run(
@@ -898,9 +902,9 @@ extension SubprocessUnixTests {
 }
 
 @available(macOS 9999, *)
-internal func assertNewSessionCreated<Output: Subprocess.OutputProtocol>(
-    with result: Subprocess.CollectedResult<
-        Subprocess.StringOutput,
+internal func assertNewSessionCreated<Output: OutputProtocol>(
+    with result: CollectedResult<
+        StringOutput,
         Output
     >
 ) throws {

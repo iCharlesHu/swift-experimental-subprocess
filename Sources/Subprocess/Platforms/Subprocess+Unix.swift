@@ -30,77 +30,100 @@ import _CShims
 #endif
 
 import Dispatch
+#if canImport(System)
 import System
+#else
+@preconcurrency import SystemPackage
+#endif
 
 // MARK: - Signals
+
+/// Signals are standardized messages sent to a running program
+/// to trigger specific behavior, such as quitting or error handling.
 @available(macOS 9999, *)
-extension Subprocess {
-    /// Signals are standardized messages sent to a running program
-    /// to trigger specific behavior, such as quitting or error handling.
-    public struct Signal : Hashable, Sendable {
-        /// The underlying platform specific value for the signal
-        public let rawValue: Int32
+public struct Signal : Hashable, Sendable {
+    /// The underlying platform specific value for the signal
+    public let rawValue: Int32
 
-        private init(rawValue: Int32) {
-            self.rawValue = rawValue
-        }
+    private init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
 
-        /// The `.interrupt` signal is sent to a process by its
-        /// controlling terminal when a user wishes to interrupt
-        /// the process.
-        public static var interrupt: Self { .init(rawValue: SIGINT) }
-        /// The `.terminate` signal is sent to a process to request its
-        /// termination. Unlike the `.kill` signal, it can be caught
-        /// and interpreted or ignored by the process. This allows
-        /// the process to perform nice termination releasing resources
-        /// and saving state if appropriate. `.interrupt` is nearly
-        /// identical to `.terminate`.
-        public static var terminate: Self { .init(rawValue: SIGTERM) }
-        /// The `.suspend` signal instructs the operating system
-        /// to stop a process for later resumption.
-        public static var suspend: Self { .init(rawValue: SIGSTOP) }
-        /// The `resume` signal instructs the operating system to
-        /// continue (restart) a process previously paused by the
-        /// `.suspend` signal.
-        public static var resume: Self { .init(rawValue: SIGCONT) }
-        /// The `.kill` signal is sent to a process to cause it to
-        /// terminate immediately (kill). In contrast to `.terminate`
-        /// and `.interrupt`, this signal cannot be caught or ignored,
-        /// and the receiving process cannot perform any
-        /// clean-up upon receiving this signal.
-        public static var kill: Self { .init(rawValue: SIGKILL) }
-        /// The `.terminalClosed` signal is sent to a process when
-        /// its controlling terminal is closed. In modern systems,
-        /// this signal usually means that the controlling pseudo
-        /// or virtual terminal has been closed.
-        public static var terminalClosed: Self { .init(rawValue: SIGHUP) }
-        /// The `.quit` signal is sent to a process by its controlling
-        /// terminal when the user requests that the process quit
-        /// and perform a core dump.
-        public static var quit: Self { .init(rawValue: SIGQUIT) }
-        /// The `.userDefinedOne` signal is sent to a process to indicate
-        /// user-defined conditions.
-        public static var userDefinedOne: Self { .init(rawValue: SIGUSR1) }
-        /// The `.userDefinedTwo` signal is sent to a process to indicate
-        /// user-defined conditions.
-        public static var userDefinedTwo: Self { .init(rawValue: SIGUSR2) }
-        /// The `.alarm` signal is sent to a process when the corresponding
-        /// time limit is reached.
-        public static var alarm: Self { .init(rawValue: SIGALRM) }
-        /// The `.windowSizeChange` signal is sent to a process when
-        /// its controlling terminal changes its size (a window change).
-        public static var windowSizeChange: Self { .init(rawValue: SIGWINCH) }
+    /// The `.interrupt` signal is sent to a process by its
+    /// controlling terminal when a user wishes to interrupt
+    /// the process.
+    public static var interrupt: Self { .init(rawValue: SIGINT) }
+    /// The `.terminate` signal is sent to a process to request its
+    /// termination. Unlike the `.kill` signal, it can be caught
+    /// and interpreted or ignored by the process. This allows
+    /// the process to perform nice termination releasing resources
+    /// and saving state if appropriate. `.interrupt` is nearly
+    /// identical to `.terminate`.
+    public static var terminate: Self { .init(rawValue: SIGTERM) }
+    /// The `.suspend` signal instructs the operating system
+    /// to stop a process for later resumption.
+    public static var suspend: Self { .init(rawValue: SIGSTOP) }
+    /// The `resume` signal instructs the operating system to
+    /// continue (restart) a process previously paused by the
+    /// `.suspend` signal.
+    public static var resume: Self { .init(rawValue: SIGCONT) }
+    /// The `.kill` signal is sent to a process to cause it to
+    /// terminate immediately (kill). In contrast to `.terminate`
+    /// and `.interrupt`, this signal cannot be caught or ignored,
+    /// and the receiving process cannot perform any
+    /// clean-up upon receiving this signal.
+    public static var kill: Self { .init(rawValue: SIGKILL) }
+    /// The `.terminalClosed` signal is sent to a process when
+    /// its controlling terminal is closed. In modern systems,
+    /// this signal usually means that the controlling pseudo
+    /// or virtual terminal has been closed.
+    public static var terminalClosed: Self { .init(rawValue: SIGHUP) }
+    /// The `.quit` signal is sent to a process by its controlling
+    /// terminal when the user requests that the process quit
+    /// and perform a core dump.
+    public static var quit: Self { .init(rawValue: SIGQUIT) }
+    /// The `.userDefinedOne` signal is sent to a process to indicate
+    /// user-defined conditions.
+    public static var userDefinedOne: Self { .init(rawValue: SIGUSR1) }
+    /// The `.userDefinedTwo` signal is sent to a process to indicate
+    /// user-defined conditions.
+    public static var userDefinedTwo: Self { .init(rawValue: SIGUSR2) }
+    /// The `.alarm` signal is sent to a process when the corresponding
+    /// time limit is reached.
+    public static var alarm: Self { .init(rawValue: SIGALRM) }
+    /// The `.windowSizeChange` signal is sent to a process when
+    /// its controlling terminal changes its size (a window change).
+    public static var windowSizeChange: Self { .init(rawValue: SIGWINCH) }
+}
+
+// MARK: - ProcessIdentifier
+
+/// A platform independent identifier for a Subprocess.
+@available(macOS 9999, *)
+public struct ProcessIdentifier: Sendable, Hashable, Codable {
+    /// The platform specific process identifier value
+    public let value: pid_t
+
+    public init(value: pid_t) {
+        self.value = value
     }
 }
 
 @available(macOS 9999, *)
-extension Subprocess.Execution {
+extension ProcessIdentifier : CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String { "\(self.value)" }
+
+    public var debugDescription: String { "\(self.value)" }
+}
+
+@available(macOS 9999, *)
+extension Execution {
     /// Send the given signal to the child process.
     /// - Parameters:
     ///   - signal: The signal to send.
     ///   - shouldSendToProcessGroup: Whether this signal should be sent to
     ///     the entire process group.
-    public func send(signal: Subprocess.Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
+    public func send(signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
         let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
         guard kill(pid, signal.rawValue) == 0 else {
             throw POSIXError(.init(rawValue: errno)!)
@@ -125,7 +148,7 @@ extension Subprocess.Execution {
 
 // MARK: - Environment Resolution
 @available(macOS 9999, *)
-extension Subprocess.Environment {
+extension Environment {
     internal static let pathEnvironmentVariableName = "PATH"
 
     internal func pathValue() -> String? {
@@ -149,8 +172,8 @@ extension Subprocess.Environment {
     // manually deallocated
     internal func createEnv() -> [UnsafeMutablePointer<CChar>?] {
         func createFullCString(
-            fromKey keyContainer: Subprocess.StringOrRawBytes,
-            value valueContainer: Subprocess.StringOrRawBytes
+            fromKey keyContainer: StringOrRawBytes,
+            value valueContainer: StringOrRawBytes
         ) -> UnsafeMutablePointer<CChar> {
             let rawByteKey: UnsafeMutablePointer<CChar> = keyContainer.createRawBytes()
             let rawByteValue: UnsafeMutablePointer<CChar> = valueContainer.createRawBytes()
@@ -212,7 +235,7 @@ extension Subprocess.Environment {
 
 // MARK: Args Creation
 @available(macOS 9999, *)
-extension Subprocess.Arguments {
+extension Arguments {
     // This method follows the standard "create" rule: `args` needs to be
     // manually deallocated
     internal func createArgs(withExecutablePath executablePath: String) -> [UnsafeMutablePointer<CChar>?] {
@@ -228,30 +251,9 @@ extension Subprocess.Arguments {
     }
 }
 
-// MARK: - ProcessIdentifier
-@available(macOS 9999, *)
-extension Subprocess {
-    /// A platform independent identifier for a subprocess.
-    public struct ProcessIdentifier: Sendable, Hashable, Codable {
-        /// The platform specific process identifier value
-        public let value: pid_t
-
-        public init(value: pid_t) {
-            self.value = value
-        }
-    }
-}
-
-@available(macOS 9999, *)
-extension Subprocess.ProcessIdentifier : CustomStringConvertible, CustomDebugStringConvertible {
-    public var description: String { "\(self.value)" }
-
-    public var debugDescription: String { "\(self.value)" }
-}
-
 // MARK: -  Executable Searching
 @available(macOS 9999, *)
-extension Subprocess.Executable {
+extension Executable {
     internal static var defaultSearchPaths: Set<String> {
         return Set([
             "/usr/bin",
@@ -266,7 +268,7 @@ extension Subprocess.Executable {
         switch self.storage {
         case .executable(let executableName):
             // If the executableName in is already a full path, return it directly
-            if Subprocess.Configuration.pathAccessible(executableName, mode: X_OK) {
+            if Configuration.pathAccessible(executableName, mode: X_OK) {
                 return executableName
             }
             // Get $PATH from environment
@@ -280,7 +282,7 @@ extension Subprocess.Executable {
 
             for path in searchPaths {
                 let fullPath = "\(path)/\(executableName)"
-                let fileExists = Subprocess.Configuration.pathAccessible(fullPath, mode: X_OK)
+                let fileExists = Configuration.pathAccessible(fullPath, mode: X_OK)
                 if fileExists {
                     return fullPath
                 }
@@ -293,9 +295,9 @@ extension Subprocess.Executable {
     }
 }
 
-// MARK: - Configuration
+// MARK: - PreSpawn
 @available(macOS 9999, *)
-extension Subprocess.Configuration {
+extension Configuration {
     internal func preSpawn() throws -> (
         executablePath: String,
         env: [UnsafeMutablePointer<CChar>?],
@@ -367,7 +369,7 @@ extension FileDescriptor {
         return devnull
     }
 
-    internal var platformDescriptor: Subprocess.PlatformFileDescriptor {
+    internal var platformDescriptor: PlatformFileDescriptor {
         return self
     }
 
@@ -490,22 +492,18 @@ extension FileDescriptor {
 }
 
 @available(macOS 9999, *)
-extension Subprocess {
-    internal typealias PlatformFileDescriptor = FileDescriptor
-}
+internal typealias PlatformFileDescriptor = FileDescriptor
 
 // MARK: - Read Buffer Size
 @available(macOS 9999, *)
-extension Subprocess {
-    @inline(__always)
-    internal static var readBufferSize: Int {
+@inline(__always)
+internal var readBufferSize: Int {
 #if canImport(Darwin)
-        return 16384
+    return 16384
 #else
-        // FIXME: Use Platform.pageSize here
-        return 4096
+    // FIXME: Use Platform.pageSize here
+    return 4096
 #endif // canImport(Darwin)
-    }
 }
 
 #endif // canImport(Darwin) || canImport(Glibc)

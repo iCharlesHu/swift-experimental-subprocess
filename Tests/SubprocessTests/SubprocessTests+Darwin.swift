@@ -13,14 +13,18 @@
 
 import _CShims
 import XCTest
+#if canImport(System)
 import System
+#else
+@preconcurrency import SystemPackage
+#endif
 @testable import Subprocess
 
 // MARK: PlatformOptions Tests
 @available(macOS 9999, *)
 final class SubprocessDarwinTests : XCTestCase {
     func testSubprocessPlatformOptionsProcessConfiguratorUpdateSpawnAttr() async throws {
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = { spawnAttr, _ in
             // Set POSIX_SPAWN_SETSID flag, which implies calls
             // to setsid
@@ -41,7 +45,7 @@ final class SubprocessDarwinTests : XCTestCase {
 
     func testSubprocessPlatformOptionsProcessConfiguratorUpdateFileAction() async throws {
         let intendedWorkingDir = FileManager.default.temporaryDirectory.path()
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = { _, fileAttr in
             // Change the working directory
             intendedWorkingDir.withCString { path in

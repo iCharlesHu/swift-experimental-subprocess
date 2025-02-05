@@ -9,304 +9,509 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(System)
 import System
+#else
+@preconcurrency import SystemPackage
+#endif
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #elseif canImport(Foundation)
 import Foundation
 #endif
 
-/// `Subprocess` allows you to spawn new processes,
-/// connect to their input/output/error,
-/// and obtain their return codes.
-@available(macOS 9999, *)
-public struct Subprocess: Sendable {
-    /// Run a executable with given parameters and a custom closure
-    /// to manage the running subprocess' lifetime and its IOs.
-    /// - Parameters:
-    ///   - executable: The executable to run.
-    ///   - arguments: The arguments to pass to the executable.
-    ///   - environment: The environment in which to run the executable.
-    ///   - workingDirectory: The working directory in which to run the executable.
-    ///   - platformOptions: The platform specific options to use
-    ///     when running the executable.
-    ///   - input: The input to send to the executable.
-    ///   - output: The method to use for redirecting the standard output.
-    ///   - error: The method to use for redirecting the standard error.
-    ///   - body: The custom execution body to manually control the running process
-    /// - Returns a CollectedResult containing the result of the run.
-    public static func run<
-        Input: InputProtocol,
-        Output: OutputProtocol,
-        Error: OutputProtocol
-    >(
-        _ executable: Executable,
-        arguments: Arguments = [],
-        environment: Environment = .inherit,
-        workingDirectory: FilePath? = nil,
-        platformOptions: PlatformOptions = PlatformOptions(),
-        input: Input = .none,
-        output: Output = .string,
-        error: Error = .discarded
-    ) async throws -> CollectedResult<Output, Error> {
-        let result = try await Configuration(
-            executable: executable,
-            arguments: arguments,
-            environment: environment,
-            workingDirectory: workingDirectory,
-            platformOptions: platformOptions
-        )
-        .run(input: input, output: output, error: error) { execution in
-            let (
-                standardOutput,
-                standardError,
-            ) = try await execution.captureIOs()
-            return (
-                processIdentifier: execution.processIdentifier,
-                standardOutput: standardOutput,
-                standardError: standardError,
-            )
-        }
-        return CollectedResult(
-            processIdentifier: result.value.processIdentifier,
-            terminationStatus: result.terminationStatus,
-            standardOutput: result.value.standardOutput,
-            standardError: result.value.standardError,
-        )
-    }
 
-    @available(macOS 9999, *)
-    public static func run<
-        InputElement: BitwiseCopyable,
-        Output: OutputProtocol,
-        Error: OutputProtocol
-    >(
-        _ executable: Executable,
-        arguments: Arguments = [],
-        environment: Environment = .inherit,
-        workingDirectory: FilePath? = nil,
-        platformOptions: PlatformOptions = PlatformOptions(),
-        input: borrowing Span<InputElement>,
-        output: Output = .string,
-        error: Error = .discarded
-    ) async throws -> CollectedResult<Output, Error> {
-        return try await Configuration(
-            executable: executable,
-            arguments: arguments,
-            environment: environment,
-            workingDirectory: workingDirectory,
-            platformOptions: platformOptions
-        ).run(input: input, output: output, error: error)
+// MARK: - Collected Result
+
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime and its IOs.
+/// - Parameters:
+///   - executable: The executable to run.
+///   - arguments: The arguments to pass to the executable.
+///   - environment: The environment in which to run the executable.
+///   - workingDirectory: The working directory in which to run the executable.
+///   - platformOptions: The platform specific options to use
+///     when running the executable.
+///   - input: The input to send to the executable.
+///   - output: The method to use for redirecting the standard output.
+///   - error: The method to use for redirecting the standard error.
+///   - body: The custom execution body to manually control the running process
+/// - Returns a CollectedResult containing the result of the run.
+@available(macOS 9999, *)
+public func run<
+    Input: InputProtocol,
+    Output: OutputProtocol,
+    Error: OutputProtocol
+>(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    input: Input = .none,
+    output: Output = .string,
+    error: Error = .discarded
+) async throws -> CollectedResult<Output, Error> {
+    let result = try await Configuration(
+        executable: executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions
+    )
+    .run(input: input, output: output, error: error) { execution in
+        let (
+            standardOutput,
+            standardError,
+        ) = try await execution.captureIOs()
+        return (
+            processIdentifier: execution.processIdentifier,
+            standardOutput: standardOutput,
+            standardError: standardError,
+        )
     }
+    return CollectedResult(
+        processIdentifier: result.value.processIdentifier,
+        terminationStatus: result.terminationStatus,
+        standardOutput: result.value.standardOutput,
+        standardError: result.value.standardError,
+    )
 }
 
-// MARK: Custom Execution Body
 @available(macOS 9999, *)
-extension Subprocess {
-    /// Run a executable with given parameters and a custom closure
-    /// to manage the running subprocess' lifetime and its IOs.
-    /// - Parameters:
-    ///   - executable: The executable to run.
-    ///   - arguments: The arguments to pass to the executable.
-    ///   - environment: The environment in which to run the executable.
-    ///   - workingDirectory: The working directory in which to run the executable.
-    ///   - platformOptions: The platform specific options to use
-    ///     when running the executable.
-    ///   - input: The input to send to the executable.
-    ///   - body: The custom execution body to manually control the running process
-    /// - Returns a ExecutableResult type containing the return value
-    ///     of the closure.
-    public static func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: OutputProtocol>(
-        _ executable: Executable,
-        arguments: Arguments = [],
-        environment: Environment = .inherit,
-        workingDirectory: FilePath? = nil,
-        platformOptions: PlatformOptions = PlatformOptions(),
-        input: Input = .none,
-        output: Output = .sequence,
-        error: Error = .discarded,
-        isolation: isolated (any Actor)? = #isolation,
-        body: (@escaping (Subprocess.Execution<Output, Error>) async throws -> Result)
-    ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
-        return try await Configuration(
-            executable: executable,
-            arguments: arguments,
-            environment: environment,
-            workingDirectory: workingDirectory,
-            platformOptions: platformOptions
-        )
-        .run(input: input, output: output, error: error, body)
-    }
+public func run<
+    InputElement: BitwiseCopyable,
+    Output: OutputProtocol,
+    Error: OutputProtocol
+>(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    input: borrowing Span<InputElement>,
+    output: Output = .string,
+    error: Error = .discarded
+) async throws -> CollectedResult<Output, Error> {
+    return try await Configuration(
+        executable: executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions
+    ).run(input: input, output: output, error: error)
+}
 
-    /// Run a executable with given parameters and a custom closure
-    /// to manage the running subprocess' lifetime and write to its
-    /// standard input via `StandardInputWriter`
-    /// - Parameters:
-    ///   - executable: The executable to run.
-    ///   - arguments: The arguments to pass to the executable.
-    ///   - environment: The environment in which to run the executable.
-    ///   - workingDirectory: The working directory in which to run the executable.
-    ///   - platformOptions: The platform specific options to use
-    ///     when running the executable.
-    ///   - body: The custom execution body to manually control the running process
-    /// - Returns a ExecutableResult type containing the return value
-    ///     of the closure.
-    public static func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
-        _ executable: Executable,
-        arguments: Arguments = [],
-        environment: Environment = .inherit,
-        workingDirectory: FilePath? = nil,
-        platformOptions: PlatformOptions = PlatformOptions(),
-        isolation: isolated (any Actor)? = #isolation,
-        output: Output = .sequence,
-        error: Error = .discarded,
-        body: (@escaping (Subprocess.Execution<Output, Error>, StandardInputWriter) async throws -> Result)
-    ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
-        return try await Configuration(
-            executable: executable,
-            arguments: arguments,
-            environment: environment,
-            workingDirectory: workingDirectory,
-            platformOptions: platformOptions
-        )
-        .run(output: output, error: error, body)
-    }
+// MARK: - Custom Execution Body
+
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime and its IOs.
+/// - Parameters:
+///   - executable: The executable to run.
+///   - arguments: The arguments to pass to the executable.
+///   - environment: The environment in which to run the executable.
+///   - workingDirectory: The working directory in which to run the executable.
+///   - platformOptions: The platform specific options to use
+///     when running the executable.
+///   - input: The input to send to the executable.
+///   - output: How to manage the executable standard ouput.
+///   - error: How to manager executable standard error.
+///   - body: The custom execution body to manually control the running process
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
+@available(macOS 9999, *)
+public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: OutputProtocol>(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    input: Input = .none,
+    output: Output,
+    error: Error,
+    isolation: isolated (any Actor)? = #isolation,
+    body: (@escaping (Execution<Output, Error>) async throws -> Result)
+) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
+    return try await Configuration(
+        executable: executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions
+    )
+    .run(input: input, output: output, error: error, body)
+}
+
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime and discard its
+/// standard error output.
+/// - Parameters:
+///   - executable: The executable to run.
+///   - arguments: The arguments to pass to the executable.
+///   - environment: The environment in which to run the executable.
+///   - workingDirectory: The working directory in which to run the executable.
+///   - platformOptions: The platform specific options to use
+///     when running the executable.
+///   - input: The input to send to the executable.
+///   - output: How to manage the executable standard ouput.
+///   - body: The custom execution body to manually control the running process
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
+@available(macOS 9999, *)
+public func run<Result, Input: InputProtocol, Output: OutputProtocol>(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    input: Input = .none,
+    output: Output,
+    isolation: isolated (any Actor)? = #isolation,
+    body: (@escaping (Execution<Output, DiscardedOutput>) async throws -> Result)
+) async throws -> ExecutionResult<Result> where Output.OutputType == Void {
+    return try await run(
+        executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions,
+        input: input,
+        output: output,
+        error: .discarded,
+        isolation: isolation,
+        body: body
+    )
+}
+
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime and discard its
+/// standard error output.
+/// - Parameters:
+///   - executable: The executable to run.
+///   - arguments: The arguments to pass to the executable.
+///   - environment: The environment in which to run the executable.
+///   - workingDirectory: The working directory in which to run the executable.
+///   - platformOptions: The platform specific options to use
+///     when running the executable.
+///   - input: The input to send to the executable.
+///   - output: How to manage the executable standard ouput.
+///   - body: The custom execution body to manually control the running process
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
+@available(macOS 9999, *)
+public func run<Result, Input: InputProtocol>(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    input: Input = .none,
+    isolation: isolated (any Actor)? = #isolation,
+    body: (@escaping (Execution<SequenceOutput, DiscardedOutput>) async throws -> Result)
+) async throws -> ExecutionResult<Result> {
+    return try await run(
+        executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions,
+        input: input,
+        output: .sequence,
+        error: .discarded,
+        isolation: isolation,
+        body: body
+    )
+}
+
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime and write to its
+/// standard input via `StandardInputWriter`
+/// - Parameters:
+///   - executable: The executable to run.
+///   - arguments: The arguments to pass to the executable.
+///   - environment: The environment in which to run the executable.
+///   - workingDirectory: The working directory in which to run the executable.
+///   - platformOptions: The platform specific options to use
+///     when running the executable.
+///   - output:How to handle executable's standard output
+///   - error: How to handle executable's standard error
+///   - body: The custom execution body to manually control the running process
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
+@available(macOS 9999, *)
+public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    output: Output,
+    error: Error,
+    isolation: isolated (any Actor)? = #isolation,
+    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
+) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
+    return try await Configuration(
+        executable: executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions
+    )
+    .run(output: output, error: error, body)
+}
+
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime, discard its
+/// standard error and write to its standard input via `StandardInputWriter`
+/// - Parameters:
+///   - executable: The executable to run.
+///   - arguments: The arguments to pass to the executable.
+///   - environment: The environment in which to run the executable.
+///   - workingDirectory: The working directory in which to run the executable.
+///   - platformOptions: The platform specific options to use
+///     when running the executable.
+///   - output:How to handle executable's standard output
+///   - body: The custom execution body to manually control the running process
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
+@available(macOS 9999, *)
+public func run<Result, Output: OutputProtocol>(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    output: Output,
+    isolation: isolated (any Actor)? = #isolation,
+    body: (@escaping (Execution<Output, DiscardedOutput>, StandardInputWriter) async throws -> Result)
+) async throws -> ExecutionResult<Result> where Output.OutputType == Void {
+    return try await run(
+        executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions,
+        output: output,
+        error: .discarded,
+        isolation: isolation,
+        body: body
+    )
+}
+
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime, discard its
+/// standard error and write to its standard input via `StandardInputWriter`
+/// - Parameters:
+///   - executable: The executable to run.
+///   - arguments: The arguments to pass to the executable.
+///   - environment: The environment in which to run the executable.
+///   - workingDirectory: The working directory in which to run the executable.
+///   - platformOptions: The platform specific options to use
+///     when running the executable.
+///   - output:How to handle executable's standard output
+///   - body: The custom execution body to manually control the running process
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
+@available(macOS 9999, *)
+public func run<Result>(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    isolation: isolated (any Actor)? = #isolation,
+    body: (@escaping (Execution<SequenceOutput, DiscardedOutput>, StandardInputWriter) async throws -> Result)
+) async throws -> ExecutionResult<Result> {
+    return try await run(
+        executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions,
+        output: .sequence,
+        error: .discarded,
+        isolation: isolation,
+        body: body
+    )
 }
 
 // MARK: - Configuration Based
+/// Run a executable with given parameters specified by a `Configuration`
+/// - Parameters:
+///   - configuration: The `Subprocess` configuration to run.
+///   - output: The method to use for redirecting the standard output.
+///   - error: The method to use for redirecting the standard error.
+///   - body: The custom configuration body to manually control
+///       the running process and write to its standard input.
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
 @available(macOS 9999, *)
-extension Subprocess {
-    /// Run a executable with given parameters specified by a
-    /// `Subprocess.Configuration`
-    /// - Parameters:
-    ///   - configuration: The `Subprocess` configuration to run.
-    ///   - output: The method to use for redirecting the standard output.
-    ///   - error: The method to use for redirecting the standard error.
-    ///   - body: The custom configuration body to manually control
-    ///       the running process and write to its standard input.
-    /// - Returns a ExecutableResult type containing the return value
-    ///     of the closure.
-    public static func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
-        _ configuration: Configuration,
-        isolation: isolated (any Actor)? = #isolation,
-        output: Output = .sequence,
-        error: Error = .discarded,
-        body: (@escaping (Subprocess.Execution<Output, Error>, StandardInputWriter) async throws -> Result)
-    ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
-        return try await configuration.run(output: output, error: error, body)
-    }
+public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
+    _ configuration: Configuration,
+    isolation: isolated (any Actor)? = #isolation,
+    output: Output,
+    error: Error,
+    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
+) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
+    return try await configuration.run(output: output, error: error, body)
+}
+
+/// Run a executable with given parameters specified by a `Configuration`
+/// and discard its standard error
+/// - Parameters:
+///   - configuration: The `Subprocess` configuration to run.
+///   - output: The method to use for redirecting the standard output.
+///   - body: The custom configuration body to manually control
+///       the running process and write to its standard input.
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
+@available(macOS 9999, *)
+public func run<Result, Output: OutputProtocol>(
+    _ configuration: Configuration,
+    isolation: isolated (any Actor)? = #isolation,
+    output: Output,
+    body: (@escaping (Execution<Output, DiscardedOutput>, StandardInputWriter) async throws -> Result)
+) async throws -> ExecutionResult<Result> where Output.OutputType == Void {
+    return try await run(
+        configuration,
+        output: output,
+        error: .discarded,
+        body: body
+    )
+}
+
+/// Run a executable with given parameters specified by a `Configuration`,
+/// redirect its standard output to sequence and discard its standard error.
+/// - Parameters:
+///   - configuration: The `Subprocess` configuration to run.
+///   - body: The custom configuration body to manually control
+///       the running process and write to its standard input.
+/// - Returns a ExecutableResult type containing the return value
+///     of the closure.
+@available(macOS 9999, *)
+public func run<Result>(
+    _ configuration: Configuration,
+    isolation: isolated (any Actor)? = #isolation,
+    body: (@escaping (Execution<SequenceOutput, DiscardedOutput>, StandardInputWriter) async throws -> Result)
+) async throws -> ExecutionResult<Result> {
+    return try await run(
+        configuration,
+        output: .sequence,
+        error: .discarded,
+        body: body
+    )
 }
 
 // MARK: - Detached
-@available(macOS 9999, *)
-extension Subprocess {
-    /// Run a executable with given parameters and return its process
-    /// identifier immediately without monitoring the state of the
-    /// subprocess nor waiting until it exits.
-    ///
-    /// This method is useful for launching subprocesses that outlive their
-    /// parents (for example, daemons and trampolines).
-    ///
-    /// - Parameters:
-    ///   - executable: The executable to run.
-    ///   - arguments: The arguments to pass to the executable.
-    ///   - environment: The environment to use for the process.
-    ///   - workingDirectory: The working directory for the process.
-    ///   - platformOptions: The platform specific options to use for the process.
-    ///   - input: A file descriptor to bind to the subprocess' standard input.
-    ///   - output: A file descriptor to bind to the subprocess' standard output.
-    ///   - error: A file descriptor to bind to the subprocess' standard error.
-    /// - Returns: the process identifier for the subprocess.
-    public static func runDetached(
-        _ executable: Executable,
-        arguments: Arguments = [],
-        environment: Environment = .inherit,
-        workingDirectory: FilePath? = nil,
-        platformOptions: PlatformOptions = PlatformOptions(),
-        input: FileDescriptor? = nil,
-        output: FileDescriptor? = nil,
-        error: FileDescriptor? = nil
-    ) throws -> ProcessIdentifier {
-        let config: Configuration = Configuration(
-            executable: executable,
-            arguments: arguments,
-            environment: environment,
-            workingDirectory: workingDirectory,
-            platformOptions: platformOptions
-        )
-        return try Self.runDetached(config, input: input, output: output, error: error)
-    }
 
-    /// Run a executable with given configuration and return its process
-    /// identifier immediately without monitoring the state of the
-    /// subprocess nor waiting until it exits.
-    ///
-    /// This method is useful for launching subprocesses that outlive their
-    /// parents (for example, daemons and trampolines).
-    ///
-    /// - Parameters:
-    ///   - configuration: The `Subprocess` configuration to run.
-    ///   - input: A file descriptor to bind to the subprocess' standard input.
-    ///   - output: A file descriptor to bind to the subprocess' standard output.
-    ///   - error: A file descriptor to bind to the subprocess' standard error.
-    /// - Returns: the process identifier for the subprocess.
-    public static func runDetached(
-        _ configuration: Configuration,
-        input: FileDescriptor? = nil,
-        output: FileDescriptor? = nil,
-        error: FileDescriptor? = nil
-    ) throws -> ProcessIdentifier {
-        // Create input
-        switch (input, output, error) {
-        case (.none, .none, .none):
-            return try configuration.spawn(
-                withInput: .none,
-                output: .discarded,
-                error: .discarded
-            ).processIdentifier
-        case (.none, .none, .some(let errorFd)):
-            return try configuration.spawn(
-                withInput: .none,
-                output: .discarded,
-                error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
-            ).processIdentifier
-        case (.none, .some(let outputFd), .none):
-            return try configuration.spawn(
-                withInput: .none,
-                output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
-                error: .discarded
-            ).processIdentifier
-        case (.none, .some(let outputFd), .some(let errorFd)):
-            return try configuration.spawn(
-                withInput: .none,
-                output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
-                error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
-            ).processIdentifier
-        case (.some(let inputFd), .none, .none):
-            return try configuration.spawn(
-                withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
-                output: .discarded,
-                error: .discarded
-            ).processIdentifier
-        case (.some(let inputFd), .none, .some(let errorFd)):
-            return try configuration.spawn(
-                withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
-                output: .discarded,
-                error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
-            ).processIdentifier
-        case (.some(let inputFd), .some(let outputFd), .none):
-            return try configuration.spawn(
-                withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
-                output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
-                error: .discarded
-            ).processIdentifier
-        case (.some(let inputFd), .some(let outputFd), .some(let errorFd)):
-            return try configuration.spawn(
-                withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
-                output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
-                error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
-            ).processIdentifier
-        }
+/// Run a executable with given parameters and return its process
+/// identifier immediately without monitoring the state of the
+/// subprocess nor waiting until it exits.
+///
+/// This method is useful for launching subprocesses that outlive their
+/// parents (for example, daemons and trampolines).
+///
+/// - Parameters:
+///   - executable: The executable to run.
+///   - arguments: The arguments to pass to the executable.
+///   - environment: The environment to use for the process.
+///   - workingDirectory: The working directory for the process.
+///   - platformOptions: The platform specific options to use for the process.
+///   - input: A file descriptor to bind to the subprocess' standard input.
+///   - output: A file descriptor to bind to the subprocess' standard output.
+///   - error: A file descriptor to bind to the subprocess' standard error.
+/// - Returns: the process identifier for the subprocess.
+@available(macOS 9999, *)
+public func runDetached(
+    _ executable: Executable,
+    arguments: Arguments = [],
+    environment: Environment = .inherit,
+    workingDirectory: FilePath? = nil,
+    platformOptions: PlatformOptions = PlatformOptions(),
+    input: FileDescriptor? = nil,
+    output: FileDescriptor? = nil,
+    error: FileDescriptor? = nil
+) throws -> ProcessIdentifier {
+    let config: Configuration = Configuration(
+        executable: executable,
+        arguments: arguments,
+        environment: environment,
+        workingDirectory: workingDirectory,
+        platformOptions: platformOptions
+    )
+    return try runDetached(config, input: input, output: output, error: error)
+}
+
+/// Run a executable with given configuration and return its process
+/// identifier immediately without monitoring the state of the
+/// subprocess nor waiting until it exits.
+///
+/// This method is useful for launching subprocesses that outlive their
+/// parents (for example, daemons and trampolines).
+///
+/// - Parameters:
+///   - configuration: The `Subprocess` configuration to run.
+///   - input: A file descriptor to bind to the subprocess' standard input.
+///   - output: A file descriptor to bind to the subprocess' standard output.
+///   - error: A file descriptor to bind to the subprocess' standard error.
+/// - Returns: the process identifier for the subprocess.
+@available(macOS 9999, *)
+public func runDetached(
+    _ configuration: Configuration,
+    input: FileDescriptor? = nil,
+    output: FileDescriptor? = nil,
+    error: FileDescriptor? = nil
+) throws -> ProcessIdentifier {
+    // Create input
+    switch (input, output, error) {
+    case (.none, .none, .none):
+        return try configuration.spawn(
+            withInput: .none,
+            output: .discarded,
+            error: .discarded
+        ).processIdentifier
+    case (.none, .none, .some(let errorFd)):
+        return try configuration.spawn(
+            withInput: .none,
+            output: .discarded,
+            error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
+        ).processIdentifier
+    case (.none, .some(let outputFd), .none):
+        return try configuration.spawn(
+            withInput: .none,
+            output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
+            error: .discarded
+        ).processIdentifier
+    case (.none, .some(let outputFd), .some(let errorFd)):
+        return try configuration.spawn(
+            withInput: .none,
+            output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
+            error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
+        ).processIdentifier
+    case (.some(let inputFd), .none, .none):
+        return try configuration.spawn(
+            withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
+            output: .discarded,
+            error: .discarded
+        ).processIdentifier
+    case (.some(let inputFd), .none, .some(let errorFd)):
+        return try configuration.spawn(
+            withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
+            output: .discarded,
+            error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
+        ).processIdentifier
+    case (.some(let inputFd), .some(let outputFd), .none):
+        return try configuration.spawn(
+            withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
+            output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
+            error: .discarded
+        ).processIdentifier
+    case (.some(let inputFd), .some(let outputFd), .some(let errorFd)):
+        return try configuration.spawn(
+            withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
+            output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
+            error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
+        ).processIdentifier
     }
 }
 

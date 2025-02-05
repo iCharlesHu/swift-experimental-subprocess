@@ -23,49 +23,49 @@ import FoundationEssentials
 import Foundation
 #endif
 
+
+/// A step in the graceful shutdown teardown sequence.
+/// It consists of a signal to send to the child process and the
+/// duration allowed for the child process to exit before proceeding
+/// to the next step.
 @available(macOS 9999, *)
-extension Subprocess {
-    /// A step in the graceful shutdown teardown sequence.
-    /// It consists of a signal to send to the child process and the
-    /// duration allowed for the child process to exit before proceeding
-    /// to the next step.
-    public struct TeardownStep: Sendable, Hashable {
-        internal enum Storage: Sendable, Hashable {
-            case sendSignal(Signal, allowedDuration: Duration)
-            case kill
-        }
-        var storage: Storage
-
-        /// Sends `signal` to the process and allows `allowedDurationToExit`
-        /// for the process to exit before proceeding to the next step.
-        /// The final step in the sequence will always send a `.kill` signal.
-        public static func sendSignal(
-            _ signal: Signal,
-            allowedDurationToExit: Duration
-        ) -> Self {
-            return Self(
-                storage: .sendSignal(
-                    signal,
-                    allowedDuration: allowedDurationToExit
-                )
-            )
-        }
+public struct TeardownStep: Sendable, Hashable {
+    internal enum Storage: Sendable, Hashable {
+        case sendSignal(Signal, allowedDuration: Duration)
+        case kill
     }
+    var storage: Storage
 
-    internal enum TeardownStepCompletion {
-        case processHasExited
-        case processStillAlive
-        case killedTheProcess
+    /// Sends `signal` to the process and allows `allowedDurationToExit`
+    /// for the process to exit before proceeding to the next step.
+    /// The final step in the sequence will always send a `.kill` signal.
+    public static func sendSignal(
+        _ signal: Signal,
+        allowedDurationToExit: Duration
+    ) -> Self {
+        return Self(
+            storage: .sendSignal(
+                signal,
+                allowedDuration: allowedDurationToExit
+            )
+        )
     }
 }
 
 @available(macOS 9999, *)
-extension Subprocess.Execution {
-    internal func runTeardownSequence(_ sequence: [Subprocess.TeardownStep]) async {
+internal enum TeardownStepCompletion {
+    case processHasExited
+    case processStillAlive
+    case killedTheProcess
+}
+
+@available(macOS 9999, *)
+extension Execution {
+    internal func runTeardownSequence(_ sequence: [TeardownStep]) async {
         // First insert the `.kill` step
-        let finalSequence = sequence + [Subprocess.TeardownStep(storage: .kill)]
+        let finalSequence = sequence + [TeardownStep(storage: .kill)]
         for step in finalSequence {
-            let stepCompletion: Subprocess.TeardownStepCompletion
+            let stepCompletion: TeardownStepCompletion
 
             guard self.isAlive() else {
                 return
@@ -73,7 +73,7 @@ extension Subprocess.Execution {
 
             switch step.storage {
             case .sendSignal(let signal, let allowedDuration):
-                stepCompletion = await withTaskGroup(of: Subprocess.TeardownStepCompletion.self) { group in
+                stepCompletion = await withTaskGroup(of: TeardownStepCompletion.self) { group in
                     group.addTask {
                         do {
                             try await Task.sleep(for: allowedDuration)
@@ -104,7 +104,7 @@ extension Subprocess.Execution {
 }
 
 @available(macOS 9999, *)
-extension Subprocess.Execution {
+extension Execution {
     private func isAlive() -> Bool {
         return kill(self.processIdentifier.value, 0) == 0
     }

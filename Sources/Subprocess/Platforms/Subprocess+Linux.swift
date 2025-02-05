@@ -11,26 +11,31 @@
 
 #if canImport(Glibc)
 
+#if canImport(System)
+import System
+#else
+@preconcurrency import SystemPackage
+#endif
+
 import Glibc
 import Dispatch
-import System
+import Synchronization
 import FoundationEssentials
 import _CShims
 
 // Linux specific implementations
 @available(macOS 9999, *)
-extension Subprocess.Configuration {
-    internal typealias StringOrRawBytes = Subprocess.StringOrRawBytes
+extension Configuration {
 
     internal func spawn<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        Input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Subprocess.Execution<Input, Output, Error> {
+    ) throws -> Execution<Output, Error> {
         _setupMonitorSignalHandler()
 
         let (executablePath,
@@ -91,7 +96,7 @@ extension Subprocess.Configuration {
             try self.cleanupAll(input: input, output: output, error: error)
             throw POSIXError(.init(rawValue: spawnError) ?? .ENODEV)
         }
-        return Subprocess.Execution(
+        return Execution(
             processIdentifier: .init(value: pid),
             output: output,
             error: error
@@ -100,56 +105,55 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - Platform Specific Options
-@available(macOS 9999, *)
-extension Subprocess {
-    /// The collection of platform-specific settings
-    /// to configure the subprocess when running
-    public struct PlatformOptions: Sendable {
-        // Set user ID for the subprocess
-        public var userID: uid_t? = nil
-        /// Set the real and effective group ID and the saved
-        /// set-group-ID of the subprocess, equivalent to calling
-        /// `setgid()` on the child process.
-        /// Group ID is used to control permissions, particularly
-        /// for file access.
-        public var groupID: gid_t? = nil
-        // Set list of supplementary group IDs for the subprocess
-        public var supplementaryGroups: [gid_t]? = nil
-        /// Set the process group for the subprocess, equivalent to
-        /// calling `setpgid()` on the child process.
-        /// Process group ID is used to group related processes for
-        /// controlling signals.
-        public var processGroupID: pid_t? = nil
-        // Creates a session and sets the process group ID
-        // i.e. Detach from the terminal.
-        public var createSession: Bool = false
-        /// An ordered list of steps in order to tear down the child
-        /// process in case the parent task is cancelled before
-        /// the child proces terminates.
-        /// Always ends in sending a `.kill` signal at the end.
-        public var teardownSequence: [TeardownStep] = []
-        /// A closure to configure platform-specific
-        /// spawning constructs. This closure enables direct
-        /// configuration or override of underlying platform-specific
-        /// spawn settings that `Subprocess` utilizes internally,
-        /// in cases where Subprocess does not provide higher-level
-        /// APIs for such modifications.
-        ///
-        /// On Linux, Subprocess uses `fork/exec` as the
-        /// underlying spawning mechanism. This closure is called
-        /// after `fork()` but before `exec()`. You may use it to
-        /// call any necessary process setup functions.
-        public var preSpawnProcessConfigurator: (@convention(c) @Sendable () -> Void)? = nil
 
-        public init() {}
-    }
+/// The collection of platform-specific settings
+/// to configure the subprocess when running
+@available(macOS 9999, *)
+public struct PlatformOptions: Sendable {
+    // Set user ID for the subprocess
+    public var userID: uid_t? = nil
+    /// Set the real and effective group ID and the saved
+    /// set-group-ID of the subprocess, equivalent to calling
+    /// `setgid()` on the child process.
+    /// Group ID is used to control permissions, particularly
+    /// for file access.
+    public var groupID: gid_t? = nil
+    // Set list of supplementary group IDs for the subprocess
+    public var supplementaryGroups: [gid_t]? = nil
+    /// Set the process group for the subprocess, equivalent to
+    /// calling `setpgid()` on the child process.
+    /// Process group ID is used to group related processes for
+    /// controlling signals.
+    public var processGroupID: pid_t? = nil
+    // Creates a session and sets the process group ID
+    // i.e. Detach from the terminal.
+    public var createSession: Bool = false
+    /// An ordered list of steps in order to tear down the child
+    /// process in case the parent task is cancelled before
+    /// the child proces terminates.
+    /// Always ends in sending a `.kill` signal at the end.
+    public var teardownSequence: [TeardownStep] = []
+    /// A closure to configure platform-specific
+    /// spawning constructs. This closure enables direct
+    /// configuration or override of underlying platform-specific
+    /// spawn settings that `Subprocess` utilizes internally,
+    /// in cases where Subprocess does not provide higher-level
+    /// APIs for such modifications.
+    ///
+    /// On Linux, Subprocess uses `fork/exec` as the
+    /// underlying spawning mechanism. This closure is called
+    /// after `fork()` but before `exec()`. You may use it to
+    /// call any necessary process setup functions.
+    public var preSpawnProcessConfigurator: (@convention(c) @Sendable () -> Void)? = nil
+
+    public init() {}
 }
 
 @available(macOS 9999, *)
-extension Subprocess.PlatformOptions: Hashable {
+extension PlatformOptions: Hashable {
     public static func ==(
-        lhs: Subprocess.PlatformOptions,
-        rhs: Subprocess.PlatformOptions
+        lhs: PlatformOptions,
+        rhs: PlatformOptions
     ) -> Bool {
         // Since we can't compare closure equality,
         // as long as preSpawnProcessConfigurator is set
@@ -183,7 +187,7 @@ extension Subprocess.PlatformOptions: Hashable {
 }
 
 @available(macOS 9999, *)
-extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
+extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
         return """
@@ -216,8 +220,8 @@ extension String {
 @available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
-    forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
-) async throws -> Subprocess.TerminationStatus {
+    forProcessWithIdentifier pid: ProcessIdentifier
+) async throws -> TerminationStatus {
     return try await withCheckedThrowingContinuation { continuation in
         _childProcessContinuations.withLock { continuations in
             if let existing = continuations.removeValue(forKey: pid.value),
@@ -233,28 +237,25 @@ internal func monitorProcessTermination(
 }
 
 private enum ContinuationOrStatus {
-    case continuation(CheckedContinuation<Subprocess.TerminationStatus, any Error>)
-    case status(Subprocess.TerminationStatus)
+    case continuation(CheckedContinuation<TerminationStatus, any Error>)
+    case status(TerminationStatus)
 }
 
 private let _childProcessContinuations: Mutex<
     [pid_t: ContinuationOrStatus]
 > = Mutex([:])
 
-private var signalSource: (any DispatchSourceSignal)? = nil
+private let signalSource: SendableSourceSignal = SendableSourceSignal()
+
 private let setup: () = {
-    signalSource = DispatchSource.makeSignalSource(
-        signal: SIGCHLD,
-        queue: .global()
-    )
-    signalSource?.setEventHandler {
+    signalSource.setEventHandler {
         _childProcessContinuations.withLock { continuations in
             while true {
                 var siginfo = siginfo_t()
                 guard waitid(P_ALL, id_t(0), &siginfo, WEXITED) == 0 else {
                     return
                 }
-                var status: Subprocess.TerminationStatus? = nil
+                var status: TerminationStatus? = nil
                 switch siginfo.si_code {
                 case .init(CLD_EXITED):
                     status = .exited(siginfo._sifields._sigchld.si_status)
@@ -280,8 +281,29 @@ private let setup: () = {
             }
         }
     }
-    signalSource?.resume()
+    signalSource.resume()
 }()
+
+/// Unchecked Sendable here since this class is only explicitly
+/// initialzied once during the lifetime of the process
+final class SendableSourceSignal: @unchecked Sendable {
+    private let signalSource: DispatchSourceSignal
+
+    func setEventHandler(handler: @escaping DispatchSourceHandler) {
+        self.signalSource.setEventHandler(handler: handler)
+    }
+
+    func resume() {
+        self.signalSource.resume()
+    }
+
+    init() {
+        self.signalSource = DispatchSource.makeSignalSource(
+            signal: SIGCHLD,
+            queue: .global()
+        )
+    }
+}
 
 private func _setupMonitorSignalHandler() {
     // Only executed once

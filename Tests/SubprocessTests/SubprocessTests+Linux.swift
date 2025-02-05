@@ -20,7 +20,7 @@ final class SubprocessLinuxTests: XCTestCase {
         guard getuid() == 0 else {
             throw XCTSkip("This test requires root privileges")
         }
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = {
             setgid(4321)
         }

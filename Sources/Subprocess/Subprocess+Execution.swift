@@ -9,7 +9,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(System)
 import System
+#else
+@preconcurrency import SystemPackage
+#endif
 
 #if canImport(Darwin)
 import Darwin
@@ -25,28 +29,26 @@ import FoundationEssentials
 import Foundation
 #endif
 
+/// An object that repersents a subprocess that has been
+/// executed. You can use this object to send signals to the
+/// child process as well as stream its output and error.
 @available(macOS 9999, *)
-extension Subprocess {
-    /// An object that repersents a subprocess that has been
-    /// executed. You can use this object to send signals to the
-    /// child process as well as stream its output and error.
-    public struct Execution<
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
-    >: Sendable {
-        /// The process identifier of the current execution
-        public let processIdentifier: ProcessIdentifier
+public struct Execution<
+    Output: OutputProtocol,
+    Error: OutputProtocol
+>: Sendable {
+    /// The process identifier of the current execution
+    public let processIdentifier: ProcessIdentifier
 
-        internal let output: Output
-        internal let error: Error
+    internal let output: Output
+    internal let error: Error
 #if os(Windows)
-        internal let consoleBehavior: PlatformOptions.ConsoleBehavior
+    internal let consoleBehavior: PlatformOptions.ConsoleBehavior
 #endif
-    }
 }
 
 @available(macOS 9999, *)
-extension Subprocess.Execution where Output == Subprocess.SequenceOutput {
+extension Execution where Output == SequenceOutput {
     /// The standard output of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.output` wasn't set to `.redirectToSequence` when the subprocess was spawned;
@@ -57,12 +59,12 @@ extension Subprocess.Execution where Output == Subprocess.SequenceOutput {
             .consumeReadFileDescriptor() else {
             fatalError("The standard output has already been consumed")
         }
-        return Subprocess.AsyncDataSequence(fileDescriptor: fd)
+        return AsyncDataSequence(fileDescriptor: fd)
     }
 }
 
 @available(macOS 9999, *)
-extension Subprocess.Execution where Error == Subprocess.SequenceOutput {
+extension Execution where Error == SequenceOutput {
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.error` wasn't set to `.redirectToSequence` when the subprocess was spawned;
@@ -73,18 +75,18 @@ extension Subprocess.Execution where Error == Subprocess.SequenceOutput {
             .consumeReadFileDescriptor() else {
             fatalError("The standard error has already been consumed")
         }
-        return Subprocess.AsyncDataSequence(fileDescriptor: fd)
+        return AsyncDataSequence(fileDescriptor: fd)
     }
 }
 
 // MARK: - Teardown
 #if canImport(Darwin) || canImport(Glibc)
 @available(macOS 9999, *)
-extension Subprocess.Execution {
+extension Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal
     /// - Parameter sequence: The  steps to perform.
-    public func teardown(using sequence: [Subprocess.TeardownStep]) async {
+    public func teardown(using sequence: [TeardownStep]) async {
         await withUncancelledTask {
             await self.runTeardownSequence(sequence)
         }
@@ -94,22 +96,21 @@ extension Subprocess.Execution {
 
 // MARK: - Output Capture
 @available(macOS 9999, *)
-extension Subprocess {
-    internal enum OutputCapturingState<Output: Sendable, Error: Sendable>: Sendable {
-        case standardOutputCaptured(Output)
-        case standardErrorCaptured(Error)
-    }
-
-    internal typealias CapturedIOs<
-        Output: Sendable, Error: Sendable
-    > = (standardOutput: Output, standardError: Error)
+internal enum OutputCapturingState<Output: Sendable, Error: Sendable>: Sendable {
+    case standardOutputCaptured(Output)
+    case standardErrorCaptured(Error)
 }
 
 @available(macOS 9999, *)
-extension Subprocess.Execution {
-    internal func captureIOs() async throws -> Subprocess.CapturedIOs<Output.OutputType, Error.OutputType> {
+internal typealias CapturedIOs<
+    Output: Sendable, Error: Sendable
+> = (standardOutput: Output, standardError: Error)
+
+@available(macOS 9999, *)
+extension Execution {
+    internal func captureIOs() async throws -> CapturedIOs<Output.OutputType, Error.OutputType> {
         return try await withThrowingTaskGroup(
-            of: Subprocess.OutputCapturingState<Output.OutputType, Error.OutputType>.self
+            of: OutputCapturingState<Output.OutputType, Error.OutputType>.self
         ) { group in
             group.addTask {
                 let stdout = try await self.output.captureOutput()
