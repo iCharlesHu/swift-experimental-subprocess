@@ -9,7 +9,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-import SystemPackage
+#if canImport(System)
+import System
+#else
+@preconcurrency import SystemPackage
+#endif
 import Dispatch
 
 #if canImport(FoundationEssentials)
@@ -19,94 +23,104 @@ import Foundation
 #endif
 
 // MARK: - Result
-extension Subprocess {
-    /// A simple wrapper around the generic result returned by the
-    /// `run` closures with the corresponding `TerminationStatus`
-    /// of the child process.
-    public struct ExecutionResult<Result> {
-        /// The termination status of the child process
-        public let terminationStatus: TerminationStatus
-        /// The result returned by the closure passed to `.run` methods
-        public let value: Result
 
-        internal init(terminationStatus: TerminationStatus, value: Result) {
-            self.terminationStatus = terminationStatus
-            self.value = value
-        }
-    }
+/// A simple wrapper around the generic result returned by the
+/// `run` closures with the corresponding `TerminationStatus`
+/// of the child process.
+@available(macOS 9999, *)
+public struct ExecutionResult<Result> {
+    /// The termination status of the child process
+    public let terminationStatus: TerminationStatus
+    /// The result returned by the closure passed to `.run` methods
+    public let value: Result
 
-    /// The result of a subprocess execution with its collected
-    /// standard output and standard error.
-    public struct CollectedResult<
-        Output: Subprocess.OutputProtocol,
-        Error:Subprocess.OutputProtocol
-    >: Sendable, Hashable {
-        /// The process identifier for the executed subprocess
-        public let processIdentifier: ProcessIdentifier
-        /// The termination status of the executed subprocess
-        public let terminationStatus: TerminationStatus
-        private let _standardOutput: Data?
-        private let _standardError: Data?
-        private let output: Output
-        private let error: Error
-
-        internal init(
-            processIdentifier: ProcessIdentifier,
-            terminationStatus: TerminationStatus,
-            output: Output,
-            error: Error,
-            standardOutputData: Data?,
-            standardErrorData: Data?
-        ) {
-            self.processIdentifier = processIdentifier
-            self.terminationStatus = terminationStatus
-            self._standardOutput = standardOutputData
-            self._standardError = standardErrorData
-            self.output = output
-            self.error = error
-        }
-
-        public func hash(into hasher: inout Hasher) {
-            hasher.combine(self.processIdentifier)
-            hasher.combine(self.terminationStatus)
-            hasher.combine(self._standardOutput)
-            hasher.combine(self._standardError)
-        }
-
-        public static func ==(lhs: Self, rhs: Self) -> Bool {
-            return lhs.processIdentifier == rhs.processIdentifier
-            && lhs.terminationStatus == rhs.terminationStatus
-            && lhs._standardOutput == rhs._standardOutput
-            && lhs._standardError == rhs._standardError
-        }
-
-        /// The collected standard output value for the subprocess.
-        public var standardOutput: Output.OutputType {
-            guard let output = self._standardOutput else {
-                fatalError("standardOutput is only available if the Subprocess was ran with .collect as output")
-            }
-            return self.output.output(from: output)
-        }
-
-        /// The collected standard error value for the subprocess.
-        public var standardError: Error.OutputType {
-            guard let error = self._standardError else {
-                fatalError("standardError is only available if the Subprocess was ran with .collect as error ")
-            }
-            return self.error.output(from: error)
-        }
+    internal init(terminationStatus: TerminationStatus, value: Result) {
+        self.terminationStatus = terminationStatus
+        self.value = value
     }
 }
-extension Subprocess.ExecutionResult: Equatable where Result : Equatable {}
 
-extension Subprocess.ExecutionResult: Hashable where Result : Hashable {}
+/// The result of a subprocess execution with its collected
+/// standard output and standard error.
+@available(macOS 9999, *)
+public struct CollectedResult<
+    Output: OutputProtocol,
+    Error: OutputProtocol
+>: Sendable {
+    /// The process identifier for the executed subprocess
+    public let processIdentifier: ProcessIdentifier
+    /// The termination status of the executed subprocess
+    public let terminationStatus: TerminationStatus
+    public let standardOutput: Output.OutputType
+    public let standardError: Error.OutputType
 
-extension Subprocess.ExecutionResult: Codable where Result : Codable {}
+    internal init(
+        processIdentifier: ProcessIdentifier,
+        terminationStatus: TerminationStatus,
+        standardOutput: Output.OutputType,
+        standardError: Error.OutputType
+    ) {
+        self.processIdentifier = processIdentifier
+        self.terminationStatus = terminationStatus
+        self.standardOutput = standardOutput
+        self.standardError = standardError
+    }
+}
 
-extension Subprocess.ExecutionResult: CustomStringConvertible where Result : CustomStringConvertible {
+// MARK: - CollectedResult Conformances
+@available(macOS 9999, *)
+extension CollectedResult: Equatable where Output.OutputType: Equatable, Error.OutputType: Equatable {}
+
+@available(macOS 9999, *)
+extension CollectedResult: Hashable where Output.OutputType: Hashable, Error.OutputType: Hashable {}
+
+@available(macOS 9999, *)
+extension CollectedResult: Codable where Output.OutputType: Codable, Error.OutputType: Codable {}
+
+@available(macOS 9999, *)
+extension CollectedResult: CustomStringConvertible where Output.OutputType: CustomStringConvertible, Error.OutputType: CustomStringConvertible {
     public var description: String {
         return """
-Subprocess.ExecutionResult(
+CollectedResult(
+    processIdentifier: \(self.processIdentifier),
+    terminationStatus: \(self.terminationStatus.description),
+    standardOutput: \(self.standardOutput.description)
+    standardError: \(self.standardError.description)
+)
+"""
+    }
+}
+
+@available(macOS 9999, *)
+extension CollectedResult: CustomDebugStringConvertible where Output.OutputType: CustomDebugStringConvertible, Error.OutputType: CustomDebugStringConvertible {
+    public var debugDescription: String {
+        return """
+CollectedResult(
+    processIdentifier: \(self.processIdentifier),
+    terminationStatus: \(self.terminationStatus.description),
+    standardOutput: \(self.standardOutput.debugDescription)
+    standardError: \(self.standardError.debugDescription)
+)
+"""
+    }
+}
+
+
+// MARK: - ExecutionResult Conformances
+@available(macOS 9999, *)
+extension ExecutionResult: Equatable where Result : Equatable {}
+
+@available(macOS 9999, *)
+extension ExecutionResult: Hashable where Result : Hashable {}
+
+@available(macOS 9999, *)
+extension ExecutionResult: Codable where Result : Codable {}
+
+@available(macOS 9999, *)
+extension ExecutionResult: CustomStringConvertible where Result : CustomStringConvertible {
+    public var description: String {
+        return """
+ExecutionResult(
     terminationStatus: \(self.terminationStatus.description),
     value: \(self.value.description)
 )
@@ -114,10 +128,11 @@ Subprocess.ExecutionResult(
     }
 }
 
-extension Subprocess.ExecutionResult: CustomDebugStringConvertible where Result : CustomDebugStringConvertible {
+@available(macOS 9999, *)
+extension ExecutionResult: CustomDebugStringConvertible where Result : CustomDebugStringConvertible {
     public var debugDescription: String {
         return """
-Subprocess.ExecutionResult(
+ExecutionResult(
     terminationStatus: \(self.terminationStatus.debugDescription),
     value: \(self.value.debugDescription)
 )
@@ -125,87 +140,63 @@ Subprocess.ExecutionResult(
     }
 }
 
-extension Subprocess.CollectedResult : CustomStringConvertible, CustomDebugStringConvertible {
-    public var description: String {
-        return """
-Subprocess.CollectedResult(
-    processIdentifier: \(self.processIdentifier.description),
-    terminationStatus: \(self.terminationStatus.description),
-    standardOutput: \(self._standardOutput?.description ?? "not captured"),
-    standardError: \(self._standardError?.description ?? "not captured")
-)
-"""
-    }
-
-    public var debugDescription: String {
-        return """
-Subprocess.CollectedResult(
-    processIdentifier: \(self.processIdentifier.debugDescription),
-    terminationStatus: \(self.terminationStatus.debugDescription),
-    standardOutput: \(self._standardOutput?.debugDescription ?? "not captured"),
-    standardError: \(self._standardError?.debugDescription ?? "not captured")
-)
-"""
-    }
-}
-
 // MARK: - StandardInputWriter
-extension Subprocess {
-    /// A writer that writes to the standard input of the subprocess.
-    public final actor StandardInputWriter: Sendable {
 
-        private let input: CustomWriteInput
+/// A writer that writes to the standard input of the subprocess.
+@available(macOS 9999, *)
+public final actor StandardInputWriter: Sendable {
 
-        init(input: CustomWriteInput) {
-            self.input = input
+    private let input: CustomWriteInput
+
+    init(input: CustomWriteInput) {
+        self.input = input
+    }
+
+    /// Write a sequence of UInt8 to the standard input of the subprocess.
+    /// - Parameter sequence: The sequence of bytes to write.
+    public func write<SendableSequence: Sequence<UInt8> & Sendable>(
+        _ sequence: SendableSequence
+    ) async throws {
+        guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
+            fatalError("Attempting to write to a file descriptor that's already closed")
         }
-
-        /// Write a sequence of UInt8 to the standard input of the subprocess.
-        /// - Parameter sequence: The sequence of bytes to write.
-        public func write<SendableSequence: Sequence<UInt8> & Sendable>(
-            _ sequence: SendableSequence
-        ) async throws {
-            guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
-                fatalError("Attempting to write to a file descriptor that's already closed")
-            }
-            if let array = sequence as? Array<UInt8> {
-                try await fd.write(array)
-            } else {
-                try await fd.write(Array(sequence))
-            }
+        if let array = sequence as? Array<UInt8> {
+            try await fd.write(array)
+        } else {
+            try await fd.write(Array(sequence))
         }
+    }
 
-        /// Write a sequence of CChar to the standard input of the subprocess.
-        /// - Parameter sequence: The sequence of bytes to write.
-        public func write(
-            _ string: some StringProtocol,
-            using encoding: String.Encoding = .utf8
-        ) async throws {
-            guard encoding != .utf8 else {
-                try await self.write(Data(string.utf8))
-                return
-            }
-            if let data = string.data(using: encoding) {
-                try await self.write(data)
-            }
+    /// Write a sequence of CChar to the standard input of the subprocess.
+    /// - Parameter sequence: The sequence of bytes to write.
+    public func write(
+        _ string: some StringProtocol,
+        using encoding: String.Encoding = .utf8
+    ) async throws {
+        guard encoding != .utf8 else {
+            try await self.write(Data(string.utf8))
+            return
         }
+        if let data = string.data(using: encoding) {
+            try await self.write(data)
+        }
+    }
 
-        /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
-        /// - Parameter sequence: The sequence of bytes to write.
-        public func write<AsyncSendableSequence: AsyncSequence & Sendable>(
-            _ asyncSequence: AsyncSendableSequence
-        ) async throws where AsyncSendableSequence.Element == Data {
-            var buffer = Data()
-            for try await data in asyncSequence {
-                buffer.append(data)
-            }
-            try await self.write(buffer)
+    /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
+    /// - Parameter sequence: The sequence of bytes to write.
+    public func write<AsyncSendableSequence: AsyncSequence & Sendable>(
+        _ asyncSequence: AsyncSendableSequence
+    ) async throws where AsyncSendableSequence.Element == Data {
+        var buffer = Data()
+        for try await data in asyncSequence {
+            buffer.append(data)
         }
+        try await self.write(buffer)
+    }
 
-        /// Signal all writes are finished
-        public func finish() async throws {
-            try self.input.closeWriteFileDescriptor()
-        }
+    /// Signal all writes are finished
+    public func finish() async throws {
+        try self.input.closeWriteFileDescriptor()
     }
 }
 

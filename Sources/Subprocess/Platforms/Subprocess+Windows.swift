@@ -13,20 +13,25 @@
 
 import WinSDK
 import Dispatch
-import SystemPackage
+#if canImport(System)
+import System
+#else
+@preconcurrency import SystemPackage
+#endif
 import FoundationEssentials
 
 // Windows specific implementation
-extension Subprocess.Configuration {
+@available(macOS 9999, *)
+extension Configuration {
     internal func spawn<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Subprocess.Execution<Input, Output, Error> {
+    ) throws -> Execution<Input, Output, Error> {
         // Spawn differently depending on whether
         // we need to spawn as a user
         if let userCredentials = self.platformOptions.userCredentials {
@@ -46,14 +51,14 @@ extension Subprocess.Configuration {
     }
 
     internal func spawnDirect<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Subprocess.Execution<Input, Output, Error> {
+    ) throws -> Execution<Input, Output, Error> {
         let (
             applicationName,
             commandAndArgs,
@@ -133,11 +138,11 @@ extension Subprocess.Configuration {
                 errorCode: .fileReadUnknown
             )
         }
-        let pid = Subprocess.ProcessIdentifier(
+        let pid = ProcessIdentifier(
             value: processInfo.dwProcessId,
             threadID: processInfo.dwThreadId
         )
-        return Subprocess.Execution(
+        return Execution(
             processIdentifier: pid,
             input: input,
             output: output,
@@ -147,15 +152,15 @@ extension Subprocess.Configuration {
     }
 
     internal func spawnAsUser<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error,
-        userCredentials: Subprocess.PlatformOptions.UserCredentials
-    ) throws -> Subprocess.Execution<Input, Output, Error> {
+        userCredentials: PlatformOptions.UserCredentials
+    ) throws -> Execution<Input, Output, Error> {
         let (
             applicationName,
             commandAndArgs,
@@ -248,11 +253,11 @@ extension Subprocess.Configuration {
                 errorCode: .fileReadUnknown
             )
         }
-        let pid = Subprocess.ProcessIdentifier(
+        let pid = ProcessIdentifier(
             value: processInfo.dwProcessId,
             threadID: processInfo.dwThreadId
         )
-        return Subprocess.Execution(
+        return Execution(
             processIdentifier: pid,
             input: input,
             output: output,
@@ -263,125 +268,126 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - Platform Specific Options
-extension Subprocess {
-    /// The collection of platform-specific settings
-    /// to configure the subprocess when running
-    public struct PlatformOptions: Sendable {
-        /// A `UserCredentials` to use spawning the subprocess
-        /// as a different user
-        public struct UserCredentials: Sendable, Hashable {
-            // The name of the user. This is the name
-            // of the user account to run as.
-            public var username: String
-            // The clear-text password for the account.
-            public var password: String
-            // The name of the domain or server whose account database
-            // contains the account.
-            public var domain: String?
-        }
 
-        /// `ConsoleBehavior` defines how should the console appear
-        /// when spawning a new process
-        public struct ConsoleBehavior: Sendable, Hashable {
-            internal enum Storage: Sendable, Hashable {
-                case createNew
-                case detatch
-                case inherit
-            }
-
-            internal let storage: Storage
-
-            private init(_ storage: Storage) {
-                self.storage = storage
-            }
-
-            /// The subprocess has a new console, instead of
-            /// inheriting its parent's console (the default).
-            public static let createNew: Self = .init(.createNew)
-            /// For console processes, the new process does not
-            /// inherit its parent's console (the default).
-            /// The new process can call the `AllocConsole`
-            /// function at a later time to create a console.
-            public static let detatch: Self = .init(.detatch)
-            /// The subprocess inherits its parent's console.
-            public static let inherit: Self = .init(.inherit)
-        }
-
-        /// `ConsoleBehavior` defines how should the window appear
-        /// when spawning a new process
-        public struct WindowStyle: Sendable, Hashable {
-            internal enum Storage: Sendable, Hashable {
-                case normal
-                case hidden
-                case maximized
-                case minimized
-            }
-
-            internal let storage: Storage
-
-            internal var platformStyle: WORD {
-                switch self.storage {
-                case .hidden: return WORD(SW_HIDE)
-                case .maximized: return WORD(SW_SHOWMAXIMIZED)
-                case .minimized: return WORD(SW_SHOWMINIMIZED)
-                default: return WORD(SW_SHOWNORMAL)
-                }
-            }
-
-            private init(_ storage: Storage) {
-                self.storage = storage
-            }
-
-            /// Activates and displays a window of normal size
-            public static let normal: Self = .init(.normal)
-            /// Does not activate a new window
-            public static let hidden: Self = .init(.hidden)
-            /// Activates the window and displays it as a maximized window.
-            public static let maximized: Self = .init(.maximized)
-            /// Activates the window and displays it as a minimized window.
-            public static let minimized: Self = .init(.minimized)
-        }
-
-        /// Sets user credentials when starting the process as another user
-        public var userCredentials: UserCredentials? = nil
-        /// The console behavior of the new process,
-        /// default to inheriting the console from parent process
-        public var consoleBehavior: ConsoleBehavior = .inherit
-        /// Window style to use when the process is started
-        public var windowStyle: WindowStyle = .normal
-        /// Whether to create a new process group for the new
-        /// process. The process group includes all processes
-        /// that are descendants of this root process.
-        /// The process identifier of the new process group
-        /// is the same as the process identifier.
-        public var createProcessGroup: Bool = false
-        /// A closure to configure platform-specific
-        /// spawning constructs. This closure enables direct
-        /// configuration or override of underlying platform-specific
-        /// spawn settings that `Subprocess` utilizes internally,
-        /// in cases where Subprocess does not provide higher-level
-        /// APIs for such modifications.
-        ///
-        /// On Windows, Subprocess uses `CreateProcessW()` as the
-        /// underlying spawning mechanism. This closure allows
-        /// modification of the `dwCreationFlags` creation flag
-        /// and startup info `STARTUPINFOW` before
-        /// they are sent to `CreateProcessW()`.
-        public var preSpawnProcessConfigurator: (
-            @Sendable (
-                inout DWORD,
-                inout STARTUPINFOW
-            ) throws -> Void
-        )? = nil
-
-        public init() {}
+/// The collection of platform-specific settings
+/// to configure the subprocess when running
+@available(macOS 9999, *)
+public struct PlatformOptions: Sendable {
+    /// A `UserCredentials` to use spawning the subprocess
+    /// as a different user
+    public struct UserCredentials: Sendable, Hashable {
+        // The name of the user. This is the name
+        // of the user account to run as.
+        public var username: String
+        // The clear-text password for the account.
+        public var password: String
+        // The name of the domain or server whose account database
+        // contains the account.
+        public var domain: String?
     }
+
+    /// `ConsoleBehavior` defines how should the console appear
+    /// when spawning a new process
+    public struct ConsoleBehavior: Sendable, Hashable {
+        internal enum Storage: Sendable, Hashable {
+            case createNew
+            case detatch
+            case inherit
+        }
+
+        internal let storage: Storage
+
+        private init(_ storage: Storage) {
+            self.storage = storage
+        }
+
+        /// The subprocess has a new console, instead of
+        /// inheriting its parent's console (the default).
+        public static let createNew: Self = .init(.createNew)
+        /// For console processes, the new process does not
+        /// inherit its parent's console (the default).
+        /// The new process can call the `AllocConsole`
+        /// function at a later time to create a console.
+        public static let detatch: Self = .init(.detatch)
+        /// The subprocess inherits its parent's console.
+        public static let inherit: Self = .init(.inherit)
+    }
+
+    /// `ConsoleBehavior` defines how should the window appear
+    /// when spawning a new process
+    public struct WindowStyle: Sendable, Hashable {
+        internal enum Storage: Sendable, Hashable {
+            case normal
+            case hidden
+            case maximized
+            case minimized
+        }
+
+        internal let storage: Storage
+
+        internal var platformStyle: WORD {
+            switch self.storage {
+            case .hidden: return WORD(SW_HIDE)
+            case .maximized: return WORD(SW_SHOWMAXIMIZED)
+            case .minimized: return WORD(SW_SHOWMINIMIZED)
+            default: return WORD(SW_SHOWNORMAL)
+            }
+        }
+
+        private init(_ storage: Storage) {
+            self.storage = storage
+        }
+
+        /// Activates and displays a window of normal size
+        public static let normal: Self = .init(.normal)
+        /// Does not activate a new window
+        public static let hidden: Self = .init(.hidden)
+        /// Activates the window and displays it as a maximized window.
+        public static let maximized: Self = .init(.maximized)
+        /// Activates the window and displays it as a minimized window.
+        public static let minimized: Self = .init(.minimized)
+    }
+
+    /// Sets user credentials when starting the process as another user
+    public var userCredentials: UserCredentials? = nil
+    /// The console behavior of the new process,
+    /// default to inheriting the console from parent process
+    public var consoleBehavior: ConsoleBehavior = .inherit
+    /// Window style to use when the process is started
+    public var windowStyle: WindowStyle = .normal
+    /// Whether to create a new process group for the new
+    /// process. The process group includes all processes
+    /// that are descendants of this root process.
+    /// The process identifier of the new process group
+    /// is the same as the process identifier.
+    public var createProcessGroup: Bool = false
+    /// A closure to configure platform-specific
+    /// spawning constructs. This closure enables direct
+    /// configuration or override of underlying platform-specific
+    /// spawn settings that `Subprocess` utilizes internally,
+    /// in cases where Subprocess does not provide higher-level
+    /// APIs for such modifications.
+    ///
+    /// On Windows, Subprocess uses `CreateProcessW()` as the
+    /// underlying spawning mechanism. This closure allows
+    /// modification of the `dwCreationFlags` creation flag
+    /// and startup info `STARTUPINFOW` before
+    /// they are sent to `CreateProcessW()`.
+    public var preSpawnProcessConfigurator: (
+        @Sendable (
+            inout DWORD,
+            inout STARTUPINFOW
+        ) throws -> Void
+    )? = nil
+
+    public init() {}
 }
 
-extension Subprocess.PlatformOptions: Hashable {
+@available(macOS 9999, *)
+extension PlatformOptions: Hashable {
     public static func == (
-        lhs: Subprocess.PlatformOptions,
-        rhs: Subprocess.PlatformOptions
+        lhs: PlatformOptions,
+        rhs: PlatformOptions
     ) -> Bool {
         // Since we can't compare closure equality,
         // as long as preSpawnProcessConfigurator is set
@@ -409,7 +415,8 @@ extension Subprocess.PlatformOptions: Hashable {
     }
 }
 
-extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
+@available(macOS 9999, *)
+extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
         return """
@@ -433,10 +440,11 @@ PlatformOptions(
 }
 
 // MARK: - Process Monitoring
+@available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
-    forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
-) async throws -> Subprocess.TerminationStatus {
+    forProcessWithIdentifier pid: ProcessIdentifier
+) async throws -> TerminationStatus {
     // Once the continuation resumes, it will need to unregister the wait, so
     // yield the wait handle back to the calling scope.
     var waitHandle: HANDLE?
@@ -491,7 +499,8 @@ internal func monitorProcessTermination(
 }
 
 // MARK: - Subprocess Control
-extension Subprocess.Execution {
+@available(macOS 9999, *)
+extension Execution {
     /// Terminate the current subprocess with the given exit code
     /// - Parameter exitCode: The exit code to use for the subprocess.
     public func terminate(withExitCode exitCode: DWORD) throws {
@@ -600,7 +609,8 @@ extension Subprocess.Execution {
 }
 
 // MARK: - Executable Searching
-extension Subprocess.Executable {
+@available(macOS 9999, *)
+extension Executable {
     // Technically not needed for CreateProcess since
     // it takes process name. It's here to support
     // Executable.resolveExecutablePath
@@ -642,7 +652,8 @@ extension Subprocess.Executable {
 }
 
 // MARK: - Environment Resolution
-extension Subprocess.Environment {
+@available(macOS 9999, *)
+extension Environment {
     internal static let pathEnvironmentVariableName = "Path"
 
     internal func pathValue() -> String? {
@@ -664,25 +675,26 @@ extension Subprocess.Environment {
 }
 
 // MARK: - ProcessIdentifier
-extension Subprocess {
-    /// A platform independent identifier for a subprocess.
-    public struct ProcessIdentifier: Sendable, Hashable, Codable {
-        /// Windows specifc process identifier value
-        public let value: DWORD
-        /// Windows specific thread identifier associated with process
-        public let threadID: DWORD
 
-        internal init(
-            value: DWORD,
-            threadID: DWORD
-        ) {
-            self.value = value
-            self.threadID = threadID
-        }
+/// A platform independent identifier for a subprocess.
+@available(macOS 9999, *)
+public struct ProcessIdentifier: Sendable, Hashable, Codable {
+    /// Windows specifc process identifier value
+    public let value: DWORD
+    /// Windows specific thread identifier associated with process
+    public let threadID: DWORD
+
+    internal init(
+        value: DWORD,
+        threadID: DWORD
+    ) {
+        self.value = value
+        self.threadID = threadID
     }
 }
 
-extension Subprocess.ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
+@available(macOS 9999, *)
+extension ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         return "(processID: \(self.value), threadID: \(self.threadID))"
     }
@@ -693,7 +705,8 @@ extension Subprocess.ProcessIdentifier: CustomStringConvertible, CustomDebugStri
 }
 
 // MARK: - Private Utils
-extension Subprocess.Configuration {
+@available(macOS 9999, *)
+extension Configuration {
     private func preSpawn() throws -> (
         applicationName: String?,
         commandAndArgs: String,
@@ -728,7 +741,7 @@ extension Subprocess.Configuration {
         }
         // On Windows, the PATH is required in order to locate dlls needed by
         // the process so we should also pass that to the child
-        let pathVariableName = Subprocess.Environment.pathEnvironmentVariableName
+        let pathVariableName = Environment.pathEnvironmentVariableName
         if env[pathVariableName] == nil,
            let parentPath = ProcessInfo.processInfo.environment[pathVariableName] {
             env[pathVariableName] = parentPath
@@ -776,9 +789,9 @@ extension Subprocess.Configuration {
     }
 
     private func generateStartupInfo<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
@@ -952,19 +965,17 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - PlatformFileDescriptor Type
-extension Subprocess {
-    internal typealias PlatformFileDescriptor = HANDLE
-}
+@available(macOS 9999, *)
+internal typealias PlatformFileDescriptor = HANDLE
 
 // MARK: - Read Buffer Size
-extension Subprocess {
-    @inline(__always)
-    internal static var readBufferSize: Int {
-        // FIXME: Use Platform.pageSize here
-        var sysInfo: SYSTEM_INFO = SYSTEM_INFO()
-        GetSystemInfo(&sysInfo)
-        return Int(sysInfo.dwPageSize)
-    }
+@available(macOS 9999, *)
+@inline(__always)
+internal var readBufferSize: Int {
+    // FIXME: Use Platform.pageSize here
+    var sysInfo: SYSTEM_INFO = SYSTEM_INFO()
+    GetSystemInfo(&sysInfo)
+    return Int(sysInfo.dwPageSize)
 }
 
 // MARK: - Pipe Support
@@ -1033,7 +1044,7 @@ extension FileDescriptor {
         }
     }
 
-    var platformDescriptor: Subprocess.PlatformFileDescriptor {
+    var platformDescriptor: PlatformFileDescriptor {
         return HANDLE(bitPattern: _get_osfhandle(self.rawValue))!
     }
 

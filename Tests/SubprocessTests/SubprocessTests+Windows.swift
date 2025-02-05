@@ -13,14 +13,19 @@
 
 import WinSDK
 import XCTest
-import SystemPackage
-@testable import SwiftExperimentalSubprocess
+#if canImport(System)
+import System
+#else
+@preconcurrency import SystemPackage
+#endif
+@testable import Subprocess
 
 final class SubprocessWindowsTests: XCTestCase {
     private let cmdExe: Subprocess.Executable = .at("C:\\Windows\\System32\\cmd.exe")
 }
 
 // MARK: - Executable Tests
+@available(macOS 9999, *)
 extension SubprocessWindowsTests {
     func testExecutableNamed() async throws {
         // Simple test to make sure we can run a common utility

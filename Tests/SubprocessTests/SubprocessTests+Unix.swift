@@ -19,14 +19,19 @@ import Foundation
 
 import _CShims
 import XCTest
-@testable import SwiftExperimentalSubprocess
+@testable import Subprocess
 
 import Dispatch
-import SystemPackage
+#if canImport(System)
+import System
+#else
+@preconcurrency import SystemPackage
+#endif
 
 final class SubprocessUnixTests: XCTestCase { }
 
 // MARK: - Executable test
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     func testExecutableNamed() async throws {
         // Simple test to make sure we can find a common utility
@@ -36,9 +41,11 @@ extension SubprocessUnixTests {
             arguments: [message]
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             message
         )
     }
@@ -60,8 +67,10 @@ extension SubprocessUnixTests {
         let expected = FileManager.default.currentDirectoryPath
         let result = try await Subprocess.run(.at("/bin/pwd"), output: .string)
         XCTAssertTrue(result.terminationStatus.isSuccess)
-        let path = try XCTUnwrap(result.standardOutput?
-            .trimmingCharacters(in: .whitespacesAndNewlines))
+        // rdar://138670128
+        let maybePath = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = try XCTUnwrap(maybePath)
         XCTAssertTrue(directory(path, isSameAs: expected))
     }
 
@@ -83,6 +92,7 @@ extension SubprocessUnixTests {
 }
 
 // MARK: - Arguments Tests
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     func testArgunementsArrayLitereal() async throws {
         let result = try await Subprocess.run(
@@ -91,9 +101,11 @@ extension SubprocessUnixTests {
             output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "Hello World!"
         )
     }
@@ -108,9 +120,11 @@ extension SubprocessUnixTests {
             output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "apple"
         )
     }
@@ -126,15 +140,18 @@ extension SubprocessUnixTests {
             output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "Data Content"
         )
     }
 }
 
 // MARK: - Environment Tests
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     func testEnvironmentInherit() async throws {
         let result = try await Subprocess.run(
@@ -146,7 +163,9 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // As a sanity check, make sure there's `/bin` in PATH
         // since we inherited the environment variables
-        let pathValue = try XCTUnwrap(result.standardOutput)
+        // rdar://138670128
+        let maybeOutput = result.standardOutput
+        let pathValue = try XCTUnwrap(maybeOutput)
         XCTAssertTrue(pathValue.contains("/bin"))
     }
 
@@ -160,9 +179,11 @@ extension SubprocessUnixTests {
             output: .string
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "/my/new/home"
         )
     }
@@ -178,15 +199,18 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertEqual(
-            result.standardOutput?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            output,
             "PATH=/bin:/usr/bin"
         )
     }
 }
 
 // MARK: - Working Directory Tests
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     func testWorkingDirectoryDefaultValue() async throws {
         // By default we should use the working directory of the parent process
@@ -199,8 +223,10 @@ extension SubprocessUnixTests {
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
         // `PATH` that we set
-        let path = try XCTUnwrap(result.standardOutput?
-            .trimmingCharacters(in: .whitespacesAndNewlines))
+        // rdar://138670128
+        let output = result.standardOutput?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = try XCTUnwrap(output)
         XCTAssertTrue(directory(path, isSameAs: workingDirectory))
     }
 
@@ -238,6 +264,7 @@ extension SubprocessUnixTests {
 }
 
 // MARK: - Input Tests
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     func testInputNoInput() async throws {
         let catResult = try await Subprocess.run(
@@ -275,6 +302,23 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
             input: .sequence(expected),
+            output: .data(limit: 2048 * 1024)
+        )
+        XCTAssertTrue(catResult.terminationStatus.isSuccess)
+        XCTAssertEqual(catResult.standardOutput.count, expected.count)
+        XCTAssertEqual(Array(catResult.standardOutput), Array(expected))
+    }
+
+    @available(macOS 9999, *)
+    func testInputSpan() async throws {
+        let expected: Data = try Data(
+            contentsOf: URL(filePath: theMysteriousIsland.string)
+        )
+        let ptr = expected.withUnsafeBytes { return $0 }
+        let span: Span<UInt8> = Span(_unsafeBytes: ptr)
+        let catResult = try await Subprocess.run(
+            .at("/bin/cat"),
+            input: span,
             output: .data(limit: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
@@ -365,6 +409,7 @@ extension SubprocessUnixTests {
 }
 
 // MARK: - Output Tests
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
 #if false // This test needs "death test" support
     func testOutputDiscarded() async throws {
@@ -578,6 +623,7 @@ extension SubprocessUnixTests {
 }
 
 // MARK: - PlatformOption Tests
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     // Run this test with sudo
     func testSubprocessPlatformOptionsUserID() async throws {
@@ -585,7 +631,7 @@ extension SubprocessUnixTests {
             throw XCTSkip("This test requires root privileges")
         }
         let expectedUserID = uid_t(Int.random(in: 1000 ... 2000))
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.userID = expectedUserID
         try await self.assertID(
             withArgument: "-u",
@@ -600,7 +646,7 @@ extension SubprocessUnixTests {
             throw XCTSkip("This test requires root privileges")
         }
         let expectedGroupID = gid_t(Int.random(in: 1000 ... 2000))
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.groupID = expectedGroupID
         try await self.assertID(
             withArgument: "-g",
@@ -618,7 +664,7 @@ extension SubprocessUnixTests {
         for _ in 0 ..< Int.random(in: 5 ... 10) {
             expectedGroups.insert(gid_t(Int.random(in: 1000 ... 2000)))
         }
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.supplementaryGroups = Array(expectedGroups)
         let idResult = try await Subprocess.run(
             .named("/usr/bin/swift"),
@@ -638,7 +684,7 @@ extension SubprocessUnixTests {
         guard getuid() == 0 else {
             throw XCTSkip("This test requires root privileges")
         }
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         // Sets the process group ID to 0, which creates a new session
         platformOptions.processGroupID = 0
         let psResult = try await Subprocess.run(
@@ -660,7 +706,7 @@ extension SubprocessUnixTests {
 
     func testSubprocessPlatformOptionsCreateSession() async throws {
         // platformOptions.createSession implies calls to setsid
-        var platformOptions = Subprocess.PlatformOptions()
+        var platformOptions = PlatformOptions()
         platformOptions.createSession = true
         // Check the proces ID (pid), pross group ID (pgid), and
         // controling terminal's process group ID (tpgid)
@@ -690,7 +736,7 @@ extension SubprocessUnixTests {
         ) { subprocess in
             return try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    try await Task.sleep(nanoseconds: 200_00_000)
+                    try await Task.sleep(for: .milliseconds(200))
                     // Send shut down signal
                     await subprocess.teardown(using: [
                         .sendSignal(.quit, allowedDurationToExit: .milliseconds(500)),
@@ -721,10 +767,11 @@ extension SubprocessUnixTests {
 }
 
 // MARK: - Misc
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     func testRunDetached() async throws {
         let (readFd, writeFd) = try FileDescriptor.pipe()
-        let pid = try Subprocess.runDetached(
+        let pid = try runDetached(
             .at("/bin/bash"),
             arguments: ["-c", "echo $$"],
             output: writeFd
@@ -753,11 +800,12 @@ extension SubprocessUnixTests {
             XCTFail("Wrong termination status repored")
             return
         }
-        XCTAssertEqual(exception, Subprocess.Signal.terminate.rawValue)
+        XCTAssertEqual(exception, Signal.terminate.rawValue)
     }
 }
 
 // MARK: - Performance Tests
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     func testConcurrentRun() async throws {
         // Launch as many processes as we can
@@ -831,10 +879,11 @@ extension SubprocessUnixTests {
 }
 
 // MARK: - Utils
+@available(macOS 9999, *)
 extension SubprocessUnixTests {
     private func assertID(
         withArgument argument: String,
-        platformOptions: Subprocess.PlatformOptions,
+        platformOptions: PlatformOptions,
         isEqualTo expected: gid_t
     ) async throws {
         let idResult = try await Subprocess.run(
@@ -852,9 +901,10 @@ extension SubprocessUnixTests {
     }
 }
 
-internal func assertNewSessionCreated<Output: Subprocess.OutputProtocol>(
-    with result: Subprocess.CollectedResult<
-        Subprocess.StringOutput,
+@available(macOS 9999, *)
+internal func assertNewSessionCreated<Output: OutputProtocol>(
+    with result: CollectedResult<
+        StringOutput,
         Output
     >
 ) throws {
@@ -876,6 +926,40 @@ internal func assertNewSessionCreated<Output: Subprocess.OutputProtocol>(
     let tpgid = try XCTUnwrap(Int(psValue[5]))
     XCTAssertEqual(pid, pgid)
     XCTAssertTrue(tpgid <= 0)
+}
+
+extension FileDescriptor {
+    internal func readUntilEOF(upToLength maxLength: Int) async throws -> Data {
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, any Error>) in
+            let dispatchIO = DispatchIO(
+                type: .stream,
+                fileDescriptor: self.rawValue,
+                queue: .global()
+            ) { error in
+                if error != 0 {
+                    continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                }
+            }
+            var buffer: Data = Data()
+            dispatchIO.read(
+                offset: 0,
+                length: maxLength,
+                queue: .global()
+            ) { done, data, error in
+                guard error == 0 else {
+                    continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                    return
+                }
+                if let data = data {
+                    buffer += Data(data)
+                }
+                if done {
+                    dispatchIO.close()
+                    continuation.resume(returning: buffer)
+                }
+            }
+        }
+    }
 }
 
 #endif // canImport(Darwin) || canImport(Glibc)
