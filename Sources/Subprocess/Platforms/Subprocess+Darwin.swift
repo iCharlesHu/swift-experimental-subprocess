@@ -19,7 +19,11 @@ import Foundation
 
 import Darwin
 import Dispatch
+#if canImport(System)
 import System
+#else
+@preconcurrency import SystemPackage
+#endif
 
 #if FOUNDATION_FRAMEWORK
 @_implementationOnly import _FoundationCShims
@@ -27,20 +31,140 @@ import System
 import _CShims
 #endif
 
-// Darwin specific implementation
-@available(macOS 9999, *)
-extension Subprocess.Configuration {
-    internal typealias StringOrRawBytes = Subprocess.StringOrRawBytes
 
+// MARK: - PlatformOptions
+
+/// The collection of platform-specific settings
+/// to configure the subprocess when running
+@available(macOS 9999, *)
+public struct PlatformOptions: Sendable {
+    public var qualityOfService: QualityOfService = .default
+    /// Set user ID for the subprocess
+    public var userID: uid_t? = nil
+    /// Set the real and effective group ID and the saved
+    /// set-group-ID of the subprocess, equivalent to calling
+    /// `setgid()` on the child process.
+    /// Group ID is used to control permissions, particularly
+    /// for file access.
+    public var groupID: gid_t? = nil
+    /// Set list of supplementary group IDs for the subprocess
+    public var supplementaryGroups: [gid_t]? = nil
+    /// Set the process group for the subprocess, equivalent to
+    /// calling `setpgid()` on the child process.
+    /// Process group ID is used to group related processes for
+    /// controlling signals.
+    public var processGroupID: pid_t? = nil
+    /// Creates a session and sets the process group ID
+    /// i.e. Detach from the terminal.
+    public var createSession: Bool = false
+    /// A lightweight code requirement that you use to
+    /// evaluate the executable for a launching process.
+    public var launchRequirementData: Data? = nil
+    /// An ordered list of steps in order to tear down the child
+    /// process in case the parent task is cancelled before
+    /// the child proces terminates.
+    /// Always ends in sending a `.kill` signal at the end.
+    public var teardownSequence: [TeardownStep] = []
+    /// A closure to configure platform-specific
+    /// spawning constructs. This closure enables direct
+    /// configuration or override of underlying platform-specific
+    /// spawn settings that `Subprocess` utilizes internally,
+    /// in cases where Subprocess does not provide higher-level
+    /// APIs for such modifications.
+    ///
+    /// On Darwin, Subprocess uses `posix_spawn()` as the
+    /// underlying spawning mechanism. This closure allows
+    /// modification of the `posix_spawnattr_t` spawn attribute
+    /// and file actions `posix_spawn_file_actions_t` before
+    /// they are sent to `posix_spawn()`.
+    public var preSpawnProcessConfigurator: (
+        @Sendable (
+            inout posix_spawnattr_t?,
+            inout posix_spawn_file_actions_t?
+        ) throws -> Void
+    )? = nil
+
+    public init() {}
+}
+
+@available(macOS 9999, *)
+extension PlatformOptions: Hashable {
+    public static func == (lhs: PlatformOptions, rhs: PlatformOptions) -> Bool {
+        // Since we can't compare closure equality,
+        // as long as preSpawnProcessConfigurator is set
+        // always returns false so that `PlatformOptions`
+        // with it set will never equal to each other
+        if lhs.preSpawnProcessConfigurator != nil ||
+            rhs.preSpawnProcessConfigurator != nil {
+            return false
+        }
+        return lhs.qualityOfService == rhs.qualityOfService &&
+        lhs.userID == rhs.userID &&
+        lhs.groupID == rhs.groupID &&
+        lhs.supplementaryGroups == rhs.supplementaryGroups &&
+        lhs.processGroupID == rhs.processGroupID &&
+        lhs.createSession == rhs.createSession &&
+        lhs.launchRequirementData == rhs.launchRequirementData
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.qualityOfService)
+        hasher.combine(self.userID)
+        hasher.combine(self.groupID)
+        hasher.combine(self.supplementaryGroups)
+        hasher.combine(self.processGroupID)
+        hasher.combine(self.createSession)
+        hasher.combine(self.launchRequirementData)
+        // Since we can't really hash closures,
+        // use an UUID such that as long as
+        // `preSpawnProcessConfigurator` is set, it will
+        // never equal to other PlatformOptions
+        if self.preSpawnProcessConfigurator != nil {
+            hasher.combine(UUID())
+        }
+    }
+}
+
+@available(macOS 9999, *)
+extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
+    internal func description(withIndent indent: Int) -> String {
+        let indent = String(repeating: " ", count: indent * 4)
+        return """
+PlatformOptions(
+\(indent)    qualityOfService: \(self.qualityOfService),
+\(indent)    userID: \(String(describing: userID)),
+\(indent)    groupID: \(String(describing: groupID)),
+\(indent)    supplementaryGroups: \(String(describing: supplementaryGroups)),
+\(indent)    processGroupID: \(String(describing: processGroupID)),
+\(indent)    createSession: \(createSession),
+\(indent)    launchRequirementData: \(String(describing: launchRequirementData)),
+\(indent)    preSpawnProcessConfigurator: \(self.preSpawnProcessConfigurator == nil ? "not set" : "set")
+\(indent))
+"""
+    }
+
+    public var description: String {
+        return self.description(withIndent: 0)
+    }
+
+    public var debugDescription: String {
+        return self.description(withIndent: 0)
+    }
+}
+
+
+// MARK: - Spawn
+@available(macOS 9999, *)
+extension Configuration {
     internal func spawn<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        Input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Subprocess.Execution<Output, Error> {
+    ) throws -> Execution<Output, Error> {
         let (executablePath,
             env, argv,
             intendedWorkingDir,
@@ -183,7 +307,7 @@ extension Subprocess.Configuration {
             try self.cleanupAll(input: input, output: output, error: error)
             throw POSIXError(.init(rawValue: spawnError) ?? .ENODEV)
         }
-        return Subprocess.Execution(
+        return Execution(
             processIdentifier: .init(value: pid),
             output: output,
             error: error
@@ -196,133 +320,12 @@ extension String {
     static let debugDescriptionErrorKey = "NSDebugDescription"
 }
 
-// MARK: - Platform Specific Options
-@available(macOS 9999, *)
-extension Subprocess {
-    /// The collection of platform-specific settings
-    /// to configure the subprocess when running
-    public struct PlatformOptions: Sendable {
-        public var qualityOfService: QualityOfService = .default
-        /// Set user ID for the subprocess
-        public var userID: uid_t? = nil
-        /// Set the real and effective group ID and the saved
-        /// set-group-ID of the subprocess, equivalent to calling
-        /// `setgid()` on the child process.
-        /// Group ID is used to control permissions, particularly
-        /// for file access.
-        public var groupID: gid_t? = nil
-        /// Set list of supplementary group IDs for the subprocess
-        public var supplementaryGroups: [gid_t]? = nil
-        /// Set the process group for the subprocess, equivalent to
-        /// calling `setpgid()` on the child process.
-        /// Process group ID is used to group related processes for
-        /// controlling signals.
-        public var processGroupID: pid_t? = nil
-        /// Creates a session and sets the process group ID
-        /// i.e. Detach from the terminal.
-        public var createSession: Bool = false
-        /// A lightweight code requirement that you use to
-        /// evaluate the executable for a launching process.
-        public var launchRequirementData: Data? = nil
-        /// An ordered list of steps in order to tear down the child
-        /// process in case the parent task is cancelled before
-        /// the child proces terminates.
-        /// Always ends in sending a `.kill` signal at the end.
-        public var teardownSequence: [TeardownStep] = []
-        /// A closure to configure platform-specific
-        /// spawning constructs. This closure enables direct
-        /// configuration or override of underlying platform-specific
-        /// spawn settings that `Subprocess` utilizes internally,
-        /// in cases where Subprocess does not provide higher-level
-        /// APIs for such modifications.
-        ///
-        /// On Darwin, Subprocess uses `posix_spawn()` as the
-        /// underlying spawning mechanism. This closure allows
-        /// modification of the `posix_spawnattr_t` spawn attribute
-        /// and file actions `posix_spawn_file_actions_t` before
-        /// they are sent to `posix_spawn()`.
-        public var preSpawnProcessConfigurator: (
-            @Sendable (
-                inout posix_spawnattr_t?,
-                inout posix_spawn_file_actions_t?
-            ) throws -> Void
-        )? = nil
-
-        public init() {}
-    }
-}
-
-@available(macOS 9999, *)
-extension Subprocess.PlatformOptions: Hashable {
-    public static func == (lhs: Subprocess.PlatformOptions, rhs: Subprocess.PlatformOptions) -> Bool {
-        // Since we can't compare closure equality,
-        // as long as preSpawnProcessConfigurator is set
-        // always returns false so that `PlatformOptions`
-        // with it set will never equal to each other
-        if lhs.preSpawnProcessConfigurator != nil ||
-            rhs.preSpawnProcessConfigurator != nil {
-            return false
-        }
-        return lhs.qualityOfService == rhs.qualityOfService &&
-            lhs.userID == rhs.userID &&
-            lhs.groupID == rhs.groupID &&
-            lhs.supplementaryGroups == rhs.supplementaryGroups &&
-            lhs.processGroupID == rhs.processGroupID &&
-            lhs.createSession == rhs.createSession &&
-            lhs.launchRequirementData == rhs.launchRequirementData
-    }
-    
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(self.qualityOfService)
-        hasher.combine(self.userID)
-        hasher.combine(self.groupID)
-        hasher.combine(self.supplementaryGroups)
-        hasher.combine(self.processGroupID)
-        hasher.combine(self.createSession)
-        hasher.combine(self.launchRequirementData)
-        // Since we can't really hash closures,
-        // use an UUID such that as long as
-        // `preSpawnProcessConfigurator` is set, it will
-        // never equal to other PlatformOptions
-        if self.preSpawnProcessConfigurator != nil {
-            hasher.combine(UUID())
-        }
-    }
-}
-
-@available(macOS 9999, *)
-extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
-    internal func description(withIndent indent: Int) -> String {
-        let indent = String(repeating: " ", count: indent * 4)
-        return """
-PlatformOptions(
-\(indent)    qualityOfService: \(self.qualityOfService),
-\(indent)    userID: \(String(describing: userID)),
-\(indent)    groupID: \(String(describing: groupID)),
-\(indent)    supplementaryGroups: \(String(describing: supplementaryGroups)),
-\(indent)    processGroupID: \(String(describing: processGroupID)),
-\(indent)    createSession: \(createSession),
-\(indent)    launchRequirementData: \(String(describing: launchRequirementData)),
-\(indent)    preSpawnProcessConfigurator: \(self.preSpawnProcessConfigurator == nil ? "not set" : "set")
-\(indent))
-"""
-    }
-
-    public var description: String {
-        return self.description(withIndent: 0)
-    }
-
-    public var debugDescription: String {
-        return self.description(withIndent: 0)
-    }
-}
-
 // MARK: - Process Monitoring
 @available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
-    forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
-) async throws -> Subprocess.TerminationStatus {
+    forProcessWithIdentifier pid: ProcessIdentifier
+) async throws -> TerminationStatus {
     return try await withCheckedThrowingContinuation { continuation in
         let source = DispatchSource.makeProcessSource(
             identifier: pid.value,

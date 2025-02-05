@@ -19,7 +19,11 @@ import FoundationEssentials
 import Foundation
 #endif
 
+#if canImport(System)
 import System
+#else
+@preconcurrency import SystemPackage
+#endif
 import class Foundation.Bundle
 import struct Foundation.URL
 
