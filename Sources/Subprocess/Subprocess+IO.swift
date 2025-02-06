@@ -415,7 +415,7 @@ extension PipeBasedInputProtocol {
 
 // MARK: - Output
 
-/// The `OutputProtocol` protocol specifies the set of methods that a type
+/// `OutputProtocol` specifies the set of methods that a type
 /// must implement to serve as the output target for a subprocess.
 /// Instead of developing custom implementations of `OutputProtocol`,
 /// it is recommended to utilize the default implementations provided
@@ -641,6 +641,8 @@ extension OutputProtocol where Self == FileDescriptorOutput {
 
 @available(macOS 9999, *)
 extension OutputProtocol where Self == StringOutput {
+    /// Create a `Subprocess` output that collects output as
+    /// UTF8 String with 128kb limit.
     public static var string: Self {
         return .string(limit: 128 * 1024)
     }
@@ -657,11 +659,14 @@ extension OutputProtocol where Self == StringOutput {
 
 @available(macOS 9999, *)
 extension OutputProtocol where Self == DataOutput {
+    /// Create a `Subprocess` output that collects output as `Data`
+    /// up to 128kb.
     public static var data: Self {
         return .data(limit: 128 * 1024)
     }
 
     /// Create a `Subprocess` output that collects output as `Data`
+    /// with given max number of bytes to collect.
     public static func data(limit: Int) -> Self  {
         return .init(limit: limit)
     }
