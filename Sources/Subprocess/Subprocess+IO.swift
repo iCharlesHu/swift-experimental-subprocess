@@ -30,7 +30,6 @@ import Synchronization
 /// Instead of developing custom implementations of `InputProtocol`,
 /// it is recommended to utilize the default implementations provided
 /// by the `Subprocess` library to specify the input handling requirements.
-@available(macOS 9999, *)
 public protocol InputProtocol: Sendable {
     /// Lazily create and return the FileDescriptor for reading
     func readFileDescriptor() throws -> FileDescriptor?
@@ -48,7 +47,7 @@ public protocol InputProtocol: Sendable {
 }
 
 @available(macOS 9999, *)
-public protocol PipeBasedInputProtocol: InputProtocol {
+public protocol PipeInputProtocol: InputProtocol {
     /// The underlying pipe used by this input in order to
     /// write input to child process
     var pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
@@ -59,7 +58,6 @@ public protocol PipeBasedInputProtocol: InputProtocol {
 /// `NoInput` redirects the standard input of the subprocess
 /// to `/dev/null`, while on Windows, it does not bind any
 /// file handle to the subprocess standard input handle.
-@available(macOS 9999, *)
 public final class NoInput: InputProtocol {
     private let devnull: Mutex<FileDescriptor?>
 
@@ -149,7 +147,7 @@ public final class FileDescriptorInput: InputProtocol {
 @available(macOS 9999, *)
 public final class StringInput<
     InputString: StringProtocol & Sendable
->: PipeBasedInputProtocol {
+>: PipeInputProtocol {
     private let string: InputString
     internal let encoding: String.Encoding
     public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
@@ -184,12 +182,10 @@ public final class StringInput<
 }
 
 /// A concrete `Input` type for subprocesses that reads input
-/// from a given sequence of `UInt8` (such as `Data` or `[UInt8]`).
+/// from a given `UInt8` Array.
 @available(macOS 9999, *)
-public final class UInt8SequenceInput<
-    InputSequence: Sequence & Sendable
->: PipeBasedInputProtocol, Sendable where InputSequence.Element == UInt8 {
-    private let sequence: InputSequence
+public final class ArrayInput: PipeInputProtocol, Sendable {
+    private let array: [UInt8]
     public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
     public func write() async throws {
@@ -200,7 +196,7 @@ public final class UInt8SequenceInput<
             guard let writeEnd = writeEnd else {
                 fatalError("Attempting to write before process is launched")
             }
-            writeEnd.write(self.sequence) { error in
+            writeEnd.write(self.array) { error in
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else {
@@ -210,8 +206,39 @@ public final class UInt8SequenceInput<
         }
     }
 
-    internal init(underlying: InputSequence) {
-        self.sequence = underlying
+    internal init(array: [UInt8]) {
+        self.array = array
+        self.pipe = Mutex(nil)
+    }
+}
+
+/// A concrete `Input` type for subprocesses that reads input
+/// from a given `Data`.
+@available(macOS 9999, *)
+public final class DataInput: PipeInputProtocol, Sendable {
+    private let data: Data
+    public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
+
+    public func write() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            let writeEnd = self.pipe.withLock { pipeStore in
+                return pipeStore?.writeEnd
+            }
+            guard let writeEnd = writeEnd else {
+                fatalError("Attempting to write before process is launched")
+            }
+            writeEnd.write(self.data) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    internal init(data: Data) {
+        self.data = data
         self.pipe = Mutex(nil)
     }
 }
@@ -223,7 +250,7 @@ public final class UInt8SequenceInput<
 @available(macOS 9999, *)
 public final class DataSequenceInput<
     InputSequence: Sequence & Sendable
->: PipeBasedInputProtocol where InputSequence.Element == Data {
+>: PipeInputProtocol where InputSequence.Element == Data {
     private let sequence: InputSequence
     public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
@@ -261,7 +288,7 @@ public final class DataSequenceInput<
 @available(macOS 9999, *)
 public final class DataAsyncSequenceInput<
     InputSequence: AsyncSequence & Sendable
->: PipeBasedInputProtocol where InputSequence.Element == Data {
+>: PipeInputProtocol where InputSequence.Element == Data {
     private let sequence: InputSequence
     public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
@@ -298,7 +325,7 @@ public final class DataAsyncSequenceInput<
 /// A concrete `Input` type for subprocess that indicates that
 /// the Subprocess should read its input from `StandardInputWriter`.
 @available(macOS 9999, *)
-public final class CustomWriteInput: PipeBasedInputProtocol {
+public final class CustomWriteInput: PipeInputProtocol {
     public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
     public func write() async throws {
@@ -310,7 +337,6 @@ public final class CustomWriteInput: PipeBasedInputProtocol {
     }
 }
 
-@available(macOS 9999, *)
 extension InputProtocol where Self == NoInput {
     /// Create a Subprocess input that specfies there is no input
     public static var none: Self { .init() }
@@ -334,12 +360,16 @@ extension InputProtocol where Self == FileDescriptorInput {
 
 @available(macOS 9999, *)
 extension InputProtocol {
-    /// Create a Subprocess input from a `Sequence` of `UInt8` such as
-    /// `Data` or `Array<UInt8>`.
-    public static func sequence<InputSequence: Sequence & Sendable>(
-        _ sequence: InputSequence
-    ) -> Self where Self == UInt8SequenceInput<InputSequence> {
-        return UInt8SequenceInput(underlying: sequence)
+    /// Create a Subprocess input from a `Array` of `UInt8`.
+    public static func array(
+        _ array: [UInt8]
+    ) -> Self where Self == ArrayInput {
+        return ArrayInput(array: array)
+    }
+
+    /// Create a Subprocess input from a `Data`
+    public static func data(_ data: Data) -> Self where Self == DataInput {
+        return DataInput(data: data)
     }
 
     /// Create a Subprocess input from a `Sequence` of `Data`.
@@ -367,7 +397,7 @@ extension InputProtocol {
 
 // MARK: Defult implementations
 @available(macOS 9999, *)
-extension PipeBasedInputProtocol {
+extension PipeInputProtocol {
     public func readFileDescriptor() throws -> FileDescriptor? {
         return try self.pipe.withLock { pipeStore in
             if let pipe = pipeStore {
@@ -447,7 +477,7 @@ public protocol OutputProtocol: Sendable {
 }
 
 @available(macOS 9999, *)
-public protocol PipeBasedOutputProtocol: OutputProtocol {
+public protocol PipeOutputProtocol: OutputProtocol {
     /// The underlying pipe used by this output in order to
     /// read from the child process
     var pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
@@ -557,7 +587,7 @@ public final class FileDescriptorOutput: OutputProtocol {
 /// property of `Execution`. This output type is
 /// only applicable to the `run()` family that takes a custom closure.
 @available(macOS 9999, *)
-public final class SequenceOutput: PipeBasedOutputProtocol {
+public final class SequenceOutput: PipeOutputProtocol {
     public typealias OutputType = Void
     public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
@@ -570,7 +600,7 @@ public final class SequenceOutput: PipeBasedOutputProtocol {
 /// from the subprocess as `Data`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
 @available(macOS 9999, *)
-public final class DataOutput: PipeBasedOutputProtocol {
+public final class DataOutput: PipeOutputProtocol {
     public typealias OutputType = Data
     public let maxSize: Int
     public let pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
@@ -590,7 +620,7 @@ public final class DataOutput: PipeBasedOutputProtocol {
 /// This option must be used with he `run()` method that
 /// returns a `CollectedResult`.
 @available(macOS 9999, *)
-public final class StringOutput: PipeBasedOutputProtocol {
+public final class StringOutput: PipeOutputProtocol {
     public typealias OutputType = String?
     public let maxSize: Int
     internal let encoding: String.Encoding
@@ -616,9 +646,13 @@ public final class StringOutput: PipeBasedOutputProtocol {
 extension OutputProtocol {
     public func output(from data: some DataProtocol) throws -> OutputType {
         //FIXME: remove workaround for rdar://143992296
-        let result = try self.output(from: data.bytes)
-        return result
+        return try self.output(from: data.bytes)
     }
+
+//    public func output(from array: [UInt8]) throws -> OutputType {
+//        //FIXME: remove workaround for rdar://143992296
+//        return try self.output(from: array.bytes)
+//    }
 }
 
 @available(macOS 9999, *)
@@ -682,7 +716,7 @@ extension OutputProtocol where Self == SequenceOutput {
 
 // MARK: Default Implementations
 @available(macOS 9999, *)
-extension PipeBasedOutputProtocol {
+extension PipeOutputProtocol {
     public func readFileDescriptor() throws -> FileDescriptor? {
         return try self.pipe.withLock { pipeStore in
             if let pipe = pipeStore {

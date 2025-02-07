@@ -36,7 +36,6 @@ import _CShims
 
 /// The collection of platform-specific settings
 /// to configure the subprocess when running
-@available(macOS 9999, *)
 public struct PlatformOptions: Sendable {
     public var qualityOfService: QualityOfService = .default
     /// Set user ID for the subprocess

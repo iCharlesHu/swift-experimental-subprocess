@@ -40,7 +40,6 @@ import System
 
 /// Signals are standardized messages sent to a running program
 /// to trigger specific behavior, such as quitting or error handling.
-@available(macOS 9999, *)
 public struct Signal : Hashable, Sendable {
     /// The underlying platform specific value for the signal
     public let rawValue: Int32
@@ -99,7 +98,6 @@ public struct Signal : Hashable, Sendable {
 // MARK: - ProcessIdentifier
 
 /// A platform independent identifier for a Subprocess.
-@available(macOS 9999, *)
 public struct ProcessIdentifier: Sendable, Hashable, Codable {
     /// The platform specific process identifier value
     public let value: pid_t
@@ -264,7 +262,7 @@ extension Executable {
         ])
     }
 
-    internal func resolveExecutablePath(withPathValue pathValue: String?) -> String? {
+    internal func resolveExecutablePath(withPathValue pathValue: String?) throws -> String {
         switch self.storage {
         case .executable(let executableName):
             // If the executableName in is already a full path, return it directly
@@ -291,7 +289,8 @@ extension Executable {
             // Use path directly
             return executablePath.string
         }
-        return nil
+
+        throw SubprocessError.executableNotFound
     }
 }
 
@@ -310,12 +309,14 @@ extension Configuration {
         // Prepare environment
         let env = self.environment.createEnv()
         // Prepare executable path
-        guard let executablePath = self.executable.resolveExecutablePath(
-            withPathValue: self.environment.pathValue()) else {
+        let executablePath: String
+        do {
+            executablePath = try self.executable.resolveExecutablePath(
+                withPathValue: self.environment.pathValue()
+            )
+        } catch {
             for ptr in env { ptr?.deallocate() }
-            throw CocoaError(.executableNotLoadable, userInfo: [
-                .debugDescriptionErrorKey : "\(self.executable.description) is not an executable"
-            ])
+            throw error
         }
         // Prepare arguments
         let argv: [UnsafeMutablePointer<CChar>?] = self.arguments.createArgs(withExecutablePath: executablePath)
@@ -360,7 +361,6 @@ extension Configuration {
 }
 
 // MARK: - FileDescriptor extensions
-@available(macOS 9999, *)
 extension FileDescriptor {
     internal static func openDevNull(
         withAcessMode mode: FileDescriptor.AccessMode
@@ -394,7 +394,8 @@ extension FileDescriptor {
     }
 
     internal func readUntilEOF(
-        upToLength maxLength: Int, resultHandler: @escaping (Swift.Result<DispatchData, any Error>) -> Void
+        upToLength maxLength: Int,
+        resultHandler: @escaping (Swift.Result<DispatchData, any Error>) -> Void
     ) {
         let dispatchIO = DispatchIO(
             type: .stream,
@@ -491,11 +492,9 @@ extension FileDescriptor {
     }
 }
 
-@available(macOS 9999, *)
 internal typealias PlatformFileDescriptor = FileDescriptor
 
 // MARK: - Read Buffer Size
-@available(macOS 9999, *)
 @inline(__always)
 internal var readBufferSize: Int {
 #if canImport(Darwin)

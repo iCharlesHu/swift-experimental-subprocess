@@ -469,11 +469,9 @@ public struct Executable: Sendable, Hashable {
         return .init(_config: .path(filePath))
     }
     /// Returns the full executable path given the environment value.
-    public func resolveExecutablePath(in environment: Environment) -> FilePath? {
-        if let path = self.resolveExecutablePath(withPathValue: environment.pathValue()) {
-            return FilePath(path)
-        }
-        return nil
+    public func resolveExecutablePath(in environment: Environment) throws -> FilePath {
+        let path = try self.resolveExecutablePath(withPathValue: environment.pathValue())
+        return FilePath(path)
     }
 }
 

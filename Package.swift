@@ -33,7 +33,6 @@ let package = Package(
                 .enableExperimentalFeature("StrictConcurrency"),
                 .enableExperimentalFeature("NonescapableTypes"),
                 .enableExperimentalFeature("LifetimeDependence"),
-                .enableExperimentalFeature("SuppressedAssociatedTypes"),
                 .enableExperimentalFeature("Span")
             ]
         ),

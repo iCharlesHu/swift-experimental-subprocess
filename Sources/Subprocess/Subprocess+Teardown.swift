@@ -28,7 +28,6 @@ import Foundation
 /// It consists of a signal to send to the child process and the
 /// duration allowed for the child process to exit before proceeding
 /// to the next step.
-@available(macOS 9999, *)
 public struct TeardownStep: Sendable, Hashable {
     internal enum Storage: Sendable, Hashable {
         case sendSignal(Signal, allowedDuration: Duration)

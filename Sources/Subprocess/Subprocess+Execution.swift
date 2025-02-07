@@ -45,6 +45,12 @@ public struct Execution<
 #if os(Windows)
     internal let consoleBehavior: PlatformOptions.ConsoleBehavior
 #endif
+
+    init(processIdentifier: ProcessIdentifier, output: Output, error: Error) {
+        self.processIdentifier = processIdentifier
+        self.output = output
+        self.error = error
+    }
 }
 
 @available(macOS 9999, *)
