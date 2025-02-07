@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(Glibc)
+#if canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 
 #if canImport(System)
 import System
@@ -17,7 +17,14 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
+#if canImport(Bionic)
+import Bionic
+#elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Musl)
+import Musl
+#endif
+
 import Dispatch
 import Synchronization
 import FoundationEssentials
@@ -310,5 +317,12 @@ private func _setupMonitorSignalHandler() {
     setup
 }
 
-#endif // canImport(Glibc)
+extension PipeOutputProtocol {
+    public func output(from data: DispatchData) throws -> OutputType {
+        //FIXME: remove workaround for rdar://143992296
+        return try self.output(from: data.bytes)
+    }
+}
+
+#endif // canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 

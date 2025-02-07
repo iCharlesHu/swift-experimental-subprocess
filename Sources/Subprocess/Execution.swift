@@ -17,8 +17,12 @@ import System
 
 #if canImport(Darwin)
 import Darwin
+#elseif canImport(Bionic)
+import Bionic
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Musl)
+import Musl
 #elseif canImport(WinSDK)
 import WinSDK
 #endif
@@ -32,7 +36,6 @@ import Foundation
 /// An object that repersents a subprocess that has been
 /// executed. You can use this object to send signals to the
 /// child process as well as stream its output and error.
-@available(macOS 9999, *)
 public struct Execution<
     Output: OutputProtocol,
     Error: OutputProtocol
@@ -53,14 +56,13 @@ public struct Execution<
     }
 }
 
-@available(macOS 9999, *)
 extension Execution where Output == SequenceOutput {
     /// The standard output of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.output` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardOutput: some _AsyncSequence<Data, any Swift.Error> {
+    public var standardOutput: some AsyncSequence<Data, any Swift.Error> {
         guard let fd = self.output
             .consumeReadFileDescriptor() else {
             fatalError("The standard output has already been consumed")
@@ -69,14 +71,13 @@ extension Execution where Output == SequenceOutput {
     }
 }
 
-@available(macOS 9999, *)
 extension Execution where Error == SequenceOutput {
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.error` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardError: some _AsyncSequence<Data, any Swift.Error> {
+    public var standardError: some AsyncSequence<Data, any Swift.Error> {
         guard let fd = self.error
             .consumeReadFileDescriptor() else {
             fatalError("The standard error has already been consumed")
@@ -86,8 +87,7 @@ extension Execution where Error == SequenceOutput {
 }
 
 // MARK: - Teardown
-#if canImport(Darwin) || canImport(Glibc)
-@available(macOS 9999, *)
+#if canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 extension Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal
@@ -98,23 +98,22 @@ extension Execution {
         }
     }
 }
-#endif
+#endif // canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 
 // MARK: - Output Capture
-@available(macOS 9999, *)
 internal enum OutputCapturingState<Output: Sendable, Error: Sendable>: Sendable {
     case standardOutputCaptured(Output)
     case standardErrorCaptured(Error)
 }
 
-@available(macOS 9999, *)
 internal typealias CapturedIOs<
     Output: Sendable, Error: Sendable
 > = (standardOutput: Output, standardError: Error)
 
-@available(macOS 9999, *)
 extension Execution {
-    internal func captureIOs() async throws -> CapturedIOs<Output.OutputType, Error.OutputType> {
+    internal func captureIOs() async throws -> CapturedIOs<
+        Output.OutputType, Error.OutputType
+    > {
         return try await withThrowingTaskGroup(
             of: OutputCapturingState<Output.OutputType, Error.OutputType>.self
         ) { group in

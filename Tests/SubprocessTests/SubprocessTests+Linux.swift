@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(Glibc)
+#if canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 
 import XCTest
 @testable import Subprocess
@@ -25,7 +25,7 @@ final class SubprocessLinuxTests: XCTestCase {
             setgid(4321)
         }
         let idResult = try await Subprocess.run(
-            .named("/usr/bin/id"),
+            .name("/usr/bin/id"),
             arguments: ["-g"],
             platformOptions: platformOptions,
             output: .string
@@ -66,7 +66,7 @@ final class SubprocessLinuxTests: XCTestCase {
 
         _ = try await Subprocess.run(
             // This will intentionally hang
-            .at("/usr/bin/sleep"),
+            .path("/usr/bin/sleep"),
             arguments: ["infinity"]
         ) { subprocess in
             // First suspend the procss
@@ -85,4 +85,4 @@ final class SubprocessLinuxTests: XCTestCase {
     }
 }
 
-#endif // canImport(Glibc)
+#endif // canImport(Glibc) || canImport(Bionic) || canImport(Musl)

@@ -9,7 +9,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#elseif canImport(Foundation)
 import Foundation
+#endif
+
 import Dispatch
 
 @_unsafeNonescapableResult
@@ -91,3 +96,25 @@ extension DataProtocol {
         }
     }
 }
+
+#if canImport(Glibc) || canImport(Bionic) || canImport(Musl)
+@available(macOS 9999, *)
+extension DispatchData {
+    var bytes: RawSpan {
+        _read {
+            if self.count == 0 {
+                let empty = UnsafeRawBufferPointer(start: nil, count: 0)
+                let span = RawSpan(_unsafeBytes: empty)
+                yield _overrideLifetime(of: span, to: self)
+            } else {
+                let ptr = self.withUnsafeBytes {
+                    return UnsafeRawBufferPointer(start: UnsafeRawPointer($0), count: self.count)
+                }
+                let span = RawSpan(_unsafeBytes: ptr)
+                yield _overrideLifetime(of: span, to: self)
+            }
+        }
+    }
+}
+#endif // canImport(Glibc) || canImport(Bionic) || canImport(Musl)
+

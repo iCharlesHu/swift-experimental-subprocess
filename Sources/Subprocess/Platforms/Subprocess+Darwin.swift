@@ -153,7 +153,6 @@ PlatformOptions(
 
 
 // MARK: - Spawn
-@available(macOS 9999, *)
 extension Configuration {
     internal func spawn<
         Input: InputProtocol,
@@ -320,7 +319,6 @@ extension String {
 }
 
 // MARK: - Process Monitoring
-@available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: ProcessIdentifier

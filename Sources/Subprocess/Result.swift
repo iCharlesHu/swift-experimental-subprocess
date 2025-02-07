@@ -27,7 +27,6 @@ import Foundation
 /// A simple wrapper around the generic result returned by the
 /// `run` closures with the corresponding `TerminationStatus`
 /// of the child process.
-@available(macOS 9999, *)
 public struct ExecutionResult<Result> {
     /// The termination status of the child process
     public let terminationStatus: TerminationStatus
@@ -137,66 +136,6 @@ ExecutionResult(
     value: \(self.value.debugDescription)
 )
 """
-    }
-}
-
-// MARK: - StandardInputWriter
-
-/// A writer that writes to the standard input of the subprocess.
-@available(macOS 9999, *)
-public final actor StandardInputWriter: Sendable {
-
-    private let input: CustomWriteInput
-
-    init(input: CustomWriteInput) {
-        self.input = input
-    }
-
-    /// Write a sequence of UInt8 to the standard input of the subprocess.
-    /// - Parameter sequence: The sequence of bytes to write.
-    public func write<SendableSequence: Sequence<UInt8> & Sendable>(
-        _ sequence: SendableSequence
-    ) async throws {
-        guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
-            fatalError("Attempting to write to a file descriptor that's already closed")
-        }
-        if let array = sequence as? Array<UInt8> {
-            try await fd.write(array)
-        } else {
-            try await fd.write(Array(sequence))
-        }
-    }
-
-    /// Write a sequence of CChar to the standard input of the subprocess.
-    /// - Parameter sequence: The sequence of bytes to write.
-    public func write(
-        _ string: some StringProtocol,
-        using encoding: String.Encoding = .utf8
-    ) async throws {
-        guard encoding != .utf8 else {
-            try await self.write(Data(string.utf8))
-            return
-        }
-        if let data = string.data(using: encoding) {
-            try await self.write(data)
-        }
-    }
-
-    /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
-    /// - Parameter sequence: The sequence of bytes to write.
-    public func write<AsyncSendableSequence: AsyncSequence & Sendable>(
-        _ asyncSequence: AsyncSendableSequence
-    ) async throws where AsyncSendableSequence.Element == Data {
-        var buffer = Data()
-        for try await data in asyncSequence {
-            buffer.append(data)
-        }
-        try await self.write(buffer)
-    }
-
-    /// Signal all writes are finished
-    public func finish() async throws {
-        try self.input.closeWriteFileDescriptor()
     }
 }
 

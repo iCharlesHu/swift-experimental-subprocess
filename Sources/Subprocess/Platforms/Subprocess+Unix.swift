@@ -9,7 +9,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(Darwin) || canImport(Glibc)
+#if canImport(Darwin) || canImport(Glibc) || canImport(Bionic) || canImport(Musl)
+
+#if canImport(System)
+import System
+#else
+@preconcurrency import SystemPackage
+#endif
 
 #if canImport(FoundationEssentials)
 import FoundationEssentials
@@ -19,22 +25,16 @@ import Foundation
 
 #if canImport(Darwin)
 import Darwin
+#elseif canImport(Bionic)
+import Bionic
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Musl)
+import Musl
 #endif
 
-#if FOUNDATION_FRAMEWORK
-@_implementationOnly import _FoundationCShims
-#else
 import _CShims
-#endif
-
 import Dispatch
-#if canImport(System)
-import System
-#else
-@preconcurrency import SystemPackage
-#endif
 
 // MARK: - Signals
 
@@ -107,14 +107,12 @@ public struct ProcessIdentifier: Sendable, Hashable, Codable {
     }
 }
 
-@available(macOS 9999, *)
 extension ProcessIdentifier : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String { "\(self.value)" }
 
     public var debugDescription: String { "\(self.value)" }
 }
 
-@available(macOS 9999, *)
 extension Execution {
     /// Send the given signal to the child process.
     /// - Parameters:
@@ -145,7 +143,6 @@ extension Execution {
 }
 
 // MARK: - Environment Resolution
-@available(macOS 9999, *)
 extension Environment {
     internal static let pathEnvironmentVariableName = "PATH"
 
@@ -232,7 +229,6 @@ extension Environment {
 }
 
 // MARK: Args Creation
-@available(macOS 9999, *)
 extension Arguments {
     // This method follows the standard "create" rule: `args` needs to be
     // manually deallocated
@@ -250,7 +246,6 @@ extension Arguments {
 }
 
 // MARK: -  Executable Searching
-@available(macOS 9999, *)
 extension Executable {
     internal static var defaultSearchPaths: Set<String> {
         return Set([
@@ -295,7 +290,6 @@ extension Executable {
 }
 
 // MARK: - PreSpawn
-@available(macOS 9999, *)
 extension Configuration {
     internal func preSpawn() throws -> (
         executablePath: String,
@@ -436,41 +430,38 @@ extension FileDescriptor {
         }
     }
 
-    internal func write<WriteSequence: Sequence & Sendable>(
-        _ data: WriteSequence
-    ) async throws where WriteSequence.Element == UInt8 {
+    internal func write(
+        _ data: Data
+    ) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-            self.write(data) { error in
+            let dispatchData = data.withUnsafeBytes {
+                return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+            }
+            self.write(dispatchData) { error in
                 if let error = error {
                     continuation.resume(throwing: error)
-                    return
+                } else {
+                    continuation.resume()
                 }
-                continuation.resume()
             }
         }
     }
 
-    internal func write<WriteSequence: Sequence & Sendable>(
-        _ data: WriteSequence,
-        completion: @escaping (Error?) -> Void
-    ) where WriteSequence.Element == UInt8 {
-        let dispatchData: DispatchData
-        if let array = data as? [UInt8] {
-            dispatchData = array.withUnsafeBytes {
+    internal func write(
+        _ array: [UInt8]
+    ) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            let dispatchData = array.withUnsafeBytes {
                 return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
             }
-        } else if let data = data as? Data {
-            dispatchData = data.withUnsafeBytes {
-                return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
-            }
-        } else {
-            // Slow case: need to copy the buffer
-            let array = Array(data)
-            dispatchData = array.withUnsafeBytes {
-                return DispatchData(bytes: $0)
+            self.write(dispatchData) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
             }
         }
-        self.write(dispatchData, completion: completion)
     }
 
     internal func write(
@@ -505,4 +496,4 @@ internal var readBufferSize: Int {
 #endif // canImport(Darwin)
 }
 
-#endif // canImport(Darwin) || canImport(Glibc)
+#endif // canImport(Darwin) || canImport(Glibc) || canImport(Bionic) || canImport(Musl)
