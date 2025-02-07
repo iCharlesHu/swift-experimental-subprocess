@@ -38,7 +38,7 @@ extension SubprocessUnixTests {
         let message = "Hello, world!"
         let result = try await Subprocess.run(
             .named("echo"),
-            arguments: [message]
+            arguments: .init([message])
         )
         XCTAssertTrue(result.terminationStatus.isSuccess)
         // rdar://138670128
@@ -301,7 +301,7 @@ extension SubprocessUnixTests {
         )
         let catResult = try await Subprocess.run(
             .at("/bin/cat"),
-            input: .sequence(expected),
+            input: .data(expected),
             output: .data(limit: 2048 * 1024)
         )
         XCTAssertTrue(catResult.terminationStatus.isSuccess)
@@ -361,7 +361,7 @@ extension SubprocessUnixTests {
         )
         let result = try await Subprocess.run(
             .at("/bin/cat"),
-            input: .sequence(expected)
+            input: .data(expected)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {

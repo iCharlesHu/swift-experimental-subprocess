@@ -24,14 +24,14 @@ import FoundationEssentials
 @available(macOS 9999, *)
 extension Configuration {
     internal func spawn<
-        input: InputProtocol,
+        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Execution<Input, Output, Error> {
+    ) throws -> Execution<Output, Error> {
         // Spawn differently depending on whether
         // we need to spawn as a user
         if let userCredentials = self.platformOptions.userCredentials {
@@ -51,14 +51,14 @@ extension Configuration {
     }
 
     internal func spawnDirect<
-        input: InputProtocol,
+        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Execution<Input, Output, Error> {
+    ) throws -> Execution<Output, Error> {
         let (
             applicationName,
             commandAndArgs,
@@ -144,7 +144,6 @@ extension Configuration {
         )
         return Execution(
             processIdentifier: pid,
-            input: input,
             output: output,
             error: error,
             consoleBehavior: self.platformOptions.consoleBehavior
@@ -152,7 +151,7 @@ extension Configuration {
     }
 
     internal func spawnAsUser<
-        input: InputProtocol,
+        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
@@ -160,7 +159,7 @@ extension Configuration {
         output: Output,
         error: Error,
         userCredentials: PlatformOptions.UserCredentials
-    ) throws -> Execution<Input, Output, Error> {
+    ) throws -> Execution<Output, Error> {
         let (
             applicationName,
             commandAndArgs,
@@ -259,7 +258,6 @@ extension Configuration {
         )
         return Execution(
             processIdentifier: pid,
-            input: input,
             output: output,
             error: error,
             consoleBehavior: self.platformOptions.consoleBehavior
@@ -614,7 +612,7 @@ extension Executable {
     // Technically not needed for CreateProcess since
     // it takes process name. It's here to support
     // Executable.resolveExecutablePath
-    internal func resolveExecutablePath(withPathValue pathValue: String?) -> String? {
+    internal func resolveExecutablePath(withPathValue pathValue: String?) throws -> String {
         switch self.storage {
         case .executable(let executableName):
             return executableName.withCString(
@@ -629,7 +627,10 @@ extension Executable {
                         nil, 0, nil, nil
                     )
                     guard pathLenth > 0 else {
-                        return nil
+                        throw CocoaError.windowsError(
+                            underlying: GetLastError(),
+                            errorCode: .fileWriteUnknown
+                        )
                     }
                     return withUnsafeTemporaryAllocation(
                         of: WCHAR.self, capacity: Int(pathLenth) + 1
@@ -789,7 +790,7 @@ extension Configuration {
     }
 
     private func generateStartupInfo<
-        input: InputProtocol,
+        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
@@ -860,12 +861,12 @@ extension Configuration {
             // actually resolve the path. However, to maintain
             // the same behavior as other platforms, still check
             // here to make sure the executable actually exists
-            guard self.executable.resolveExecutablePath(
-                withPathValue: self.environment.pathValue()
-            ) != nil else {
-                throw CocoaError(.executableNotLoadable, userInfo: [
-                    .debugDescriptionErrorKey : "\(self.executable.description) is not an executable"
-                ])
+            do {
+                _ = try self.executable.resolveExecutablePath(
+                    withPathValue: self.environment.pathValue()
+                )
+            } catch {
+                throw error
             }
             executableNameOrPath = name
         }
@@ -1049,67 +1050,75 @@ extension FileDescriptor {
     }
 
     internal func readChunk(upToLength maxLength: Int) async throws -> Data? {
-        let result = try await self.readUntilEOF(upToLength: maxLength)
-        guard !result.isEmpty else {
-            return nil
+        return try await withCheckedThrowingContinuation { continuation in
+            self.readUntilEOF(
+                upToLength: maxLength
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success(let bytes):
+                    continuation.resume(returning: Data(bytes))
+                }
+            }
         }
-        return result
     }
 
-    internal func readUntilEOF(upToLength maxLength: Int) async throws -> Data {
-        // TODO: Figure out a better way to asynchornously read
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                var totalBytesRead: Int = 0
-                var lastError: DWORD? = nil
-                let values = Array<UInt8>(
-                    unsafeUninitializedCapacity: maxLength
-                ) { buffer, initializedCount in
-                    while true {
-                        guard let baseAddress = buffer.baseAddress else {
-                            initializedCount = 0
-                            break
-                        }
-                        let bufferPtr = baseAddress.advanced(by: totalBytesRead)
-                        var bytesRead: DWORD = 0
-                        let readSucceed = ReadFile(
-                            self.platformDescriptor,
-                            UnsafeMutableRawPointer(mutating: bufferPtr),
-                            DWORD(maxLength - totalBytesRead),
-                            &bytesRead,
-                            nil
-                        )
-                        if !readSucceed {
-                            // Windows throws ERROR_BROKEN_PIPE when the pipe is closed
-                            let error = GetLastError()
-                            if error == ERROR_BROKEN_PIPE {
-                                // We are done reading
-                                initializedCount = totalBytesRead
-                            } else {
-                                // We got some error
-                                lastError = error
-                                initializedCount = 0
-                            }
-                            break
+    internal func readUntilEOF(
+        upToLength maxLength: Int,
+        resultHandler: @escaping (Swift.Result<Array<UInt8>, any Error>) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            var totalBytesRead: Int = 0
+            var lastError: DWORD? = nil
+            let values = Array<UInt8>(
+                unsafeUninitializedCapacity: maxLength
+            ) { buffer, initializedCount in
+                while true {
+                    guard let baseAddress = buffer.baseAddress else {
+                        initializedCount = 0
+                        break
+                    }
+                    let bufferPtr = baseAddress.advanced(by: totalBytesRead)
+                    var bytesRead: DWORD = 0
+                    let readSucceed = ReadFile(
+                        self.platformDescriptor,
+                        UnsafeMutableRawPointer(mutating: bufferPtr),
+                        DWORD(maxLength - totalBytesRead),
+                        &bytesRead,
+                        nil
+                    )
+                    if !readSucceed {
+                        // Windows throws ERROR_BROKEN_PIPE when the pipe is closed
+                        let error = GetLastError()
+                        if error == ERROR_BROKEN_PIPE {
+                            // We are done reading
+                            initializedCount = totalBytesRead
                         } else {
-                            // We succesfully read the current round
-                            totalBytesRead += Int(bytesRead)
+                            // We got some error
+                            lastError = error
+                            initializedCount = 0
                         }
+                        break
+                    } else {
+                        // We succesfully read the current round
+                        totalBytesRead += Int(bytesRead)
+                    }
 
-                        if totalBytesRead >= maxLength {
-                            initializedCount = min(maxLength, totalBytesRead)
-                            break
-                        }
+                    if totalBytesRead >= maxLength {
+                        initializedCount = min(maxLength, totalBytesRead)
+                        break
                     }
                 }
-                if let lastError = lastError {
-                    continuation.resume(throwing: CocoaError.windowsError(
-                        underlying: lastError,
-                        errorCode: .fileReadUnknown)
-                    )
-                } else {
-                    continuation.resume(returning: Data(values))
-                }
+            }
+            if let lastError = lastError {
+                let windowsError = CocoaError.windowsError(
+                    underlying: lastError,
+                    errorCode: .fileReadUnknown
+                )
+                resultHandler(.failure(windowsError))
+            } else {
+                resultHandler(.success(values))
             }
         }
     }

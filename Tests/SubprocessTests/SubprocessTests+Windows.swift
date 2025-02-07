@@ -912,4 +912,64 @@ extension SubprocessWindowsTests {
     }
 }
 
+extension FileDescriptor {
+    internal func readUntilEOF(upToLength maxLength: Int) async throws -> Data {
+        // TODO: Figure out a better way to asynchornously read
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var totalBytesRead: Int = 0
+                var lastError: DWORD? = nil
+                let values = Array<UInt8>(
+                    unsafeUninitializedCapacity: maxLength
+                ) { buffer, initializedCount in
+                    while true {
+                        guard let baseAddress = buffer.baseAddress else {
+                            initializedCount = 0
+                            break
+                        }
+                        let bufferPtr = baseAddress.advanced(by: totalBytesRead)
+                        var bytesRead: DWORD = 0
+                        let readSucceed = ReadFile(
+                            self.platformDescriptor,
+                            UnsafeMutableRawPointer(mutating: bufferPtr),
+                            DWORD(maxLength - totalBytesRead),
+                            &bytesRead,
+                            nil
+                        )
+                        if !readSucceed {
+                            // Windows throws ERROR_BROKEN_PIPE when the pipe is closed
+                            let error = GetLastError()
+                            if error == ERROR_BROKEN_PIPE {
+                                // We are done reading
+                                initializedCount = totalBytesRead
+                            } else {
+                                // We got some error
+                                lastError = error
+                                initializedCount = 0
+                            }
+                            break
+                        } else {
+                            // We succesfully read the current round
+                            totalBytesRead += Int(bytesRead)
+                        }
+
+                        if totalBytesRead >= maxLength {
+                            initializedCount = min(maxLength, totalBytesRead)
+                            break
+                        }
+                    }
+                }
+                if let lastError = lastError {
+                    continuation.resume(throwing: CocoaError.windowsError(
+                        underlying: lastError,
+                        errorCode: .fileReadUnknown)
+                    )
+                } else {
+                    continuation.resume(returning: Data(values))
+                }
+            }
+        }
+    }
+}
+
 #endif // canImport(WinSDK)
