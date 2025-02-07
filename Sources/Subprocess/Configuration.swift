@@ -17,8 +17,12 @@ import System
 
 #if canImport(Darwin)
 import Darwin
+#elseif canImport(Bionic)
+import Bionic
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Musl)
+import Musl
 #elseif canImport(WinSDK)
 import WinSDK
 #endif
@@ -33,7 +37,6 @@ import Dispatch
 
 /// A collection of configurations parameters to use when
 /// spawning a subprocess.
-@available(macOS 9999, *)
 public struct Configuration: Sendable, Hashable {
 
     internal enum RunState<Result: Sendable>: Sendable {
@@ -444,7 +447,6 @@ Configuration(
 
 /// `Executable` defines how should the executable
 /// be looked up for execution.
-@available(macOS 9999, *)
 public struct Executable: Sendable, Hashable {
     internal enum Storage: Sendable, Hashable {
         case executable(String)
@@ -460,12 +462,12 @@ public struct Executable: Sendable, Hashable {
     /// Locate the executable by its name.
     /// `Subprocess` will use `PATH` value to
     /// determine the full path to the executable.
-    public static func named(_ executableName: String) -> Self {
+    public static func name(_ executableName: String) -> Self {
         return .init(_config: .executable(executableName))
     }
     /// Locate the executable by its full path.
     /// `Subprocess` will use this  path directly.
-    public static func at(_ filePath: FilePath) -> Self {
+    public static func path(_ filePath: FilePath) -> Self {
         return .init(_config: .path(filePath))
     }
     /// Returns the full executable path given the environment value.
@@ -499,7 +501,6 @@ extension Executable : CustomStringConvertible, CustomDebugStringConvertible {
 // MARK: - Arguments
 
 /// A collection of arguments to pass to the subprocess.
-@available(macOS 9999, *)
 public struct Arguments: Sendable, ExpressibleByArrayLiteral, Hashable {
     public typealias ArrayLiteralElement = String
 
@@ -576,7 +577,6 @@ extension Arguments : CustomStringConvertible, CustomDebugStringConvertible {
 // MARK: - Environment
 
 /// A set of environment variables to use when executing the subprocess.
-@available(macOS 9999, *)
 public struct Environment: Sendable, Hashable {
     internal enum Configuration: Sendable, Hashable {
         case inherit([StringOrRawBytes : StringOrRawBytes])
@@ -634,7 +634,6 @@ extension Environment : CustomStringConvertible, CustomDebugStringConvertible {
 
 /// An exit status of a subprocess.
 @frozen
-@available(macOS 9999, *)
 public enum TerminationStatus: Sendable, Hashable, Codable {
 #if canImport(WinSDK)
     public typealias Code = DWORD
@@ -675,7 +674,6 @@ extension TerminationStatus : CustomStringConvertible, CustomDebugStringConverti
 
 // MARK: - Internal
 
-@available(macOS 9999, *)
 internal enum StringOrRawBytes: Sendable, Hashable {
     case string(String)
     case rawBytes([CChar])
@@ -777,7 +775,6 @@ extension Optional where Wrapped == String {
     }
 }
 
-@available(macOS 9999, *)
 fileprivate extension Dictionary where Key == String, Value == String {
     func wrapToStringOrRawBytes() -> [StringOrRawBytes : StringOrRawBytes] {
         var result = Dictionary<
@@ -791,7 +788,6 @@ fileprivate extension Dictionary where Key == String, Value == String {
     }
 }
 
-@available(macOS 9999, *)
 fileprivate extension Dictionary where Key == Data, Value == Data {
     func wrapToStringOrRawBytes() -> [StringOrRawBytes : StringOrRawBytes] {
         var result = Dictionary<
@@ -805,7 +801,6 @@ fileprivate extension Dictionary where Key == Data, Value == Data {
     }
 }
 
-@available(macOS 9999, *)
 fileprivate extension Dictionary where Key == StringOrRawBytes, Value == StringOrRawBytes {
     var dictionaryDescription: String {
         var result = "[\n"

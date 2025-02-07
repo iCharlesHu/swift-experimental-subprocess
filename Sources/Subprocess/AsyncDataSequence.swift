@@ -22,15 +22,14 @@ import FoundationEssentials
 import Foundation
 #endif
 
-@available(macOS 9999, *)
-public struct AsyncDataSequence: AsyncSequence, Sendable, _AsyncSequence {
-    public typealias Error = any Swift.Error
+internal struct AsyncDataSequence: AsyncSequence, Sendable {
+    internal typealias Failure = any Swift.Error
 
-    public typealias Element = Data
+    internal typealias Element = Data
 
     @_nonSendable
-    public struct Iterator: AsyncIteratorProtocol {
-        public typealias Element = Data
+    internal struct Iterator: AsyncIteratorProtocol {
+        internal typealias Element = Data
 
         private let fileDescriptor: FileDescriptor
         private var buffer: [UInt8]
@@ -44,7 +43,7 @@ public struct AsyncDataSequence: AsyncSequence, Sendable, _AsyncSequence {
             self.finished = false
         }
 
-        public mutating func next() async throws -> Data? {
+        internal mutating func next() async throws -> Data? {
             let data = try await self.fileDescriptor.readChunk(
                 upToLength: readBufferSize
             )
@@ -63,7 +62,7 @@ public struct AsyncDataSequence: AsyncSequence, Sendable, _AsyncSequence {
         self.fileDescriptor = fileDescriptor
     }
 
-    public func makeAsyncIterator() -> Iterator {
+    internal func makeAsyncIterator() -> Iterator {
         return Iterator(fileDescriptor: self.fileDescriptor)
     }
 }
@@ -73,7 +72,7 @@ extension RangeReplaceableCollection {
     ///
     /// - Parameter source: The asynchronous sequence of elements for the new collection.
     @inlinable
-    public init<Source: AsyncSequence>(_ source: Source) async rethrows where Source.Element == Element {
+    internal init<Source: AsyncSequence>(_ source: Source) async rethrows where Source.Element == Element {
         self.init()
         for try await item in source {
             append(item)
@@ -81,6 +80,3 @@ extension RangeReplaceableCollection {
     }
 }
 
-public protocol _AsyncSequence<Element, Error>: AsyncSequence {
-    associatedtype Error
-}

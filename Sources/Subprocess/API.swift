@@ -116,6 +116,7 @@ public func run<
     ).run(input: input, output: output, error: error)
 }
 
+
 // MARK: - Custom Execution Body
 
 /// Run a executable with given parameters and a custom closure
@@ -133,7 +134,6 @@ public func run<
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -171,7 +171,6 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Input: InputProtocol, Output: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -212,7 +211,6 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol>(
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Input: InputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -252,7 +250,6 @@ public func run<Result, Input: InputProtocol>(
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -288,7 +285,6 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Output: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -326,7 +322,6 @@ public func run<Result, Output: OutputProtocol>(
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -350,6 +345,7 @@ public func run<Result>(
 }
 
 // MARK: - Configuration Based
+
 /// Run a executable with given parameters specified by a `Configuration`
 /// - Parameters:
 ///   - configuration: The `Subprocess` configuration to run.
@@ -359,7 +355,6 @@ public func run<Result>(
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ configuration: Configuration,
     isolation: isolated (any Actor)? = #isolation,
@@ -379,7 +374,6 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Output: OutputProtocol>(
     _ configuration: Configuration,
     isolation: isolated (any Actor)? = #isolation,
@@ -402,7 +396,6 @@ public func run<Result, Output: OutputProtocol>(
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result>(
     _ configuration: Configuration,
     isolation: isolated (any Actor)? = #isolation,
@@ -435,7 +428,6 @@ public func run<Result>(
 ///   - output: A file descriptor to bind to the subprocess' standard output.
 ///   - error: A file descriptor to bind to the subprocess' standard error.
 /// - Returns: the process identifier for the subprocess.
-@available(macOS 9999, *)
 public func runDetached(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -469,7 +461,6 @@ public func runDetached(
 ///   - output: A file descriptor to bind to the subprocess' standard output.
 ///   - error: A file descriptor to bind to the subprocess' standard error.
 /// - Returns: the process identifier for the subprocess.
-@available(macOS 9999, *)
 public func runDetached(
     _ configuration: Configuration,
     input: FileDescriptor? = nil,

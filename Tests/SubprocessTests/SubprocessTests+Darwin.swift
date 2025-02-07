@@ -35,7 +35,7 @@ final class SubprocessDarwinTests : XCTestCase {
         // Check the proces ID (pid), pross group ID (pgid), and
         // controling terminal's process group ID (tpgid)
         let psResult = try await Subprocess.run(
-            .named("/bin/bash"),
+            .name("/bin/bash"),
             arguments: ["-c", "ps -o pid,pgid,tpgid -p $$"],
             platformOptions: platformOptions,
             output: .string
@@ -53,7 +53,7 @@ final class SubprocessDarwinTests : XCTestCase {
             }
         }
         let pwdResult = try await Subprocess.run(
-            .at("/bin/pwd"),
+            .path("/bin/pwd"),
             platformOptions: platformOptions,
             output: .string
         )
@@ -72,7 +72,7 @@ final class SubprocessDarwinTests : XCTestCase {
     func testSuspendResumeProcess() async throws {
         _ = try await Subprocess.run(
             // This will intentionally hang
-            .at("/bin/cat")
+            .path("/bin/cat")
         ) { subprocess in
             // First suspend the procss
             try subprocess.send(signal: .suspend)

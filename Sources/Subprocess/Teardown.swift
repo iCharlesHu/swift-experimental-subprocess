@@ -9,12 +9,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(Darwin) || canImport(Glibc)
+#if canImport(Darwin) || canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 
 #if canImport(Darwin)
 import Darwin
+#elseif canImport(Bionic)
+import Bionic
 #elseif canImport(Glibc)
 import Glibc
+#elseif canImport(Musl)
+import Musl
 #endif
 
 #if canImport(FoundationEssentials)
@@ -51,14 +55,12 @@ public struct TeardownStep: Sendable, Hashable {
     }
 }
 
-@available(macOS 9999, *)
 internal enum TeardownStepCompletion {
     case processHasExited
     case processStillAlive
     case killedTheProcess
 }
 
-@available(macOS 9999, *)
 extension Execution {
     internal func runTeardownSequence(_ sequence: [TeardownStep]) async {
         // First insert the `.kill` step
@@ -102,7 +104,6 @@ extension Execution {
     }
 }
 
-@available(macOS 9999, *)
 extension Execution {
     private func isAlive() -> Bool {
         return kill(self.processIdentifier.value, 0) == 0
@@ -122,4 +123,4 @@ func withUncancelledTask<Result: Sendable>(
     }.value
 }
 
-#endif // canImport(Darwin) || canImport(Glibc)
+#endif // canImport(Darwin) || canImport(Glibc) || canImport(Bionic) || canImport(Musl)
