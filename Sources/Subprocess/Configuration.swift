@@ -479,7 +479,6 @@ public struct Executable: Sendable, Hashable {
     }
 }
 
-@available(macOS 9999, *)
 extension Executable : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch storage {
@@ -562,7 +561,6 @@ public struct Arguments: Sendable, ExpressibleByArrayLiteral, Hashable {
 #endif
 }
 
-@available(macOS 9999, *)
 extension Arguments : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         var result: [String] = self.storage.map(\.description)
@@ -616,7 +614,6 @@ public struct Environment: Sendable, Hashable {
 #endif
 }
 
-@available(macOS 9999, *)
 extension Environment : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch self.config {
@@ -658,7 +655,6 @@ public enum TerminationStatus: Sendable, Hashable, Codable {
     }
 }
 
-@available(macOS 9999, *)
 extension TerminationStatus : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch self {

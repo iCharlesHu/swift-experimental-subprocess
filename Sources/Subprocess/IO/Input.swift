@@ -150,7 +150,7 @@ public final class FileDescriptorInput: InputProtocol {
 /// encoding the string to data, which defaults to UTF-8.
 public final class StringInput<
     InputString: StringProtocol & Sendable
->: ManagedInputProtocol, @unchecked Sendable {
+>: ManagedInputProtocol {
     private let string: InputString
     internal let encoding: String.Encoding
     public let pipe: Pipe
@@ -171,7 +171,7 @@ public final class StringInput<
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given `UInt8` Array.
-public final class ArrayInput: ManagedInputProtocol, Sendable {
+public final class ArrayInput: ManagedInputProtocol {
     private let array: [UInt8]
     public let pipe: Pipe
 
@@ -187,7 +187,7 @@ public final class ArrayInput: ManagedInputProtocol, Sendable {
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given `Data`.
-public final class DataInput: ManagedInputProtocol, Sendable {
+public final class DataInput: ManagedInputProtocol {
     private let data: Data
     public let pipe: Pipe
 
@@ -350,6 +350,7 @@ public final actor StandardInputWriter: Sendable {
 
     /// Write an array of UInt8 to the standard input of the subprocess.
     /// - Parameter array: The sequence of bytes to write.
+    /// - Returns number of bytes written.
     public func write(
         _ array: [UInt8]
     ) async throws -> Int {
@@ -361,7 +362,7 @@ public final actor StandardInputWriter: Sendable {
 
     /// Write a `Data` to the standard input of the subprocess.
     /// - Parameter data: The sequence of bytes to write.
-    /// - Returns
+    /// - Returns number of bytes written.
     public func write(
         _ data: Data
     ) async throws -> Int {
@@ -371,8 +372,10 @@ public final actor StandardInputWriter: Sendable {
         return try await fd.write(data)
     }
 
-    /// Write a sequence of CChar to the standard input of the subprocess.
-    /// - Parameter sequence: The sequence of bytes to write.
+    /// Write a StringProtocol to the standard input of the subprocess.
+    /// - Parameters:
+    ///   - string: The string to write.
+    ///   - encoding: The encoding to use when converting string to bytes
     /// - Returns number of bytes written.
     public func write(
         _ string: some StringProtocol,

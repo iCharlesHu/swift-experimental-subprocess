@@ -275,7 +275,7 @@ extension OutputProtocol where Self == StringOutput {
     }
 
     /// Create a `Subprocess` output that collects output as
-    /// `String` using the given encoding.
+    /// `String` using the given encoding up to limit it bytes.
     public static func string(
         limit: Int,
         encoding: String.Encoding = .utf8
