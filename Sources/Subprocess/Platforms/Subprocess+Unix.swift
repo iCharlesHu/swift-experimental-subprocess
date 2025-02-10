@@ -432,16 +432,16 @@ extension FileDescriptor {
 
     internal func write(
         _ data: Data
-    ) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+    ) async throws -> Int {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, any Error>) in
             let dispatchData = data.withUnsafeBytes {
                 return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
             }
-            self.write(dispatchData) { error in
+            self.write(dispatchData) { writtenLength, error in
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else {
-                    continuation.resume()
+                    continuation.resume(returning: writtenLength)
                 }
             }
         }
@@ -449,16 +449,16 @@ extension FileDescriptor {
 
     internal func write(
         _ array: [UInt8]
-    ) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+    ) async throws -> Int {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, any Error>) in
             let dispatchData = array.withUnsafeBytes {
                 return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
             }
-            self.write(dispatchData) { error in
+            self.write(dispatchData) { writtenLength, error in
                 if let error = error {
                     continuation.resume(throwing: error)
                 } else {
-                    continuation.resume()
+                    continuation.resume(returning: writtenLength)
                 }
             }
         }
@@ -467,18 +467,20 @@ extension FileDescriptor {
     internal func write(
         _ dispatchData: DispatchData,
         queue: DispatchQueue = .global(),
-        completion: @escaping (Error?) -> Void
+        completion: @escaping (Int, Error?) -> Void
     ) {
         DispatchIO.write(
             toFileDescriptor: self.rawValue,
             data: dispatchData,
             runningHandlerOn: queue
-        ) { _, error in
+        ) { unwritten, error in
+            let unwrittenLength = unwritten?.count ?? 0
+            let writtenLength = dispatchData.count - unwrittenLength
             guard error != 0 else {
-                completion(nil)
+                completion(writtenLength, nil)
                 return
             }
-            completion(POSIXError(.init(rawValue: error) ?? .ENODEV))
+            completion(writtenLength, POSIXError(.init(rawValue: error) ?? .ENODEV))
         }
     }
 }

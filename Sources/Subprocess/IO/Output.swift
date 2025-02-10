@@ -53,7 +53,7 @@ public protocol OutputProtocol: Sendable {
 }
 
 @available(macOS 9999, *)
-public protocol PipeOutputProtocol: OutputProtocol {
+public protocol ManagedOutputProtocol: OutputProtocol {
     /// The underlying pipe used by this output in order to
     /// read from the child process
     var pipe: Pipe { get }
@@ -165,7 +165,7 @@ public final class FileDescriptorOutput: OutputProtocol {
 /// from the subprocess as `Data`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
 @available(macOS 9999, *)
-public final class DataOutput: PipeOutputProtocol {
+public final class DataOutput: ManagedOutputProtocol {
     public typealias OutputType = Data
     public let maxSize: Int
     public let pipe: Pipe
@@ -186,7 +186,7 @@ public final class DataOutput: PipeOutputProtocol {
 /// This option must be used with he `run()` method that
 /// returns a `CollectedResult`.
 @available(macOS 9999, *)
-public final class StringOutput: PipeOutputProtocol {
+public final class StringOutput: ManagedOutputProtocol {
     public typealias OutputType = String?
     public let maxSize: Int
     internal let encoding: String.Encoding
@@ -243,16 +243,11 @@ public final class SequenceOutput: OutputProtocol {
 }
 
 @available(macOS 9999, *)
-extension PipeOutputProtocol {
+extension ManagedOutputProtocol {
     public func output(from data: some DataProtocol) throws -> OutputType {
         //FIXME: remove workaround for rdar://143992296
         return try self.output(from: data.bytes)
     }
-
-    //    public func output(from array: [UInt8]) throws -> OutputType {
-    //        //FIXME: remove workaround for rdar://143992296
-    //        return try self.output(from: array.bytes)
-    //    }
 }
 
 extension OutputProtocol where Self == DiscardedOutput {
@@ -313,7 +308,7 @@ extension OutputProtocol where Self == SequenceOutput {
 
 // MARK: Default Implementations
 @available(macOS 9999, *)
-extension PipeOutputProtocol {
+extension ManagedOutputProtocol {
     public func readFileDescriptor() throws -> FileDescriptor? {
         return try self.pipe.readFileDescriptor(creatingIfNeeded: true)
     }
