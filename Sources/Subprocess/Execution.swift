@@ -87,7 +87,7 @@ extension Execution where Error == SequenceOutput {
 }
 
 // MARK: - Teardown
-#if canImport(Glibc) || canImport(Bionic) || canImport(Musl)
+#if canImport(Darwin) || canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 extension Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal

@@ -49,10 +49,10 @@ public protocol InputProtocol: Sendable {
 
     /// Asynchronously write the input to the subprocess using the
     /// write file descriptor
-    func write() async throws
+    func write(into writeFileDescriptor: FileDescriptor) async throws
 }
 
-public protocol PipeInputProtocol: InputProtocol {
+public protocol ManagedInputProtocol: InputProtocol {
     /// The underlying pipe used by this input in order to
     /// write input to child process
     var pipe: Pipe { get }
@@ -92,7 +92,7 @@ public final class NoInput: InputProtocol {
         // NOOP
     }
 
-    public func write() async throws {
+    public func write(into writeFileDescriptor: FileDescriptor) async throws {
         // NOOP
     }
 
@@ -131,7 +131,7 @@ public final class FileDescriptorInput: InputProtocol {
         // NOOP
     }
 
-    public func write() async throws {
+    public func write(into writeFileDescriptor: FileDescriptor) async throws {
         // NOOP
     }
 
@@ -150,21 +150,16 @@ public final class FileDescriptorInput: InputProtocol {
 /// encoding the string to data, which defaults to UTF-8.
 public final class StringInput<
     InputString: StringProtocol & Sendable
->: PipeInputProtocol {
+>: ManagedInputProtocol, @unchecked Sendable {
     private let string: InputString
     internal let encoding: String.Encoding
     public let pipe: Pipe
 
-    public func write() async throws {
-        guard let writeEnd = try? self.pipe.writeFileDescriptor(
-            creatingIfNeeded: false
-        ) else {
-            fatalError("Attempting to write before process is launched")
-        }
+    public func write(into writeFileDescriptor: FileDescriptor) async throws {
         guard let data = self.string.data(using: self.encoding) else {
             return
         }
-        try await writeEnd.write(data)
+        _ = try await writeFileDescriptor.write(data)
     }
 
     internal init(string: InputString, encoding: String.Encoding) {
@@ -176,17 +171,12 @@ public final class StringInput<
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given `UInt8` Array.
-public final class ArrayInput: PipeInputProtocol, Sendable {
+public final class ArrayInput: ManagedInputProtocol, Sendable {
     private let array: [UInt8]
     public let pipe: Pipe
 
-    public func write() async throws {
-        guard let writeEnd = try? self.pipe.writeFileDescriptor(
-            creatingIfNeeded: false
-        ) else {
-            fatalError("Attempting to write before process is launched")
-        }
-        try await writeEnd.write(self.array)
+    public func write(into writeFileDescriptor: FileDescriptor) async throws {
+        _ = try await writeFileDescriptor.write(self.array)
     }
 
     internal init(array: [UInt8]) {
@@ -197,17 +187,12 @@ public final class ArrayInput: PipeInputProtocol, Sendable {
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given `Data`.
-public final class DataInput: PipeInputProtocol, Sendable {
+public final class DataInput: ManagedInputProtocol, Sendable {
     private let data: Data
     public let pipe: Pipe
 
-    public func write() async throws {
-        guard let writeEnd = try? self.pipe.writeFileDescriptor(
-            creatingIfNeeded: false
-        ) else {
-            fatalError("Attempting to write before process is launched")
-        }
-        try await writeEnd.write(self.data)
+    public func write(into writeFileDescriptor: FileDescriptor) async throws {
+        _ = try await writeFileDescriptor.write(self.data)
     }
 
     internal init(data: Data) {
@@ -222,21 +207,16 @@ public final class DataInput: PipeInputProtocol, Sendable {
 /// large amount input data.
 public final class DataSequenceInput<
     InputSequence: Sequence & Sendable
->: PipeInputProtocol where InputSequence.Element == Data {
+>: ManagedInputProtocol where InputSequence.Element == Data {
     private let sequence: InputSequence
     public let pipe: Pipe
 
-    public func write() async throws {
+    public func write(into writeFileDescriptor: FileDescriptor) async throws {
         var buffer = Data()
         for chunk in self.sequence {
             buffer.append(chunk)
         }
-        guard let writeEnd = try? self.pipe.writeFileDescriptor(
-            creatingIfNeeded: false
-        ) else {
-            fatalError("Attempting to write before process is launched")
-        }
-        try await writeEnd.write(buffer)
+        _ = try await writeFileDescriptor.write(buffer)
     }
 
     internal init(underlying: InputSequence) {
@@ -249,22 +229,17 @@ public final class DataSequenceInput<
 /// from a given async sequence of `Data`.
 public final class DataAsyncSequenceInput<
     InputSequence: AsyncSequence & Sendable
->: PipeInputProtocol where InputSequence.Element == Data {
+>: ManagedInputProtocol where InputSequence.Element == Data {
     private let sequence: InputSequence
     public let pipe: Pipe
 
-    private func writeChunk(_ chunk: Data) async throws {
-        guard let writeEnd = try? self.pipe.writeFileDescriptor(
-            creatingIfNeeded: false
-        ) else {
-            fatalError("Attempting to write before process is launched")
-        }
-        try await writeEnd.write(chunk)
+    private func writeChunk(_ chunk: Data, into writeFileDescriptor: FileDescriptor) async throws {
+        _ = try await writeFileDescriptor.write(chunk)
     }
 
-    public func write() async throws {
+    public func write(into writeFileDescriptor: FileDescriptor) async throws {
         for try await chunk in self.sequence {
-            try await self.writeChunk(chunk)
+            try await self.writeChunk(chunk, into: writeFileDescriptor)
         }
     }
 
@@ -276,10 +251,10 @@ public final class DataAsyncSequenceInput<
 
 /// A concrete `Input` type for subprocess that indicates that
 /// the Subprocess should read its input from `StandardInputWriter`.
-public final class CustomWriteInput: PipeInputProtocol {
+public final class CustomWriteInput: ManagedInputProtocol {
     public let pipe: Pipe
 
-    public func write() async throws {
+    public func write(into writeFileDescriptor: FileDescriptor) async throws {
         // NOOP
     }
 
@@ -344,6 +319,24 @@ extension InputProtocol {
     }
 }
 
+extension ManagedInputProtocol {
+    public func readFileDescriptor() throws -> FileDescriptor? {
+        return try self.pipe.readFileDescriptor(creatingIfNeeded: true)
+    }
+
+    public func writeFileDescriptor() throws -> FileDescriptor? {
+        return try self.pipe.writeFileDescriptor(creatingIfNeeded: true)
+    }
+
+    public func closeReadFileDescriptor() throws {
+        try self.pipe.closeReadFileDescriptor()
+    }
+
+    public func closeWriteFileDescriptor() throws {
+        try self.pipe.closeWriteFileDescriptor()
+    }
+}
+
 // MARK: - StandardInputWriter
 
 /// A writer that writes to the standard input of the subprocess.
@@ -359,73 +352,57 @@ public final actor StandardInputWriter: Sendable {
     /// - Parameter array: The sequence of bytes to write.
     public func write(
         _ array: [UInt8]
-    ) async throws {
+    ) async throws -> Int {
         guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
             fatalError("Attempting to write to a file descriptor that's already closed")
         }
-        try await fd.write(array)
+        return try await fd.write(array)
     }
 
     /// Write a `Data` to the standard input of the subprocess.
     /// - Parameter data: The sequence of bytes to write.
+    /// - Returns
     public func write(
         _ data: Data
-    ) async throws {
+    ) async throws -> Int {
         guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
             fatalError("Attempting to write to a file descriptor that's already closed")
         }
-        try await fd.write(data)
+        return try await fd.write(data)
     }
 
     /// Write a sequence of CChar to the standard input of the subprocess.
     /// - Parameter sequence: The sequence of bytes to write.
+    /// - Returns number of bytes written.
     public func write(
         _ string: some StringProtocol,
         using encoding: String.Encoding = .utf8
-    ) async throws {
+    ) async throws -> Int {
         guard encoding != .utf8 else {
-            try await self.write(Data(string.utf8))
-            return
+            return try await self.write(Data(string.utf8))
         }
         if let data = string.data(using: encoding) {
-            try await self.write(data)
+            return try await self.write(data)
         }
+        return 0
     }
 
     /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
     /// - Parameter sequence: The sequence of bytes to write.
+    /// - Returns number of bytes written.
     public func write<AsyncSendableSequence: AsyncSequence & Sendable>(
         _ asyncSequence: AsyncSendableSequence
-    ) async throws where AsyncSendableSequence.Element == Data {
+    ) async throws -> Int where AsyncSendableSequence.Element == Data {
         var buffer = Data()
         for try await data in asyncSequence {
             buffer.append(data)
         }
-        try await self.write(buffer)
+        return try await self.write(buffer)
     }
 
     /// Signal all writes are finished
     public func finish() async throws {
         try self.input.closeWriteFileDescriptor()
-    }
-}
-
-// MARK: Defult implementations
-extension PipeInputProtocol {
-    public func readFileDescriptor() throws -> FileDescriptor? {
-        return try self.pipe.readFileDescriptor(creatingIfNeeded: true)
-    }
-
-    public func writeFileDescriptor() throws -> FileDescriptor? {
-        return try self.pipe.writeFileDescriptor(creatingIfNeeded: true)
-    }
-
-    public func closeReadFileDescriptor() throws {
-        try self.pipe.closeReadFileDescriptor()
-    }
-
-    public func closeWriteFileDescriptor() throws {
-        try self.pipe.closeWriteFileDescriptor()
     }
 }
 

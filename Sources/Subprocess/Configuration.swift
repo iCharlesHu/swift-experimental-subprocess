@@ -298,7 +298,7 @@ public struct Configuration: Sendable, Hashable {
                 input.withUnsafeBytes { ptr in
                     let dispatchData = DispatchData(bytesNoCopy: ptr, deallocator: .custom(nil, { /* noop */ }))
 
-                    writeFd.write(dispatchData) { error in
+                    writeFd.write(dispatchData) { _, error in
                         if let error = error {
                             continuation.resume(throwing: error)
                         } else {
@@ -363,8 +363,10 @@ public struct Configuration: Sendable, Hashable {
                     returning: ExecutionResult.self
                 ) { group in
                     group.addTask {
-                        try await input.write()
-                        try input.closeWriteFileDescriptor()
+                        if let writeFd = try input.writeFileDescriptor() {
+                            try await input.write(into: writeFd)
+                            try input.closeWriteFileDescriptor()
+                        }
                         return nil
                     }
                     group.addTask {
