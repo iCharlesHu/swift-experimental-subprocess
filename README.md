@@ -20,7 +20,7 @@
     - Added a section describing `Task Cancellation`
     - Clarified for `readFrom()` and `writeTo()` Subprocess will close the passed in file descriptor right after spawning the process when `closeWhenDone` is set to true.
     - Adjusted argument orders in `Arguments`.
-    - Added `Subprocess.run(withConfiguration:...)` in favor or `Configuration.run()`.
+    - Added `run(withConfiguration:...)` in favor or `Configuration.run()`.
 - **v4**: Minor updates (primarily name changes):
     - Dropped the `executing` label from `.run()`.
     - Removed references to `Subprocess.AsyncBytes`:
@@ -92,6 +92,9 @@
     - Remove all input overloads of `run()` since now we use concrete instances iof `InputProtocol` to represent them.
     - Renamed package module name to `Subprocess`.
     - Dropped the `struct Subprocess` namespace. Now all `run()`s are free standing functions
+    - `Executable`:
+        - Renamed `.named` to `.name`.
+        - Renamed `.at` to `.path`.
 
 ## Introduction
 
@@ -171,8 +174,8 @@ Here's the above script rewritten using `Subprocess` package:
 
 import Subprocess
 
-let gitResult = try await Subprocess.run(   // <- 0
-    .named("git"),                          // <- 1
+let gitResult = try await run(   // <- 0
+    .name("git"),                          // <- 1
     arguments: ["diff", "--name-only"],
     output: .collectString()
 )
@@ -181,8 +184,8 @@ let changedFiles = gitResult.standardOutput!
 if changedFiles.isEmpty {
     changedFiles = "No changed files"
 }
-_ = try await Subprocess.run(
-    .named("say"),
+_ = try await run(
+    .name("say"),
     arguments: [changedFiles]
 )
 ```
@@ -191,15 +194,15 @@ Let's break down the example above:
 
 0. `Subprocess` is constructed entirely on the `async/await` paradigm. The `run()` method utilizes `await` to allow the child process to finish, asynchronously returning an `CollectedResult`. Additionally, there is an closure based overload of `run()` that offers more granulated control, which will be discussed later.
 1. There are two primary ways to configure the executable being run:
-    - The default approach, recommended for most developers, is `.at(FilePath)`. This allows developers to specify a full path to an executable.
-    - Alternatively, developers can use `.named(String)` to instruct `Subprocess` to look up the executable path based on heuristics such as the `$PATH` environment variable.
+    - The default approach, recommended for most developers, is `.path(FilePath)`. This allows developers to specify a full path to an executable.
+    - Alternatively, developers can use `.name(String)` to instruct `Subprocess` to look up the executable path based on heuristics such as the `$PATH` environment variable.
 
 
 ## Detailed Design
 
 ### The `run()` Family of Methods
 
-We propose several `run()` functions that allows developers to asynchronously executes a subprocess.
+We propose several `run()` functions that allow developers to asynchronously execute a subprocess.
 
 ```swift
 /// Run a executable with given parameters and a custom closure
@@ -216,7 +219,7 @@ We propose several `run()` functions that allows developers to asynchronously ex
 ///   - error: The method to use for redirecting the standard error.
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a CollectedResult containing the result of the run.
-@available(macOS 9999, *)
+@available(macOS 9999, *) // Span availability
 public func run<
     Input: InputProtocol,
     Output: OutputProtocol,
@@ -246,7 +249,7 @@ public func run<
 ///   - error: The method to use for redirecting the standard error.
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a CollectedResult containing the result of the run.
-@available(macOS 9999, *)
+@available(macOS 9999, *) // Span availability
 public func run<
     InputElement: BitwiseCopyable,
     Output: OutputProtocol,
@@ -277,7 +280,6 @@ public func run<
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -306,7 +308,6 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Input: InputProtocol, Output: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -334,7 +335,6 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol>(
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Input: InputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -361,7 +361,6 @@ public func run<Result, Input: InputProtocol>(
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -388,7 +387,6 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Output: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -414,7 +412,6 @@ public func run<Result, Output: OutputProtocol>(
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -435,7 +432,6 @@ public func run<Result>(
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ configuration: Configuration,
     isolation: isolated (any Actor)? = #isolation,
@@ -453,7 +449,6 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result, Output: OutputProtocol>(
     _ configuration: Configuration,
     isolation: isolated (any Actor)? = #isolation,
@@ -469,7 +464,6 @@ public func run<Result, Output: OutputProtocol>(
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
-@available(macOS 9999, *)
 public func run<Result>(
     _ configuration: Configuration,
     isolation: isolated (any Actor)? = #isolation,
@@ -482,24 +476,24 @@ The `run` methods can generally be divided into two categories, each addressing 
 
 ```swift
 // Simple ls with no standard input
-let ls = try await Subprocess.run(
-    .named("ls"),
+let ls = try await run(
+    .name("ls"),
     output: .string
 )
 print("Items in current directory: \(ls.standardOutput!)")
 
 // Launch VSCode with arguments
-let code = try await Subprocess.run(
-    .named("code"),
+let code = try await run(
+    .name("code"),
     arguments: ["/some/directory"]
 )
 print("Code launched successfully: \(code.terminationStatus.isSuccess)")
 
 // Launch `cat` with sequence written to standardInput
 let inputData = "Hello SwiftFoundation".utf8CString.map { UInt8($0) }
-let cat = try await Subprocess.run(
-    .named("cat"),
-    input: .sequence(inputData),
+let cat = try await run(
+    .name("cat"),
+    input: .array(inputData),
     output: .string
 )
 print("Cat result: \(cat.standardOutput!)")
@@ -512,8 +506,8 @@ print("Cat result: \(cat.standardOutput!)")
 // Use curl to call REST API
 struct MyType: Codable { ... }
 
-let result = try await Subprocess.run(
-    .named("curl"),
+let result = try await run(
+    .name("curl"),
     arguments: ["/some/rest/api"]
 ) {
     var buffer = Data()
@@ -526,8 +520,8 @@ let result = try await Subprocess.run(
 print("Result: \(result)")
 
 // Perform custom write and write the standard output
-let result = try await Subprocess.run(
-    .at("/some/executable")
+let result = try await run(
+    .path("/some/executable")
 ) { subprocess, writer in
     try await writer.write("Hello World".utf8CString)
     try await writer.finish()
@@ -559,7 +553,6 @@ Since `Subprocess` is unable to monitor the state of the subprocess or capture a
 ///   - output: A file descriptor to bind to the subprocess' standard output.
 ///   - error: A file descriptor to bind to the subprocess' standard error.
 /// - Returns: the process identifier for the subprocess.
-@available(macOS 9999, *)
 public func runDetached(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -584,7 +577,6 @@ public func runDetached(
 ///   - output: A file descriptor to bind to the subprocess' standard output.
 ///   - error: A file descriptor to bind to the subprocess' standard error.
 /// - Returns: the process identifier for the subprocess.
-@available(macOS 9999, *)
 public func runDetached(
     _ configuration: Configuration,
     input: FileDescriptor? = nil,
@@ -599,10 +591,9 @@ public func runDetached(
 In contrast to the monolithic `Process`, `Subprocess` utilizes two types to model the lifetime of a process. `Configuration` (discussed later) and `Execution`. `Execution` is designed to represent an executed process. This execution could be either in progress or completed. Direct construction of `Execution` instances is not supported; instead, a `Execution` object is passed to the `body` closure of `run()`. This object is only valid within the scope of the closure, and developers may use it to send signals to the child process or retrieve the child's standard I/Os via `AsyncSequence`s.
 
 ```swift
-/// An object that repersents a subprocess that has been
+/// An object that represents a subprocess that has been
 /// executed. You can use this object to send signals to the
 /// child process as well as stream its output and error.
-@available(macOS 9999, *)
 public struct Execution<
     Output: OutputProtocol,
     Error: OutputProtocol
@@ -611,29 +602,26 @@ public struct Execution<
     public let processIdentifier: ProcessIdentifier
 }
 
-@available(macOS 9999, *)
 extension Execution where Output == SequenceOutput {
     /// The standard output of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.output` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
-    ///   parent process via pipe under the hood and each pipe can only be consumed ones.
+    ///   parent process via pipe under the hood and each pipe can only be consumed once.
     public var standardOutput: some AsyncSequence<Data, any Swift.Error>
 }
 
-@available(macOS 9999, *)
 extension Execution where Error == SequenceOutput {
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
     /// - `.error` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
-    ///   parent process via pipe under the hood and each pipe can only be consumed ones.
+    ///   parent process via pipe under the hood and each pipe can only be consumed once.
     public var standardError: some AsyncSequence<Data, any Swift.Error>
 }
 
 #if canImport(WinSDK)
 /// A platform independent identifier for a subprocess.
-@available(macOS 9999, *)
 public struct ProcessIdentifier: Sendable, Hashable, Codable {
     /// Windows specifc process identifier value
     public let value: DWORD
@@ -642,7 +630,6 @@ public struct ProcessIdentifier: Sendable, Hashable, Codable {
 }
 #else
 /// A platform independent identifier for a Subprocess.
-@available(macOS 9999, *)
 public struct ProcessIdentifier: Sendable, Hashable, Codable {
     /// The platform specific process identifier value
     public let value: pid_t
@@ -661,10 +648,6 @@ public struct ProcessIdentifier: Sendable, Hashable, Codable {
 
 /// Signals are standardized messages sent to a running program
 /// to trigger specific behavior, such as quitting or error handling.
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct Signal : Hashable, Sendable {
     /// The underlying platform specific value for the signal
     public let rawValue: Int32
@@ -718,7 +701,6 @@ public struct Signal : Hashable, Sendable {
     public init(rawValue: Int32)
 }
 
-
 extension Execution {
     /// Send the given signal to the child process.
     /// - Parameters:
@@ -744,10 +726,6 @@ extension Execution {
 /// It consists of a signal to send to the child process and the
 /// duration allowed for the child process to exit before proceeding
 /// to the next step.
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct TeardownStep: Sendable, Hashable {
     /// Sends `signal` to the process and allows `allowedDurationToExit`
     /// for the process to exit before proceeding to the next step.
@@ -758,15 +736,10 @@ public struct TeardownStep: Sendable, Hashable {
     ) -> Self
 }
 
-
 extension Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal
     /// - Parameter sequence: The  steps to perform.
-    @available(FoundationPreview 0.4, *)
-    @available(iOS, unavailable)
-    @available(tvOS, unavailable)
-    @available(watchOS, unavailable)
     public func teardown(using sequence: [TeardownStep]) async
 }
 #endif // canImport(Glibc) || canImport(Darwin)
@@ -775,8 +748,8 @@ extension Execution {
 A teardown sequence is a series of signals sent to the child process, accompanied by a specified time limit for the child process to terminate before proceeding to the next step. For instance, it may be appropriate to initially send `.quit` and `.terminate` signals to the child process to facilitate a graceful shutdown before sending `.kill`.
 
 ```swift
-let result = try await Subprocess.run(
-    .at("/bin/bash"),
+let result = try await run(
+    .path("/bin/bash"),
     arguments: [...]
 ) { execution in
     // ... more work
@@ -794,10 +767,6 @@ The Windows does not have a centralized signaling system similar to Unix. Instea
 
 ```swift
 #if canImport(WinSDK)
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension Execution {
     /// Terminate the current subprocess with the given exit code
     /// - Parameter exitCode: The exit code to use for the subprocess.
@@ -818,10 +787,6 @@ extension Execution {
 ```swift
 /// A collection of configurations parameters to use when
 /// spawning a subprocess.
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct Configuration : Sendable, Hashable {
     /// The executable to run.
     public var executable: Executable
@@ -858,27 +823,38 @@ extension Configuration : CustomStringConvertible, CustomDebugStringConvertible 
 
 ```swift
 /// A writer that writes to the standard input of the subprocess.
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public final actor StandardInputWriter {
-    /// Write a sequence of UInt8 to the standard input of the subprocess.
-    /// - Parameter sequence: The sequence of bytes to write.
-    public func write<SendableSequence: Sequence<UInt8> & Sendable>(
-        _ sequence: SendableSequence
-    ) async throws
-    /// Write a String to the standard input of the subprocess.
-    /// - Parameter sequence: The string write.
+    /// Write an array of UInt8 to the standard input of the subprocess.
+    /// - Parameter array: The sequence of bytes to write.
+    /// - Returns number of bytes written.
     public func write(
-        _ string: some StringProtocol
-    ) async throws
+        _ array: [UInt8]
+    ) async throws -> Int
 
-    /// Write a AsyncSequence of Data to the standard input of the subprocess.
+    /// Write a `Data` to the standard input of the subprocess.
+    /// - Parameter data: The sequence of bytes to write.
+    /// - Returns number of bytes written.
+    public func write(
+        _ data: Data
+    ) async throws -> Int
+
+    /// Write a StringProtocol to the standard input of the subprocess.
+    /// - Parameters:
+    ///   - string: The string to write.
+    ///   - encoding: The encoding to use when converting string to bytes
+    /// - Returns number of bytes written.
+    public func write(
+        _ string: some StringProtocol,
+        using encoding: String.Encoding = .utf8
+    ) async throws -> Int
+
+    /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
     /// - Parameter sequence: The sequence of bytes to write.
+    /// - Returns number of bytes written.
     public func write<AsyncSendableSequence: AsyncSequence & Sendable>(
         _ asyncSequence: AsyncSendableSequence
-    ) async throws where AsyncSendableSequence.Element == Data
+    ) async throws -> Int where AsyncSendableSequence.Element == Data
+
     /// Signal all writes are finished
     public func finish() async throws
 }
@@ -893,10 +869,6 @@ Beyond the configurable parameters exposed by these static run methods, `Configu
 #if canImport(Darwin)
 /// The collection of platform-specific settings
 /// to configure the subprocess when running
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct PlatformOptions: Sendable, Hashable {
     public var qualityOfService: QualityOfService
     // Set user ID for the subprocess
@@ -983,10 +955,6 @@ For Linux, we propose a similar `PlatformOptions` configuration:
 ```swift
 #if canImport(Glibc)
 /// The collection of Linux specific configurations
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct PlatformOptions: Sendable, Hashable {
     // Set user ID for the subprocess
     public var userID: uid_t?
@@ -1060,10 +1028,6 @@ On Windows, we propose the following `PlatformOptions`:
 #if canImport(WinSDK)
 /// The collection of platform-specific settings
 /// to configure the subprocess when running
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct PlatformOptions: Sendable, Hashable {
     public struct UserCredentials: Sendable, Hashable {
         // The name of the user. This is the name
@@ -1166,30 +1130,26 @@ _(For more information on these values, checkout Microsoft's documentation [here
 
 ### `InputProtocol`
 
-`InputProtocol` defines a set of methods that a type must implement to serve as the input source for a subprocess. In most cases, developers should utilize the concrete input types provided by `Subprocess`. However, developers have the option to create their own input types by conforming to `PipeBasedInputProtocol` and implementing the `writer()` method.
+`InputProtocol` defines a set of methods that a type must implement to serve as the input source for a subprocess. In most cases, developers should utilize the concrete input types provided by `Subprocess`. However, developers have the option to create their own input types by conforming to `ManagedInputProtocol` and implementing the `write(into:)` method.
 
 `Subprocess` is distributed with the following concrete input types:
 
 - `NoInput`: indicates there is no input sent to the subprocess.
 - `FileDescriptorInput`: reads input from a specified `FileDescriptor` provided by the developer. Subprocess will automatically close the file descriptor after the process is spawned if `closeAfterSpawningProcess` is set to `true`. Note: when `closeAfterSpawningProcess` is `false`, the caller is responsible for closing the file descriptor even if `Subprocess` fails to spawn.
 - `StringInput`: reads input from a given type conforming to `StringProtocol`.
-- `UInt8SequenceInput`: reads input from a given sequence of `UInt8` (such as `Data` or `[UInt8]`).
+- `ArrayInput`: reads input from a given array of `UInt8`.
+- `DataInput`: reads input from a given `Data`.
 - `DataSequenceInput`: reads input from a given sequence of `Data`.
 - `DataAsyncSequenceInput`: reads input from a given async sequence of `Data`.
 - `CustomWriteInput`indicates that the Subprocess should read its input from `StandardInputWriter`.
 
 
 ```swift
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 /// `InputProtocol` specifies the set of methods that a type
 /// must implement to serve as the input source for a subprocess.
 /// Instead of developing custom implementations of `InputProtocol`,
 /// it is recommended to utilize the default implementations provided
 /// by the `Subprocess` library to specify the input handling requirements.
-@available(macOS 9999, *)
 public protocol InputProtocol: Sendable {
     /// Lazily create and return the FileDescriptor for reading
     func readFileDescriptor() throws -> FileDescriptor?
@@ -1203,14 +1163,13 @@ public protocol InputProtocol: Sendable {
 
     /// Asynchronously write the input to the subprocess using the
     /// write file descriptor
-    func write() async throws
+    func write(into writeFileDescriptor: FileDescriptor) async throws
 }
 
-@available(macOS 9999, *)
-public protocol PipeBasedInputProtocol: InputProtocol {
+public protocol ManagedInputProtocol: InputProtocol {
     /// The underlying pipe used by this input in order to
     /// write input to child process
-    var pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
+    var pipe: Pipe { get }
 }
 
 /// A concrete `Input` type for subprocesses that indicates
@@ -1218,28 +1177,30 @@ public protocol PipeBasedInputProtocol: InputProtocol {
 /// `NoInput` redirects the standard input of the subprocess
 /// to `/dev/null`, while on Windows, it does not bind any
 /// file handle to the subprocess standard input handle.
-public struct NoInput: InputProtocol { }
+public final class NoInput: InputProtocol { }
 
 /// A concrete `Input` type for subprocesses that
 /// reads input from a specified `FileDescriptor`.
 /// Developers have the option to instruct the `Subprocess` to
 /// automatically close the provided `FileDescriptor`
 /// after the subprocess is spawned.
-public struct FileDescriptorInput: InputProtocol { }
+public final class FileDescriptorInput: InputProtocol { }
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given type conforming to `StringProtocol`.
 /// Developers can specify the string encoding to use when
 /// encoding the string to data, which defaults to UTF-8.
-public struct StringInput<
+public final class StringInput<
     InputString: StringProtocol & Sendable
->: PipeBasedInputProtocol { }
+>: ManagedInputProtocol { }
 
 /// A concrete `Input` type for subprocesses that reads input
-/// from a given sequence of `UInt8` (such as `Data` or `[UInt8]`).
-public struct UInt8SequenceInput<
-    InputSequence: Sequence & Sendable
->: PipeBasedInputProtocol where InputSequence.Element == UInt8 { }
+/// from a given `UInt8` Array.
+public final class ArrayInput: ManagedInputProtocol { }
+
+/// A concrete `Input` type for subprocesses that reads input
+/// from a given `Data`.
+public final class DataInput: ManagedInputProtocol { }
 
 /// A concrete `Input` type for subprocesses that accepts input
 /// from a specified sequence of `Data`. This type should be preferred
@@ -1247,31 +1208,23 @@ public struct UInt8SequenceInput<
 /// large amount input data.
 public struct DataSequenceInput<
     InputSequence: Sequence & Sendable
->: PipeBasedInputProtocol where InputSequence.Element == Data { }
+>: ManagedInputProtocol where InputSequence.Element == Data { }
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given async sequence of `Data`.
 public struct DataAsyncSequenceInput<
     InputSequence: AsyncSequence & Sendable
->: PipeBasedInputProtocol where InputSequence.Element == Data { }
+>: ManagedInputProtocol where InputSequence.Element == Data { }
 
 /// A concrete `Input` type for subprocess that indicates that
 /// the Subprocess should read its input from `StandardInputWriter`.
-public struct CustomWriteInput: PipeBasedInputProtocol { }
+public struct CustomWriteInput: ManagedInputProtocol { }
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension InputProtocol where Self == NoInput {
     /// Create a Subprocess input that specfies there is no input
     public static var none: Self { get }
 }
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension InputProtocol where Self == FileDescriptorInput {
     /// Create a Subprocess input from a `FileDescriptor` and
     /// specify whether the `FileDescriptor` should be closed
@@ -1282,16 +1235,14 @@ extension InputProtocol where Self == FileDescriptorInput {
     ) -> Self
 }
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension InputProtocol {
-    /// Create a Subprocess input from a `Sequence` of `UInt8` such as
-    /// `Data` or `Array<UInt8>`.
-    public static func sequence<InputSequence: Sequence & Sendable>(
-        _ sequence: InputSequence
-    ) -> Self where Self == UInt8SequenceInput<InputSequence>
+    /// Create a Subprocess input from a `Array` of `UInt8`.
+    public static func array(
+        _ array: [UInt8]
+    ) -> Self where Self == ArrayInput
+
+    /// Create a Subprocess input from a `Data`
+    public static func data(_ data: Data) -> Self where Self == DataInput
 
     /// Create a Subprocess input from a `Sequence` of `Data`.
     public static func sequence<InputSequence: Sequence & Sendable>(
@@ -1299,7 +1250,7 @@ extension InputProtocol {
     ) -> Self where Self == DataSequenceInput<InputSequence>
 
     /// Create a Subprocess input from a `AsyncSequence` of `Data`.
-    public static func asyncSequence<InputSequence: AsyncSequence & Sendable>(
+    public static func sequence<InputSequence: AsyncSequence & Sendable>(
         _ asyncSequence: InputSequence
     ) -> Self where Self == DataAsyncSequenceInput<InputSequence>
 
@@ -1315,22 +1266,22 @@ Here are some examples:
 
 ```swift
 // By default `InputMethod` is set to `.none`
-let ls = try await Subprocess.run(.named("ls"))
+let ls = try await run(.name("ls"))
 
 // Alternatively, developers could pass in a file descriptor
 let fd: FileDescriptor = ...
-let cat = try await Subprocess.run(.named("cat"), input: .fileDescriptor(fd, closeAfterSpawningProcess: true))
+let cat = try await run(.name("cat"), input: .fileDescriptor(fd, closeAfterSpawningProcess: true))
 
 // Pass in a async sequence directly
 let sequence: AsyncSequence<Data> = ...
-let exe = try await Subprocess.run(.at("/some/executable"), input: .asyncSequence(sequence))
+let exe = try await run(.path("/some/executable"), input: .sequence(sequence))
 ```
 
 
 ### `OutputProtocol`
 
 
-`OutputProtocol` defines the set of methods that a type must implement to serve as the output target for a subprocess. Similarly to `InputProtocol`, developers should utilize the built-in concrete `Output` types provided with `Subprocess` whenever feasible; alternatively, they can create a type that conforms to `PipeBasedOutputProtocol` and implements `func output(from:) throws -> Data` for custom outputs.
+`OutputProtocol` defines the set of methods that a type must implement to serve as the output target for a subprocess. Similarly to `InputProtocol`, developers should utilize the built-in concrete `Output` types provided with `Subprocess` whenever feasible; alternatively, they can create a type that conforms to `ManagedOutputProtocol` and implements `func output(from:) throws -> OutputType` for custom outputs.
 
 Subprocess comes with the following concrete output types:
 
@@ -1347,7 +1298,6 @@ Subprocess comes with the following concrete output types:
 /// Instead of developing custom implementations of `OutputProtocol`,
 /// it is recommended to utilize the default implementations provided
 /// by the `Subprocess` library to specify the output handling requirements.
-@available(macOS 9999, *)
 public protocol OutputProtocol: Sendable {
     associatedtype OutputType: Sendable
     /// Lazily create and return the FileDescriptor for reading
@@ -1359,24 +1309,25 @@ public protocol OutputProtocol: Sendable {
     /// return `nil`.
     func consumeReadFileDescriptor() -> FileDescriptor?
 
-    /// Capture the output from the subprocess up to maxSize
-    func captureOutput() async throws -> OutputType
-
     /// Close the FileDescriptor for reading
     func closeReadFileDescriptor() throws
     /// Close the FileDescriptor for writing
     func closeWriteFileDescriptor() throws
 
+    /// Capture the output from the subprocess up to maxSize
+    func captureOutput() async throws -> OutputType
+}
+
+@available(macOS 9999, *) // Span equivelent
+public protocol ManagedOutputProtocol: OutputProtocol {
+    /// The underlying pipe used by this output in order to
+    /// read from the child process
+    var pipe: Pipe { get }
+
     /// Convert the output from Data to expected output type
     func output(from span: RawSpan) throws -> OutputType
     /// The max amount of data to collect for this output.
     var maxSize: Int { get }
-}
-
-public protocol PipeBasedOutputProtocol: OutputProtocol {
-    /// The underlying pipe used by this output in order to
-    /// read from the child process
-    var pipe: Mutex<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?> { get }
 }
 
 /// A concrete `Output` type for subprocesses that indicates that
@@ -1398,32 +1349,27 @@ public struct FileDescriptorOutput: OutputProtocol { }
 /// the child output to the `.standardOutput` or `.standardError`
 /// property of `Execution`. This output type is
 /// only applicable to the `run()` family that takes a custom closure.
-public struct SequenceOutput: PipeBasedOutputProtocol { }
+public struct SequenceOutput: OutputProtocol { }
 
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `Data`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
-public struct DataOutput: PipeBasedOutputProtocol { }
+@available(macOS 9999, *) // Span equivelent
+public struct DataOutput: ManagedOutputProtocol { }
 
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `String` with the given encoding.
 /// This option must be used with he `run()` method that
 /// returns a `CollectedResult`.
-public struct StringOutput: PipeBasedOutputProtocol { }
+@available(macOS 9999, *) // Span equivelent
+public struct StringOutput: ManagedOutputProtocol { }
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
+
 extension OutputProtocol where Self == DiscardedOutput {
     /// Create a Subprocess output that discards the output
     public static var discard: Self { }
 }
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension OutputProtocol where Self == FileDescriptorOutput {
     /// Create a Subprocess output that writes output to a `FileDescriptor`
     /// and optionally close the `FileDescriptor` once process spawned.
@@ -1433,10 +1379,14 @@ extension OutputProtocol where Self == FileDescriptorOutput {
     ) -> Self
 }
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
+extension OutputProtocol where Self == SequenceOutput {
+    /// Create a `Subprocess` output that redirects the output
+    /// to the `.standardOutput` (or `.standardError`) property
+    /// of `Execution` as `AsyncSequence<Data>`.
+    public static var sequence: Self { .init() }
+}
+
+@available(macOS 9999, *) // Span equivelent
 extension OutputProtocol where Self == StringOutput {
     /// Create a `Subprocess` output that collects output as
     /// UTF8 String with 128kb limit.
@@ -1445,7 +1395,7 @@ extension OutputProtocol where Self == StringOutput {
     }
 
     /// Create a `Subprocess` output that collects output as
-    /// `String` using the given encoding.
+    /// `String` using the given encoding up to limit it bytes.
     public static func string(
         limit: Int,
         encoding: String.Encoding = .utf8
@@ -1453,10 +1403,7 @@ extension OutputProtocol where Self == StringOutput {
         return .init(limit: limit, encoding: encoding)
     }
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
+@available(macOS 9999, *) // Span equivelent
 extension OutputProtocol where Self == DataOutput {
     /// Create a `Subprocess` output that collects output as `Data`
     /// up to 128kb.
@@ -1470,29 +1417,18 @@ extension OutputProtocol where Self == DataOutput {
         return .init(limit: limit)
     }
 }
-
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
-extension OutputProtocol where Self == SequenceOutput {
-    /// Create a `Subprocess` output that redirects the output
-    /// to the `.standardOutput` (or `.standardError`) property
-    /// of `Execution` as `AsyncSequence<Data>`.
-    public static var sequence: Self { .init() }
-}
 ```
 
 Here are some examples of using different outputs:
 
 ```swift
-let ls = try await Subprocess.run(.named("ls"), output: .string)
+let ls = try await run(.name("ls"), output: .string)
 // The output has been collected as `String`, up to 128kb limit
 print("ls output: \(ls.standardOutout!)")
 
 // Increase the default buffer limit to 256kb and collect output as Data
-let curl = try await Subprocess.run(
-    .named("curl"),
+let curl = try await run(
+    .name("curl"),
     output: .data(limit: 256 * 1024)
 )
 print("curl output: \(curl.standardOutput?.count)")
@@ -1500,8 +1436,8 @@ print("curl output: \(curl.standardOutput?.count)")
 
 // Write to a specific file descriptor
 let fd: FileDescriptor = try .open(...)
-let result = try await Subprocess.run(
-    .at("/some/script"),
+let result = try await run(
+    .path("/some/script"),
     output: .fileDescriptor(fd, closeAfterSpawningProcess: true)
 )
 ```
@@ -1516,7 +1452,6 @@ let result = try await Subprocess.run(
 ```swift
 /// The result of a subprocess execution with its collected
 /// standard output and standard error.
-@available(macOS 9999, *)
 public struct CollectedResult<
     Output: OutputProtocol,
     Error: OutputProtocol
@@ -1529,16 +1464,12 @@ public struct CollectedResult<
     public let standardError: Error.OutputType
 }
 
-@available(macOS 9999, *)
 extension CollectedResult: Equatable where Output.OutputType: Equatable, Error.OutputType: Equatable {}
 
-@available(macOS 9999, *)
 extension CollectedResult: Hashable where Output.OutputType: Hashable, Error.OutputType: Hashable {}
 
-@available(macOS 9999, *)
 extension CollectedResult: Codable where Output.OutputType: Codable, Error.OutputType: Codable {}
 
-@available(macOS 9999, *)
 extension CollectedResult: CustomStringConvertible where Output.OutputType: CustomStringConvertible, Error.OutputType: CustomStringConvertible
 ```
 
@@ -1548,72 +1479,42 @@ extension CollectedResult: CustomStringConvertible where Output.OutputType: Cust
 /// A simple wrapper around the generic result returned by the
 /// `run` closures with the corresponding `TerminationStatus`
 /// of the child process.
-@available(macOS 9999, *)
 public struct ExecutionResult<Result> {
     /// The termination status of the child process
     public let terminationStatus: TerminationStatus
     /// The result returned by the closure passed to `.run` methods
     public let value: Result
-
-    internal init(terminationStatus: TerminationStatus, value: Result) {
-        self.terminationStatus = terminationStatus
-        self.value = value
-    }
 }
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension ExecutionResult: Equatable where Result : Equatable {}
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension ExecutionResult : Hashable where Result : Hashable {}
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension ExecutionResult : Codable where Result : Codable {}
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension ExecutionResult: CustomStringConvertible where Result : CustomStringConvertible {}
 
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 extension ExecutionResult: CustomDebugStringConvertible where Result : CustomDebugStringConvertible {}
 ```
 
 
 ### `Executable`
 
-`Subprocess` utilizes `Executable` to configure how the executable is resolved. Developers can create an `Executable` using two static methods: `.named()`, indicating that an executable name is provided, and `Subprocess` should try to automatically resolve the executable path, and `.at()`, signaling that an executable path is provided, and `Subprocess` should use it unmodified.
+`Subprocess` utilizes `Executable` to configure how the executable is resolved. Developers can create an `Executable` using two static methods: `.name()`, indicating that an executable name is provided, and `Subprocess` should try to automatically resolve the executable path, and `.path()`, signaling that an executable path is provided, and `Subprocess` should use it unmodified.
 
 ```swift
 /// `Executable` defines how should the executable
 /// be looked up for execution.
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct Executable: Sendable, Hashable {
     /// Locate the executable by its name.
     /// `Subprocess` will use `PATH` value to
     /// determine the full path to the executable.
-    public static func named(_ executableName: String) -> Self
+    public static func name(_ executableName: String) -> Self
     /// Locate the executable by its full path.
     /// `Subprocess` will use this  path directly.
-    public static func at(_ filePath: FilePath) -> Self
+    public static func path(_ filePath: FilePath) -> Self
     /// Returns the full executable path given the environment value.
-    public func resolveExecutablePath(in environment: Environment) -> FilePath?
+    public func resolveExecutablePath(in environment: Environment) throws -> FilePath
 }
 
 extension Executable : CustomStringConvertible, CustomDebugStringConvertible {}
@@ -1625,10 +1526,6 @@ extension Executable : CustomStringConvertible, CustomDebugStringConvertible {}
 `struct Environment` is used to configure how should the process being launched receive its environment values:
 
 ```swift
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct Environment: Sendable, Hashable {
     /// Child process should inherit the same environment
     /// values from its parent process.
@@ -1664,16 +1561,16 @@ Developers have the option to:
 
 ```swift
 // Override the `PATH` environment value from launching process
-let result = try await Subprocess.run(
-    .at("/some/executable"),
+let result = try await run(
+    .path("/some/executable"),
     environment: .inherit.updating(
         ["PATH" : "/some/new/path"]
     )
 )
 
 // Use custom values
-let result2 = try await Subprocess.run(
-    .at("/at"),
+let result2 = try await run(
+    .path("/at"),
     environment: .custom([
         "PATH" : "/some/path"
         "HOME" : "/Users/Charles"
@@ -1691,10 +1588,6 @@ let result2 = try await Subprocess.run(
 
 ```swift
 /// A collection of arguments to pass to the subprocess.
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 public struct Arguments: Sendable, ExpressibleByArrayLiteral, Hashable {
     public typealias ArrayLiteralElement = String
     /// Creates an Arguments object using the given literal values
@@ -1731,14 +1624,14 @@ Similar to `Environment`, `Arguments` also supports raw bytes in addition to `St
 
 ```swift
 // In most cases, simply pass in an array
-let result = try await Subprocess.run(
-    .at("/some/executable"),
+let result = try await run(
+    .path("/some/executable"),
     arguments: ["arg1", "arg2"]
 )
 
 // Override the executable path
-let result2 = try await Subprocess.run(
-    .at("/some/executable"),
+let result2 = try await run(
+    .path("/some/executable"),
     arguments: .init(
         executablePathOverride: "/new/executable/path",
         remainingValues: ["arg1", "arg2"]
@@ -1752,10 +1645,6 @@ let result2 = try await Subprocess.run(
 `TerminationStatus` is used to communicate the exit statuses of a process: `exited` and `unhandledException`.
 
 ```swift
-@available(FoundationPreview 0.4, *)
-@available(iOS, unavailable)
-@available(tvOS, unavailable)
-@available(watchOS, unavailable)
 @frozen
 public enum TerminationStatus: Sendable, Hashable, Codable {
 #if canImport(WinSDK)
@@ -1807,13 +1696,13 @@ With the current design, the recommended way to "pipe" the output of one process
 ```swift
 let pipe = try FileDescriptor.pipe()
 
-async let ls = try await Subprocess.run(
-    .named("ls"),
+async let ls = try await run(
+    .name("ls"),
     output: .writeTo(pipe.writeEnd, closeAfterSpawningProcess: true)
 )
 
-async let grep = try await Subprocess.run(
-    .named("grep"),
+async let grep = try await run(
+    .name("grep"),
     arguments: ["swift"],
     input: .readFrom(pipe.readEnd, closeAfterSpawningProcess: true),
     output: .collectString()
