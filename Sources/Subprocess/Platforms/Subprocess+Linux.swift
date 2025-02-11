@@ -317,7 +317,7 @@ private func _setupMonitorSignalHandler() {
     setup
 }
 
-extension PipeOutputProtocol {
+extension ManagedOutputProtocol {
     public func output(from data: DispatchData) throws -> OutputType {
         //FIXME: remove workaround for rdar://143992296
         return try self.output(from: data.bytes)

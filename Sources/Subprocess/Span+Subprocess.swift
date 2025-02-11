@@ -107,9 +107,10 @@ extension DispatchData {
                 let span = RawSpan(_unsafeBytes: empty)
                 yield _overrideLifetime(of: span, to: self)
             } else {
-                let ptr = self.withUnsafeBytes {
-                    return UnsafeRawBufferPointer(start: UnsafeRawPointer($0), count: self.count)
-                }
+                // FIXME: We cannot get a stable ptr out of DispatchData.
+                // For now revert back to copy
+                let array = Array(self)
+                let ptr = array.withUnsafeBytes { return $0 }
                 let span = RawSpan(_unsafeBytes: ptr)
                 yield _overrideLifetime(of: span, to: self)
             }

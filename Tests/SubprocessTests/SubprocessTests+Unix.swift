@@ -50,18 +50,18 @@ extension SubprocessUnixTests {
         )
     }
 
-//    func xtestExecutableNamedCannotResolve() async {
-//        do {
-//            _ = try await Subprocess.run(.name("do-not-exist"))
-//            XCTFail("Expected to throw")
-//        } catch {
-//            guard let cocoaError: CocoaError = error as? CocoaError else {
-//                XCTFail("Expected CocoaError, got \(error)")
-//                return
-//            }
-//            XCTAssertEqual(cocoaError.code, .executableNotLoadable)
-//        }
-//    }
+    func testExecutableNamedCannotResolve() async {
+        do {
+            _ = try await Subprocess.run(.name("do-not-exist"))
+            XCTFail("Expected to throw")
+        } catch {
+            guard let cocoaError: CocoaError = error as? CocoaError else {
+                XCTFail("Expected CocoaError, got \(error)")
+                return
+            }
+            XCTAssertEqual(cocoaError.code, .executableNotLoadable)
+        }
+    }
 
     func testExecutableAtPath() async throws {
         let expected = FileManager.default.currentDirectoryPath
