@@ -615,12 +615,12 @@ extension Executable {
     internal func resolveExecutablePath(withPathValue pathValue: String?) throws -> String {
         switch self.storage {
         case .executable(let executableName):
-            return executableName.withCString(
+            return try executableName.withCString(
                 encodedAs: UTF16.self
-            ) { exeName -> String? in
-                return pathValue.withOptionalCString(
+            ) { exeName -> String in
+                return try pathValue.withOptionalCString(
                     encodedAs: UTF16.self
-                ) { path -> String? in
+                ) { path -> String in
                     let pathLenth = SearchPathW(
                         path,
                         exeName,
@@ -649,6 +649,7 @@ extension Executable {
             // Use path directly
             return executablePath.string
         }
+        throw CocoaError(.executableNotLoadable)
     }
 }
 
@@ -1123,28 +1124,52 @@ extension FileDescriptor {
         }
     }
 
-    internal func write<WriteSequence: Sequence & Sendable>(
-        _ data: WriteSequence
-    ) async throws where WriteSequence.Element == UInt8 {
-        return try await withCheckedThrowingContinuation { continuation in
-            self.write(data) { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
+    internal func write(
+        _ array: [UInt8]
+    ) async throws -> Int {
+        try await withCheckedThrowingContinuation { continuation in
+            // TODO: Figure out a better way to asynchornously write
+            DispatchQueue.global(qos: .userInitiated).async {
+                array.withUnsafeBytes {
+                    self.write($0) { writtenLength, error in
+                        if let error = error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume(returning: writtenLength)
+                        }
+                    }
                 }
-                continuation.resume()
             }
         }
     }
 
-    internal func write<WriteSequence: Sequence & Sendable>(
-        _ sequence: WriteSequence,
-        completion: @escaping (Error?) -> Void
-    ) where WriteSequence.Element == UInt8 {
+    internal func write(
+        _ data: Data
+    ) async throws -> Int {
+        try await withCheckedThrowingContinuation { continuation in
+            // TODO: Figure out a better way to asynchornously write
+            DispatchQueue.global(qos: .userInitiated).async {
+                data.withUnsafeBytes {
+                    self.write($0) { writtenLength, error in
+                        if let error = error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume(returning: writtenLength)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    internal func write(
+        _ ptr: UnsafeRawBufferPointer,
+        completion: @escaping (Int, Swift.Error?) -> Void
+    ) {
         func _write(
             _ ptr: UnsafeRawBufferPointer,
             count: Int,
-            completion: @escaping (Error?) -> Void
+            completion: @escaping (Int, Swift.Error?) -> Void
         ) {
             var writtenBytes: DWORD = 0
             let writeSucceed = WriteFile(
@@ -1159,27 +1184,9 @@ extension FileDescriptor {
                     underlying: GetLastError(),
                     errorCode: .fileWriteUnknown
                 )
-                completion(error)
+                completion(Int(writtenBytes), error)
             } else {
-                completion(nil)
-            }
-        }
-        // TODO: Figure out a better way to asynchornously write
-        DispatchQueue.global(qos: .userInitiated).async {
-            if let array = sequence as? [UInt8] {
-                array.withUnsafeBytes { ptr in
-                    _write(ptr, count: array.count, completion: completion)
-                }
-            } else if let data = sequence as? Data {
-                data.withUnsafeBytes { ptr in
-                    _write(ptr, count: data.count, completion: completion)
-                }
-            } else {
-                // Slow case: copy the buffer
-                let array = Array(sequence)
-                array.withUnsafeBytes { ptr in
-                    _write(ptr, count: array.count, completion: completion)
-                }
+                completion(Int(writtenBytes), nil)
             }
         }
     }
