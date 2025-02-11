@@ -296,9 +296,16 @@ public struct Configuration: Sendable, Hashable {
             }
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Swift.Error>) in
                 input.withUnsafeBytes { ptr in
-                    let dispatchData = DispatchData(bytesNoCopy: ptr, deallocator: .custom(nil, { /* noop */ }))
+                    #if os(Windows)
+                    let bytes = ptr
+                    #else
+                    let bytes = DispatchData(
+                        bytesNoCopy: ptr,
+                        deallocator: .custom(nil, { /* noop */ })
+                    )
+                    #endif
 
-                    writeFd.write(dispatchData) { _, error in
+                    writeFd.write(bytes) { _, error in
                         if let error = error {
                             continuation.resume(throwing: error)
                         } else {

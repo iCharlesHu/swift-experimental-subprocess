@@ -21,7 +21,7 @@ import System
 @testable import Subprocess
 
 final class SubprocessWindowsTests: XCTestCase {
-    private let cmdExe: Subprocess.Executable = .at("C:\\Windows\\System32\\cmd.exe")
+    private let cmdExe: Subprocess.Executable = .path("C:\\Windows\\System32\\cmd.exe")
 }
 
 // MARK: - Executable Tests
@@ -32,7 +32,7 @@ extension SubprocessWindowsTests {
         let message = "Hello, world from Swift!"
 
         let result = try await Subprocess.run(
-            .named("cmd.exe"),
+            .name("cmd.exe"),
             arguments: ["/c", "echo", message],
             output: .string,
             error: .discarded
@@ -48,7 +48,7 @@ extension SubprocessWindowsTests {
 
     func testExecutableNamedCannotResolve() async throws {
         do {
-            _ = try await Subprocess.run(.named("do-not-exist"))
+            _ = try await Subprocess.run(.name("do-not-exist"))
             XCTFail("Expected to throw")
         } catch {
             guard let cocoaError: CocoaError = error as? CocoaError else {
@@ -79,7 +79,7 @@ extension SubprocessWindowsTests {
             // Since we are using the path directly,
             // we expect the error to be thrown by the underlying
             // CreateProcssW
-            _ = try await Subprocess.run(.at("X:\\do-not-exist"))
+            _ = try await Subprocess.run(.path("X:\\do-not-exist"))
             XCTFail("Expected to throw POSIXError")
         } catch {
             guard let cocoaError: CocoaError = error as? CocoaError,
@@ -269,7 +269,7 @@ extension SubprocessWindowsTests {
                 "/c",
                 "findstr x*"
             ],
-            input: .sequence(expected),
+            input: .data(expected),
             output: .data(limit: 2048 * 1024),
             error: .discarded
         )
@@ -321,7 +321,7 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: .sequence(expected)
+            input: .data(expected)
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -579,7 +579,7 @@ extension SubprocessWindowsTests {
             )
 
             let whoamiResult = try await Subprocess.run(
-                .at("C:\\Windows\\System32\\whoami.exe"),
+                .path("C:\\Windows\\System32\\whoami.exe"),
                 workingDirectory: workingDirectory,
                 platformOptions: platformOptions,
                 output: .string
@@ -604,7 +604,7 @@ extension SubprocessWindowsTests {
     func testPlatformOptionsCreateNewConsole() async throws {
         let parentConsole = GetConsoleWindow()
         let sameConsoleResult = try await Subprocess.run(
-            .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+            .path("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
             arguments: [
                 "-File", windowsTester.string,
                 "-mode", "get-console-window"
@@ -624,7 +624,7 @@ extension SubprocessWindowsTests {
         var platformOptions: Subprocess.PlatformOptions = .init()
         platformOptions.consoleBehavior = .createNew
         let differentConsoleResult = try await Subprocess.run(
-            .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+            .path("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
             arguments: [
                 "-File", windowsTester.string,
                 "-mode", "get-console-window"
@@ -647,7 +647,7 @@ extension SubprocessWindowsTests {
         var platformOptions: Subprocess.PlatformOptions = .init()
         platformOptions.consoleBehavior = .detatch
         let detachConsoleResult = try await Subprocess.run(
-            .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+            .path("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
             arguments: [
                 "-File", windowsTester.string,
                 "-mode", "get-console-window"
@@ -671,7 +671,7 @@ extension SubprocessWindowsTests {
         }
         let parentConsole = GetConsoleWindow()
         let newConsoleResult = try await Subprocess.run(
-            .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+            .path("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
             arguments: [
                 "-File", windowsTester.string,
                 "-mode", "get-console-window"
@@ -704,7 +704,7 @@ extension SubprocessWindowsTests {
             }
         }
         let changeTitleResult = try await Subprocess.run(
-            .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+            .path("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
             arguments: [
                 "-Command", "$consoleTitle = [console]::Title; Write-Host $consoleTitle",
             ],
@@ -749,7 +749,7 @@ extension SubprocessWindowsTests {
             // Now check the to make sure the procss is actually suspended
             // Why not spawn a nother process to do that?
             var checkResult = try await Subprocess.run(
-                .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+                .path("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
                 arguments: [
                     "-File", windowsTester.string,
                     "-mode", "is-process-suspended",
@@ -766,7 +766,7 @@ extension SubprocessWindowsTests {
             // Now resume the process
             try subprocess.resume()
             checkResult = try await Subprocess.run(
-                .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+                .path("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
                 arguments: [
                     "-File", windowsTester.string,
                     "-mode", "is-process-suspended",
@@ -794,7 +794,7 @@ extension SubprocessWindowsTests {
             0
         )
         let pid = try Subprocess.runDetached(
-            .at("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
+            .path("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"),
             arguments: [
                 "-Command", "Write-Host $PID"
             ],

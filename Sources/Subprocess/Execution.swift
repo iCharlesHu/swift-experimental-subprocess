@@ -47,13 +47,25 @@ public struct Execution<
     internal let error: Error
 #if os(Windows)
     internal let consoleBehavior: PlatformOptions.ConsoleBehavior
-#endif
 
+    init(
+        processIdentifier: ProcessIdentifier,
+        output: Output,
+        error: Error,
+        consoleBehavior: PlatformOptions.ConsoleBehavior
+    ) {
+        self.processIdentifier = processIdentifier
+        self.output = output
+        self.error = error
+        self.consoleBehavior = consoleBehavior
+    }
+#else
     init(processIdentifier: ProcessIdentifier, output: Output, error: Error) {
         self.processIdentifier = processIdentifier
         self.output = output
         self.error = error
     }
+#endif // os(Windows)
 }
 
 extension Execution where Output == SequenceOutput {
