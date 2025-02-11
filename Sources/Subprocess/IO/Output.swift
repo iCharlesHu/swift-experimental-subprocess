@@ -242,14 +242,6 @@ public final class SequenceOutput: OutputProtocol {
     }
 }
 
-@available(macOS 9999, *)
-extension ManagedOutputProtocol {
-    public func output(from data: some DataProtocol) throws -> OutputType {
-        //FIXME: remove workaround for rdar://143992296
-        return try self.output(from: data.bytes)
-    }
-}
-
 extension OutputProtocol where Self == DiscardedOutput {
     /// Create a Subprocess output that discards the output
     public static var discarded: Self { .init() }
@@ -357,5 +349,16 @@ extension ManagedOutputProtocol {
 
 extension OutputProtocol where OutputType == Void {
     public func captureOutput() async throws -> Void { /* noop */ }
+}
+
+
+// MARK: - Workarounds
+@available(macOS 9999, *)
+extension ManagedOutputProtocol {
+    @_disfavoredOverload
+    public func output(from data: some DataProtocol) throws -> OutputType {
+        //FIXME: remove workaround for rdar://143992296
+        return try self.output(from: data.bytes)
+    }
 }
 

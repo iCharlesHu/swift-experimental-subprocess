@@ -285,7 +285,7 @@ extension Executable {
             return executablePath.string
         }
 
-        throw SubprocessError.executableNotFound
+        throw CocoaError(.executableNotLoadable)
     }
 }
 
