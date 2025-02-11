@@ -434,9 +434,9 @@ public func run<Result>(
 ///     of the closure.
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ configuration: Configuration,
-    isolation: isolated (any Actor)? = #isolation,
     output: Output,
     error: Error,
+    isolation: isolated (any Actor)? = #isolation,
     body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
 
@@ -451,8 +451,8 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///     of the closure.
 public func run<Result, Output: OutputProtocol>(
     _ configuration: Configuration,
-    isolation: isolated (any Actor)? = #isolation,
     output: Output,
+    isolation: isolated (any Actor)? = #isolation,
     body: (@escaping (Execution<Output, DiscardedOutput>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void
 
@@ -1314,7 +1314,7 @@ public protocol OutputProtocol: Sendable {
     /// Close the FileDescriptor for writing
     func closeWriteFileDescriptor() throws
 
-    /// Capture the output from the subprocess up to maxSize
+    /// Capture the output from the subprocess
     func captureOutput() async throws -> OutputType
 }
 
