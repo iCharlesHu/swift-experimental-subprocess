@@ -357,9 +357,9 @@ public func run<Result>(
 ///     of the closure.
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ configuration: Configuration,
-    isolation: isolated (any Actor)? = #isolation,
     output: Output,
     error: Error,
+    isolation: isolated (any Actor)? = #isolation,
     body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
     return try await configuration.run(output: output, error: error, body)
@@ -376,8 +376,8 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///     of the closure.
 public func run<Result, Output: OutputProtocol>(
     _ configuration: Configuration,
-    isolation: isolated (any Actor)? = #isolation,
     output: Output,
+    isolation: isolated (any Actor)? = #isolation,
     body: (@escaping (Execution<Output, DiscardedOutput>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void {
     return try await run(
