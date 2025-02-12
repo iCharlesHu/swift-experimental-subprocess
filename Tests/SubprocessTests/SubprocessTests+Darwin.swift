@@ -72,7 +72,9 @@ final class SubprocessDarwinTests : XCTestCase {
     func testSuspendResumeProcess() async throws {
         _ = try await Subprocess.run(
             // This will intentionally hang
-            .path("/bin/cat")
+            .path("/bin/cat"),
+            output: .discarded,
+            error: .discarded
         ) { subprocess in
             // First suspend the procss
             try subprocess.send(signal: .suspend)

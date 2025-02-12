@@ -67,7 +67,9 @@ final class SubprocessLinuxTests: XCTestCase {
         _ = try await Subprocess.run(
             // This will intentionally hang
             .path("/usr/bin/sleep"),
-            arguments: ["infinity"]
+            arguments: ["infinity"],
+            output: .discarded,
+            error: .discarded
         ) { subprocess in
             // First suspend the procss
             try subprocess.send(signal: .suspend)

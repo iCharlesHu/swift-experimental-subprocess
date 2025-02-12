@@ -361,7 +361,9 @@ extension SubprocessUnixTests {
         )
         let result = try await Subprocess.run(
             .path("/bin/cat"),
-            input: .data(expected)
+            input: .data(expected),
+            output: .sequence,
+            error: .discarded
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -395,7 +397,9 @@ extension SubprocessUnixTests {
         }
         let result = try await Subprocess.run(
             .path("/bin/cat"),
-            input: .sequence(stream)
+            input: .sequence(stream),
+            output: .sequence,
+            error: .discarded
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -595,7 +599,8 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .path("/bin/cat"),
             arguments: [theMysteriousIsland.string],
-            output: .sequence
+            output: .sequence,
+            error: .discarded
         ) { subprocess in
             var buffer = Data()
             for try await chunk in subprocess.standardOutput {
@@ -732,7 +737,9 @@ extension SubprocessUnixTests {
                 while true; do sleep 1; done
                 exit 2
                 """,
-            ]
+            ],
+            output: .sequence,
+            error: .discarded
         ) { subprocess in
             return try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
@@ -791,7 +798,9 @@ extension SubprocessUnixTests {
     func testTerminateProcess() async throws {
         let stuckResult = try await Subprocess.run(
             // This will intentionally hang
-            .path("/bin/cat")
+            .path("/bin/cat"),
+            output: .discarded,
+            error: .discarded
         ) { subprocess in
             // Make sure we can send signals to terminate the process
             try subprocess.send(signal: .terminate)
