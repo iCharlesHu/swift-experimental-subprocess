@@ -27,13 +27,7 @@ import Musl
 import WinSDK
 #endif
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
-
-import Dispatch
+internal import Dispatch
 
 /// A collection of configurations parameters to use when
 /// spawning a subprocess.
@@ -552,17 +546,17 @@ public struct Arguments: Sendable, ExpressibleByArrayLiteral, Hashable {
     /// - Parameters:
     ///   - executablePathOverride: the value to override the first argument.
     ///   - remainingValues: the rest of the argument value
-    public init(executablePathOverride: Data?, remainingValues: [Data]) {
-        self.storage = remainingValues.map { .rawBytes($0.toArray()) }
+    public init(executablePathOverride: [UInt8]?, remainingValues: Array<[UInt8]>) {
+        self.storage = remainingValues.map { .rawBytes($0) }
         if let override = executablePathOverride {
-            self.executablePathOverride = .rawBytes(override.toArray())
+            self.executablePathOverride = .rawBytes(override)
         } else {
             self.executablePathOverride = nil
         }
     }
 
-    public init(_ array: [Data]) {
-        self.storage = array.map { .rawBytes($0.toArray()) }
+    public init(_ array: Array<[UInt8]>) {
+        self.storage = array.map { .rawBytes($0) }
         self.executablePathOverride = nil
     }
 #endif
@@ -586,8 +580,11 @@ extension Arguments : CustomStringConvertible, CustomDebugStringConvertible {
 /// A set of environment variables to use when executing the subprocess.
 public struct Environment: Sendable, Hashable {
     internal enum Configuration: Sendable, Hashable {
-        case inherit([StringOrRawBytes : StringOrRawBytes])
-        case custom([StringOrRawBytes : StringOrRawBytes])
+        case inherit([String : String])
+        case custom([String : String])
+#if !os(Windows)
+        case rawBytes(Array<[UInt8]>)
+#endif
     }
 
     internal let config: Configuration
@@ -602,21 +599,17 @@ public struct Environment: Sendable, Hashable {
     }
     /// Override the provided `newValue` in the existing `Environment`
     public func updating(_ newValue: [String : String]) -> Self {
-        return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
+        return .init(config: .inherit(newValue))
     }
     /// Use custom environment variables
     public static func custom(_ newValue: [String : String]) -> Self {
-        return .init(config: .custom(newValue.wrapToStringOrRawBytes()))
+        return .init(config: .custom(newValue))
     }
 
 #if !os(Windows)
-    /// Override the provided `newValue` in the existing `Environment`
-    public func updating(_ newValue: [Data : Data]) -> Self {
-        return .init(config: .inherit(newValue.wrapToStringOrRawBytes()))
-    }
-    /// Use custom environment variables
-    public static func custom(_ newValue: [Data : Data]) -> Self {
-        return .init(config: .custom(newValue.wrapToStringOrRawBytes()))
+    /// Use custom environment variables of raw bytes
+    public static func custom(_ newValue: Array<[UInt8]>) -> Self {
+        return .init(config: .rawBytes(newValue))
     }
 #endif
 }
@@ -625,14 +618,55 @@ extension Environment : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch self.config {
         case .custom(let customDictionary):
-            return customDictionary.dictionaryDescription
+            return """
+            Custom environment:
+            \(customDictionary)
+            """
         case .inherit(let updateValue):
-            return "Inherting current environment with updates: \(updateValue.dictionaryDescription)"
+            return """
+            Inherting current environment with updates:
+            \(updateValue)
+            """
+#if !os(Windows)
+        case .rawBytes(let rawBytes):
+            return """
+            Raw bytes:
+            \(rawBytes)
+            """
+#endif
         }
     }
 
     public var debugDescription: String {
         return self.description
+    }
+
+    internal static func currentEnvironmentValues() -> [String : String] {
+        return self.withCopiedEnv { environments in
+            var results: [String : String] = [:]
+            for env in environments {
+                let environmentString = String(cString: env)
+
+#if os(Windows)
+                // Windows GetEnvironmentStringsW API can return
+                // magic environment variables set by the cmd shell
+                // that starts with `=`
+                // We should exclude these values
+                if environmentString.utf8.first == Character("=").utf8.first {
+                    continue
+                }
+#endif // os(Windows)
+
+                guard let delimiter = environmentString.firstIndex(of: "=") else {
+                    continue
+                }
+
+                let key = String(environmentString[environmentString.startIndex ..< delimiter])
+                let value = String(environmentString[environmentString.index(after: delimiter) ..< environmentString.endIndex])
+                results[key] = value
+            }
+            return results
+        }
     }
 }
 
@@ -681,7 +715,7 @@ extension TerminationStatus : CustomStringConvertible, CustomDebugStringConverti
 
 internal enum StringOrRawBytes: Sendable, Hashable {
     case string(String)
-    case rawBytes([CChar])
+    case rawBytes([UInt8])
 
     // Return value needs to be deallocated manually by callee
     func createRawBytes() -> UnsafeMutablePointer<CChar> {
@@ -698,7 +732,7 @@ internal enum StringOrRawBytes: Sendable, Hashable {
         case .string(let string):
             return string
         case .rawBytes(let rawBytes):
-            return String(validatingUTF8: rawBytes)
+            return String(decoding: rawBytes, as: UTF8.self)
         }
     }
 
@@ -777,51 +811,6 @@ extension Optional where Wrapped == String {
 
     var stringValue: String {
         return self ?? "nil"
-    }
-}
-
-fileprivate extension Dictionary where Key == String, Value == String {
-    func wrapToStringOrRawBytes() -> [StringOrRawBytes : StringOrRawBytes] {
-        var result = Dictionary<
-            StringOrRawBytes,
-            StringOrRawBytes
-        >(minimumCapacity: self.count)
-        for (key, value) in self {
-            result[.string(key)] = .string(value)
-        }
-        return result
-    }
-}
-
-fileprivate extension Dictionary where Key == Data, Value == Data {
-    func wrapToStringOrRawBytes() -> [StringOrRawBytes : StringOrRawBytes] {
-        var result = Dictionary<
-            StringOrRawBytes,
-            StringOrRawBytes
-        >(minimumCapacity: self.count)
-        for (key, value) in self {
-            result[.rawBytes(key.toArray())] = .rawBytes(value.toArray())
-        }
-        return result
-    }
-}
-
-fileprivate extension Dictionary where Key == StringOrRawBytes, Value == StringOrRawBytes {
-    var dictionaryDescription: String {
-        var result = "[\n"
-        for (key, value) in self {
-            result += "\t\(key.description) : \(value.description),\n"
-        }
-        result += "]"
-        return result
-    }
-}
-
-fileprivate extension Data {
-    func toArray<T>() -> [T] {
-        return self.withUnsafeBytes { ptr in
-            return Array(ptr.bindMemory(to: T.self))
-        }
     }
 }
 

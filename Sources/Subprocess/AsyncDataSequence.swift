@@ -14,7 +14,7 @@ import System
 #else
 @preconcurrency import SystemPackage
 #endif
-import Dispatch
+internal import Dispatch
 
 #if canImport(FoundationEssentials)
 import FoundationEssentials

@@ -11,14 +11,8 @@
 
 #if canImport(Darwin)
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
-
 import Darwin
-import Dispatch
+internal import Dispatch
 #if canImport(System)
 import System
 #else
@@ -56,9 +50,6 @@ public struct PlatformOptions: Sendable {
     /// Creates a session and sets the process group ID
     /// i.e. Detach from the terminal.
     public var createSession: Bool = false
-    /// A lightweight code requirement that you use to
-    /// evaluate the executable for a launching process.
-    public var launchRequirementData: Data? = nil
     /// An ordered list of steps in order to tear down the child
     /// process in case the parent task is cancelled before
     /// the child proces terminates.
@@ -102,8 +93,7 @@ extension PlatformOptions: Hashable {
         lhs.groupID == rhs.groupID &&
         lhs.supplementaryGroups == rhs.supplementaryGroups &&
         lhs.processGroupID == rhs.processGroupID &&
-        lhs.createSession == rhs.createSession &&
-        lhs.launchRequirementData == rhs.launchRequirementData
+        lhs.createSession == rhs.createSession
     }
 
     public func hash(into hasher: inout Hasher) {
@@ -113,13 +103,12 @@ extension PlatformOptions: Hashable {
         hasher.combine(self.supplementaryGroups)
         hasher.combine(self.processGroupID)
         hasher.combine(self.createSession)
-        hasher.combine(self.launchRequirementData)
         // Since we can't really hash closures,
-        // use an UUID such that as long as
+        // use an random number such that as long as
         // `preSpawnProcessConfigurator` is set, it will
         // never equal to other PlatformOptions
         if self.preSpawnProcessConfigurator != nil {
-            hasher.combine(UUID())
+            hasher.combine(Int.random(in: 0 ..< .max))
         }
     }
 }
@@ -136,7 +125,6 @@ PlatformOptions(
 \(indent)    supplementaryGroups: \(String(describing: supplementaryGroups)),
 \(indent)    processGroupID: \(String(describing: processGroupID)),
 \(indent)    createSession: \(createSession),
-\(indent)    launchRequirementData: \(String(describing: launchRequirementData)),
 \(indent)    preSpawnProcessConfigurator: \(self.preSpawnProcessConfigurator == nil ? "not set" : "set")
 \(indent))
 """
@@ -189,7 +177,10 @@ extension Configuration {
             result = posix_spawn_file_actions_adddup2(&fileActions, inputRead.rawValue, 0)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
-                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+                throw SubprocessError(
+                    code: .init(.spawnFailed),
+                    underlyingError: .init(rawValue: result)
+                )
             }
         }
         if let inputWrite = try input.writeFileDescriptor() {
@@ -197,7 +188,10 @@ extension Configuration {
             result = posix_spawn_file_actions_addclose(&fileActions, inputWrite.rawValue)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
-                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+                throw SubprocessError(
+                    code: .init(.spawnFailed),
+                    underlyingError: .init(rawValue: result)
+                )
             }
         }
         // Output
@@ -205,7 +199,10 @@ extension Configuration {
             result = posix_spawn_file_actions_adddup2(&fileActions, outputWrite.rawValue, 1)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
-                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+                throw SubprocessError(
+                    code: .init(.spawnFailed),
+                    underlyingError: .init(rawValue: result)
+                )
             }
         }
         if let outputRead = try output.readFileDescriptor() {
@@ -213,7 +210,10 @@ extension Configuration {
             result = posix_spawn_file_actions_addclose(&fileActions, outputRead.rawValue)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
-                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+                throw SubprocessError(
+                    code: .init(.spawnFailed),
+                    underlyingError: .init(rawValue: result)
+                )
             }
         }
         // Error
@@ -221,7 +221,10 @@ extension Configuration {
             result = posix_spawn_file_actions_adddup2(&fileActions, errorWrite.rawValue, 2)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
-                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+                throw SubprocessError(
+                    code: .init(.spawnFailed),
+                    underlyingError: .init(rawValue: result)
+                )
             }
         }
         if let errorRead = try error.readFileDescriptor() {
@@ -229,7 +232,10 @@ extension Configuration {
             result = posix_spawn_file_actions_addclose(&fileActions, errorRead.rawValue)
             guard result == 0 else {
                 try self.cleanupAll(input: input, output: output, error: error)
-                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+                throw SubprocessError(
+                    code: .init(.spawnFailed),
+                    underlyingError: .init(rawValue: result)
+                )
             }
         }
         // Setup spawnAttributes
@@ -273,13 +279,17 @@ extension Configuration {
         if chdirError != 0 || spawnAttributeError != 0 {
             try self.cleanupAll(input: input, output: output, error: error)
             if spawnAttributeError != 0 {
-                throw POSIXError(.init(rawValue: result) ?? .ENODEV)
+                throw SubprocessError(
+                    code: .init(.spawnFailed),
+                    underlyingError: .init(rawValue: spawnAttributeError)
+                )
             }
 
             if chdirError != 0 {
-                throw CocoaError(.fileNoSuchFile, userInfo: [
-                    .debugDescriptionErrorKey: "Cannot failed to change the working directory to \(intendedWorkingDir) with errno \(chdirError)"
-                ])
+                throw SubprocessError(
+                    code: .init(.spawnFailed),
+                    underlyingError: .init(rawValue: spawnAttributeError)
+                )
             }
         }
         // Run additional config
@@ -303,7 +313,10 @@ extension Configuration {
         // Spawn error
         if spawnError != 0 {
             try self.cleanupAll(input: input, output: output, error: error)
-            throw POSIXError(.init(rawValue: spawnError) ?? .ENODEV)
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: spawnError)
+            )
         }
         return Execution(
             processIdentifier: .init(value: pid),
@@ -334,7 +347,12 @@ internal func monitorProcessTermination(
             var siginfo = siginfo_t()
             let rc = waitid(P_PID, id_t(pid.value), &siginfo, WEXITED)
             guard rc == 0 else {
-                continuation.resume(throwing: POSIXError(.init(rawValue: errno) ?? .ENODEV))
+                continuation.resume(
+                    throwing: SubprocessError(
+                        code: .init(.failedToMonitorProcess),
+                        underlyingError: .init(rawValue: errno)
+                    )
+                )
                 return
             }
             switch siginfo.si_code {

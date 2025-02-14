@@ -14,13 +14,7 @@ import System
 #else
 @preconcurrency import SystemPackage
 #endif
-import Dispatch
-
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
+internal import Dispatch
 
 // MARK: - Result
 

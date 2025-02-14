@@ -67,6 +67,7 @@ public final class NoInput: InputProtocol {
     private let devnull: Lock<FileDescriptor?>
 
     public func readFileDescriptor() throws -> FileDescriptor? {
+#if !os(Windows)
         return try self.devnull.withLock { fd in
             if let devnull = fd {
                 return devnull
@@ -75,6 +76,12 @@ public final class NoInput: InputProtocol {
             fd = devnull
             return devnull
         }
+#else
+        // On Windows, instead of binding to dev null,
+        // we don't set the input handle in the `STARTUPINFOW`
+        // to signal no input
+        return nil
+#endif // !os(Windows)
     }
 
     public func writeFileDescriptor() throws -> FileDescriptor? {

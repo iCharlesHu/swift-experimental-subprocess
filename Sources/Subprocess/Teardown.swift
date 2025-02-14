@@ -21,12 +21,6 @@ import Glibc
 import Musl
 #endif
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
-
 
 /// A step in the graceful shutdown teardown sequence.
 /// It consists of a signal to send to the child process and the

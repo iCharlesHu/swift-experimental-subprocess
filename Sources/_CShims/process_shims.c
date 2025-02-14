@@ -24,6 +24,15 @@
 
 #include <stdio.h>
 
+#if __has_include(<crt_externs.h>)
+#include <crt_externs.h>
+#elif defined(_WIN32)
+#include <stdlib.h>
+#elif __has_include(<unistd.h>)
+#include <unistd.h>
+extern char **environ;
+#endif
+
 int _was_process_exited(int status) {
     return WIFEXITED(status);
 }
@@ -335,3 +344,31 @@ int _subprocess_fork_exec(
 
 #endif // !TARGET_OS_WINDOWS
 
+#pragma mark - Environment Locking
+
+#if __has_include(<libc_private.h>)
+#import <libc_private.h>
+void _subprocess_lock_environ(void) {
+    environ_lock_np();
+}
+
+void _subprocess_unlock_environ(void) {
+    environ_unlock_np();
+}
+#else
+void _subprocess_lock_environ(void) { /* noop */ }
+void _subprocess_unlock_environ(void) { /* noop */ }
+#endif
+
+char ** _subprocess_get_environ(void) {
+#if __has_include(<crt_externs.h>)
+    return *_NSGetEnviron();
+#elif defined(_WIN32)
+#include <stdlib.h>
+    return _environ;
+#elif TARGET_OS_WASI
+    return __wasilibc_get_environ();
+#elif __has_include(<unistd.h>)
+    return environ;
+#endif
+}

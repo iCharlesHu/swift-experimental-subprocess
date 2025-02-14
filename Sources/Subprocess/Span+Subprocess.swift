@@ -15,7 +15,7 @@ import FoundationEssentials
 import Foundation
 #endif
 
-import Dispatch
+internal import Dispatch
 
 @_unsafeNonescapableResult
 @inlinable @inline(__always)

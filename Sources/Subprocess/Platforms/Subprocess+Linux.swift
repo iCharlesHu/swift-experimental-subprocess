@@ -25,9 +25,9 @@ import Glibc
 import Musl
 #endif
 
-import Dispatch
+internal import Dispatch
+
 import Synchronization
-import FoundationEssentials
 import _CShims
 
 // Linux specific implementations
@@ -101,7 +101,10 @@ extension Configuration {
         // Spawn error
         if spawnError != 0 {
             try self.cleanupAll(input: input, output: output, error: error)
-            throw POSIXError(.init(rawValue: spawnError) ?? .ENODEV)
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: spawnError)
+            )
         }
         return Execution(
             processIdentifier: .init(value: pid),
@@ -184,11 +187,11 @@ extension PlatformOptions: Hashable {
         hasher.combine(processGroupID)
         hasher.combine(createSession)
         // Since we can't really hash closures,
-        // use an UUID such that as long as
+        // use a random number such that as long as
         // `preSpawnProcessConfigurator` is set, it will
         // never equal to other PlatformOptions
         if self.preSpawnProcessConfigurator != nil {
-            hasher.combine(UUID())
+            hasher.combine(Int.random(in: 0 ..< .max))
         }
     }
 }
@@ -318,7 +321,7 @@ private func _setupMonitorSignalHandler() {
 }
 
 extension ManagedOutputProtocol {
-    public func output(from data: DispatchData) throws -> OutputType {
+    internal func output(from data: DispatchData) throws -> OutputType {
         //FIXME: remove workaround for rdar://143992296
         return try self.output(from: data.bytes)
     }

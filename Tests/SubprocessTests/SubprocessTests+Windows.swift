@@ -321,7 +321,9 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: .data(expected)
+            input: .data(expected),
+            output: .sequence,
+            error: .discarded
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -356,7 +358,9 @@ extension SubprocessWindowsTests {
         let result = try await Subprocess.run(
             self.cmdExe,
             arguments: ["/c", "findstr x*"],
-            input: .sequence(stream)
+            input: .sequence(stream),
+            output: .sequence,
+            error: .discarded
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
@@ -546,7 +550,9 @@ extension SubprocessWindowsTests {
         )
         let catResult = try await Subprocess.run(
             self.cmdExe,
-            arguments: ["/c", "type \(theMysteriousIsland.string)"]
+            arguments: ["/c", "type \(theMysteriousIsland.string)"],
+            output: .sequence,
+            error: .discarded
         ) { subprocess in
             var buffer = Data()
             for try await chunk in subprocess.standardOutput {
@@ -726,7 +732,9 @@ extension SubprocessWindowsTests {
         let stuckProcess = try await Subprocess.run(
             self.cmdExe,
             // This command will intentionally hang
-            arguments: ["/c", "type con"]
+            arguments: ["/c", "type con"],
+            output: .discarded,
+            error: .discarded
         ) { subprocess in
             // Make sure we can kill the hung process
             try subprocess.terminate(withExitCode: 42)
@@ -743,7 +751,9 @@ extension SubprocessWindowsTests {
         let stuckProcess = try await Subprocess.run(
             self.cmdExe,
             // This command will intentionally hang
-            arguments: ["/c", "type con"]
+            arguments: ["/c", "type con"],
+            output: .discarded,
+            error: .discarded
         ) { subprocess in
             try subprocess.suspend()
             // Now check the to make sure the procss is actually suspended
@@ -960,10 +970,11 @@ extension FileDescriptor {
                     }
                 }
                 if let lastError = lastError {
-                    continuation.resume(throwing: CocoaError.windowsError(
-                        underlying: lastError,
-                        errorCode: .fileReadUnknown)
+                    let windowsError = SubprocessError(
+                        code: .init(.failedToReadFromSubprocess),
+                        underlyingError: .init(rawValue: lastError)
                     )
+                    continuation.resume(throwing: windowsError)
                 } else {
                     continuation.resume(returning: Data(values))
                 }

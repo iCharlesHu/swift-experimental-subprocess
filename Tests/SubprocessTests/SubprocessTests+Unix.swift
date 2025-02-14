@@ -55,11 +55,11 @@ extension SubprocessUnixTests {
             _ = try await Subprocess.run(.name("do-not-exist"))
             XCTFail("Expected to throw")
         } catch {
-            guard let cocoaError: CocoaError = error as? CocoaError else {
-                XCTFail("Expected CocoaError, got \(error)")
+            guard let subprocessError: SubprocessError = error as? SubprocessError else {
+                XCTFail("Expected SubprocessError, got \(error)")
                 return
             }
-            XCTAssertEqual(cocoaError.code, .executableNotLoadable)
+            XCTAssertEqual(subprocessError.code, .init(.executableNotFound("do-not-exist")))
         }
     }
 
@@ -82,11 +82,11 @@ extension SubprocessUnixTests {
             _ = try await Subprocess.run(.path("/usr/bin/do-not-exist"))
             XCTFail("Expected to throw POSIXError")
         } catch {
-            guard let posixError: POSIXError = error as? POSIXError else {
+            guard let subprocessError: SubprocessError = error as? SubprocessError else {
                 XCTFail("Expected POSIXError, got \(error)")
                 return
             }
-            XCTAssertEqual(posixError.code, .ENOENT)
+            XCTAssertEqual(subprocessError.code, .init(.spawnFailed))
         }
     }
 }
@@ -129,8 +129,8 @@ extension SubprocessUnixTests {
         )
     }
 
-    func testArgumemtsFromData() async throws {
-        let arguments = Data("Data Content".utf8)
+    func testArgumemtsFromArray() async throws {
+        let arguments: [UInt8] = Array("Data Content\0".utf8)
         let result = try await Subprocess.run(
             .path("/bin/echo"),
             arguments: .init(

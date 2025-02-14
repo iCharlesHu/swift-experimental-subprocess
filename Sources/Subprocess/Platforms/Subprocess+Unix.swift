@@ -34,7 +34,8 @@ import Musl
 #endif
 
 import _CShims
-import Dispatch
+
+internal import Dispatch
 
 // MARK: - Signals
 
@@ -122,7 +123,10 @@ extension Execution {
     public func send(signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
         let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
         guard kill(pid, signal.rawValue) == 0 else {
-            throw POSIXError(.init(rawValue: errno)!)
+            throw SubprocessError(
+                code: .init(.failedToSendSignal(signal.rawValue)),
+                underlyingError: .init(rawValue: errno)
+            )
         }
     }
 
@@ -150,14 +154,25 @@ extension Environment {
         switch self.config {
         case .inherit(let overrides):
             // If PATH value exists in overrides, use it
-            if let value = overrides[.string(Self.pathEnvironmentVariableName)] {
-                return value.stringValue
+            if let value = overrides[Self.pathEnvironmentVariableName] {
+                return value
             }
             // Fall back to current process
-            return ProcessInfo.processInfo.environment[Self.pathEnvironmentVariableName]
+            return Self.currentEnvironmentValues()[Self.pathEnvironmentVariableName]
         case .custom(let fullEnvironment):
-            if let value = fullEnvironment[.string(Self.pathEnvironmentVariableName)] {
-                return value.stringValue
+            if let value = fullEnvironment[Self.pathEnvironmentVariableName] {
+                return value
+            }
+            return nil
+        case .rawBytes(let rawBytesArray):
+            let needle: [UInt8] = Array("\(Self.pathEnvironmentVariableName)=".utf8)
+            for row in rawBytesArray {
+                guard row.starts(with: needle) else {
+                    continue
+                }
+                // Attempt to
+                let pathValue = row.dropFirst(needle.count)
+                return String(decoding: pathValue, as: UTF8.self)
             }
             return nil
         }
@@ -179,32 +194,23 @@ extension Environment {
             /// length = `key` + `=` + `value` + `\null`
             let totalLength = keyContainer.count + 1 + valueContainer.count + 1
             let fullString: UnsafeMutablePointer<CChar> = .allocate(capacity: totalLength)
-            #if canImport(Darwin)
+#if canImport(Darwin)
             _ = snprintf(ptr: fullString, totalLength, "%s=%s", rawByteKey, rawByteValue)
-            #else
+#else
             _ = _shims_snprintf(fullString, CInt(totalLength), "%s=%s", rawByteKey, rawByteValue)
-            #endif
+#endif
             return fullString
         }
 
         var env: [UnsafeMutablePointer<CChar>?] = []
         switch self.config {
         case .inherit(let updates):
-            var current = ProcessInfo.processInfo.environment
-            for (keyContainer, valueContainer) in updates {
-                if let stringKey = keyContainer.stringValue {
-                    // Remove the value from current to override it
-                    current.removeValue(forKey: stringKey)
-                }
-                // Fast path
-                if case .string(let stringKey) = keyContainer,
-                   case .string(let stringValue) = valueContainer {
-                    let fullString = "\(stringKey)=\(stringValue)"
-                    env.append(strdup(fullString))
-                    continue
-                }
-
-                env.append(createFullCString(fromKey: keyContainer, value: valueContainer))
+            var current = Self.currentEnvironmentValues()
+            for (key, value) in updates {
+                // Remove the value from current to override it
+                current.removeValue(forKey: key)
+                let fullString = "\(key)=\(value)"
+                env.append(strdup(fullString))
             }
             // Add the rest of `current` to env
             for (key, value) in current {
@@ -212,19 +218,36 @@ extension Environment {
                 env.append(strdup(fullString))
             }
         case .custom(let customValues):
-            for (keyContainer, valueContainer) in customValues {
-                // Fast path
-                if case .string(let stringKey) = keyContainer,
-                   case .string(let stringValue) = valueContainer {
-                    let fullString = "\(stringKey)=\(stringValue)"
-                    env.append(strdup(fullString))
-                    continue
-                }
-                env.append(createFullCString(fromKey: keyContainer, value: valueContainer))
+            for (key, value) in customValues {
+                let fullString = "\(key)=\(value)"
+                env.append(strdup(fullString))
+            }
+        case .rawBytes(let rawBytesArray):
+            for rawBytes in rawBytesArray {
+                env.append(strdup(rawBytes))
             }
         }
         env.append(nil)
         return env
+    }
+
+    internal static func withCopiedEnv<R>(_ body: ([UnsafeMutablePointer<CChar>]) -> R) -> R {
+        var values: [UnsafeMutablePointer<CChar>] = []
+        // This lock is taken by calls to getenv, so we want as few callouts to other code as possible here.
+        _subprocess_lock_environ()
+        guard let environments: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?> =
+                _subprocess_get_environ() else {
+            _subprocess_unlock_environ()
+            return body([])
+        }
+        var curr = environments
+        while let value = curr.pointee {
+            values.append(strdup(value))
+            curr = curr.advanced(by: 1)
+        }
+        _subprocess_unlock_environ()
+        defer { values.forEach { free($0) } }
+        return body(values)
     }
 }
 
@@ -280,12 +303,14 @@ extension Executable {
                     return fullPath
                 }
             }
+            throw SubprocessError(
+                code: .init(.executableNotFound(executableName)),
+                underlyingError: nil
+            )
         case .path(let executablePath):
             // Use path directly
             return executablePath.string
         }
-
-        throw CocoaError(.executableNotLoadable)
     }
 }
 
@@ -319,9 +344,11 @@ extension Configuration {
         guard Self.pathAccessible(intendedWorkingDir.string, mode: F_OK) else {
             for ptr in env { ptr?.deallocate() }
             for ptr in argv { ptr?.deallocate() }
-            throw CocoaError(.fileNoSuchFile, userInfo: [
-                .debugDescriptionErrorKey : "Failed to set working directory to \(intendedWorkingDir)"
-            ])
+            throw SubprocessError(
+                code: .init(
+                    .failedToChangeWorkingDirectory(intendedWorkingDir.string)),
+                underlyingError: nil
+            )
         }
 
         var uidPtr: UnsafeMutablePointer<uid_t>? = nil

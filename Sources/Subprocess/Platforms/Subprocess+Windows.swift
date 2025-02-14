@@ -12,13 +12,18 @@
 #if canImport(WinSDK)
 
 import WinSDK
-import Dispatch
+internal import Dispatch
 #if canImport(System)
 import System
 #else
 @preconcurrency import SystemPackage
 #endif
+
+#if canImport(FoundationEssentials)
 import FoundationEssentials
+#else
+import Foundation
+#endif
 
 // Windows specific implementation
 @available(macOS 9999, *)
@@ -104,9 +109,9 @@ extension Configuration {
                                 output: output,
                                 error: error
                             )
-                            throw CocoaError.windowsError(
-                                underlying: windowsError,
-                                errorCode: .fileWriteUnknown
+                            throw SubprocessError(
+                                code: .init(.spawnFailed),
+                                underlyingError: .init(rawValue: windowsError)
                             )
                         }
                     }
@@ -121,9 +126,9 @@ extension Configuration {
                 output: output,
                 error: error
             )
-            throw CocoaError.windowsError(
-                underlying: windowsError,
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: windowsError)
             )
         }
         guard CloseHandle(processInfo.hProcess) else {
@@ -133,9 +138,9 @@ extension Configuration {
                 output: output,
                 error: error
             )
-            throw CocoaError.windowsError(
-                underlying: windowsError,
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: windowsError)
             )
         }
         let pid = ProcessIdentifier(
@@ -215,9 +220,9 @@ extension Configuration {
                                             output: output,
                                             error: error
                                         )
-                                        throw CocoaError.windowsError(
-                                            underlying: windowsError,
-                                            errorCode: .fileWriteUnknown
+                                        throw SubprocessError(
+                                            code: .init(.spawnFailed),
+                                            underlyingError: .init(rawValue: windowsError)
                                         )
                                     }
                                 }
@@ -235,9 +240,9 @@ extension Configuration {
                 output: output,
                 error: error
             )
-            throw CocoaError.windowsError(
-                underlying: windowsError,
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: windowsError)
             )
         }
         guard CloseHandle(processInfo.hProcess) else {
@@ -247,9 +252,9 @@ extension Configuration {
                 output: output,
                 error: error
             )
-            throw CocoaError.windowsError(
-                underlying: windowsError,
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: windowsError)
             )
         }
         let pid = ProcessIdentifier(
@@ -404,11 +409,11 @@ extension PlatformOptions: Hashable {
         hasher.combine(windowStyle)
         hasher.combine(createProcessGroup)
         // Since we can't really hash closures,
-        // use an UUID such that as long as
+        // use a random number such that as long as
         // `preSpawnProcessConfigurator` is set, it will
         // never equal to other PlatformOptions
         if self.preSpawnProcessConfigurator != nil {
-            hasher.combine(UUID())
+            hasher.combine(Int.random(in: 0 ..< .max))
         }
     }
 }
@@ -474,9 +479,11 @@ internal func monitorProcessTermination(
         guard RegisterWaitForSingleObject(
             &waitHandle, processHandle, callback, context, INFINITE, flags
         ) else {
-            continuation.resume(throwing: CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown)
+            continuation.resume(
+                throwing: SubprocessError(
+                    code: .init(.failedToMonitorProcess),
+                    underlyingError: .init(rawValue: GetLastError())
+                )
             )
             return
         }
@@ -508,18 +515,18 @@ extension Execution {
             false,
             self.processIdentifier.value
         ) else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToTerminate),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
         defer {
             CloseHandle(processHandle)
         }
         guard TerminateProcess(processHandle, exitCode) else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToTerminate),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
     }
@@ -532,9 +539,9 @@ extension Execution {
             false,
             self.processIdentifier.value
         ) else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToSuspend),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
         defer {
@@ -550,12 +557,15 @@ extension Execution {
                 to: Optional<(@convention(c) (HANDLE) -> LONG)>.self
             )
         guard let NTSuspendProcess = NTSuspendProcess else {
-            throw CocoaError(.executableNotLoadable)
+            throw SubprocessError(
+                code: .init(.failedToSuspend),
+                underlyingError: .init(rawValue: GetLastError())
+            )
         }
         guard NTSuspendProcess(processHandle) >= 0 else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToSuspend),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
     }
@@ -568,9 +578,9 @@ extension Execution {
             false,
             self.processIdentifier.value
         ) else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToResume),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
         defer {
@@ -586,12 +596,15 @@ extension Execution {
             to: Optional<(@convention(c) (HANDLE) -> LONG)>.self
         )
         guard let NTResumeProcess = NTResumeProcess else {
-            throw CocoaError(.executableNotLoadable)
+            throw SubprocessError(
+                code: .init(.failedToResume),
+                underlyingError: .init(rawValue: GetLastError())
+            )
         }
         guard NTResumeProcess(processHandle) >= 0 else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToResume),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
     }
@@ -627,9 +640,9 @@ extension Executable {
                         nil, 0, nil, nil
                     )
                     guard pathLenth > 0 else {
-                        throw CocoaError.windowsError(
-                            underlying: GetLastError(),
-                            errorCode: .fileWriteUnknown
+                        throw SubprocessError(
+                            code: .init(.executableNotFound(executableName)),
+                            underlyingError: .init(rawValue: GetLastError())
                         )
                     }
                     return withUnsafeTemporaryAllocation(
@@ -649,12 +662,10 @@ extension Executable {
             // Use path directly
             return executablePath.string
         }
-        throw CocoaError(.executableNotLoadable)
     }
 }
 
 // MARK: - Environment Resolution
-@available(macOS 9999, *)
 extension Environment {
     internal static let pathEnvironmentVariableName = "Path"
 
@@ -662,17 +673,35 @@ extension Environment {
         switch self.config {
         case .inherit(let overrides):
             // If PATH value exists in overrides, use it
-            if let value = overrides[.string(Self.pathEnvironmentVariableName)] {
-                return value.stringValue
+            if let value = overrides[Self.pathEnvironmentVariableName] {
+                return value
             }
             // Fall back to current process
-            return ProcessInfo.processInfo.environment[Self.pathEnvironmentVariableName]
+            return Self.currentEnvironmentValues()[Self.pathEnvironmentVariableName]
         case .custom(let fullEnvironment):
-            if let value = fullEnvironment[.string(Self.pathEnvironmentVariableName)] {
-                return value.stringValue
+            if let value = fullEnvironment[Self.pathEnvironmentVariableName] {
+                return value
             }
             return nil
         }
+    }
+
+    internal static func withCopiedEnv<R>(_ body: ([UnsafeMutablePointer<CChar>]) -> R) -> R {
+        var values: [UnsafeMutablePointer<CChar>] = []
+        guard let pwszEnvironmentBlock = GetEnvironmentStringsW() else {
+            return body([])
+        }
+        defer { FreeEnvironmentStringsW(pwszEnvironmentBlock) }
+
+        var pwszEnvironmentEntry: LPWCH? = pwszEnvironmentBlock
+        while let value = pwszEnvironmentEntry {
+            let entry = String(decodingCString: value, as: UTF16.self)
+            if entry.isEmpty { break }
+            values.append(entry.withCString { _strdup($0)! })
+            pwszEnvironmentEntry = pwszEnvironmentEntry?.advanced(by: wcslen(value) + 1)
+        }
+        defer { values.forEach { free($0) } }
+        return body(values)
     }
 }
 
@@ -720,32 +749,19 @@ extension Configuration {
         switch self.environment.config {
         case .custom(let customValues):
             // Use the custom values directly
-            for customKey in customValues.keys {
-                guard case .string(let stringKey) = customKey,
-                      let valueContainer = customValues[customKey],
-                      case .string(let stringValue) = valueContainer else {
-                    fatalError("Windows does not support non unicode String as environments")
-                }
-                env.updateValue(stringValue, forKey: stringKey)
-            }
+            env = customValues
         case .inherit(let updateValues):
             // Combine current environment
-            env = ProcessInfo.processInfo.environment
-            for updatingKey in updateValues.keys {
-                // Override the current environment values
-                guard case .string(let stringKey) = updatingKey,
-                      let valueContainer = updateValues[updatingKey],
-                      case .string(let stringValue) = valueContainer else {
-                    fatalError("Windows does not support non unicode String as environments")
-                }
-                env.updateValue(stringValue, forKey: stringKey)
+            env = Environment.currentEnvironmentValues()
+            for (key, value) in updateValues {
+                env.updateValue(value, forKey: key)
             }
         }
         // On Windows, the PATH is required in order to locate dlls needed by
         // the process so we should also pass that to the child
         let pathVariableName = Environment.pathEnvironmentVariableName
         if env[pathVariableName] == nil,
-           let parentPath = ProcessInfo.processInfo.environment[pathVariableName] {
+           let parentPath = Environment.currentEnvironmentValues()[pathVariableName] {
             env[pathVariableName] = parentPath
         }
         // The environment string must be terminated by a double
@@ -762,9 +778,11 @@ extension Configuration {
         ) = try self.generateWindowsCommandAndAgruments()
         // Validate workingDir
         guard Self.pathAccessible(self.workingDirectory.string) else {
-            throw CocoaError(.fileNoSuchFile, userInfo: [
-                .debugDescriptionErrorKey : "Failed to set working directory to \(self.workingDirectory)"
-            ])
+            throw SubprocessError(
+                code: .init(
+                    .failedToChangeWorkingDirectory(self.workingDirectory.string)),
+                underlyingError: nil
+            )
         }
         return (
             applicationName: applicationName,
@@ -998,9 +1016,9 @@ extension FileDescriptor {
               writeHandle != INVALID_HANDLE_VALUE,
            let readHandle: HANDLE = readHandle,
            let writeHandle: HANDLE = writeHandle else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.failedToCreatePipe),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
         let readFd = _open_osfhandle(
@@ -1018,33 +1036,33 @@ extension FileDescriptor {
         )
     }
 
-    internal static func openDevNull(
-        withAcessMode mode: FileDescriptor.AccessMode
-    ) throws -> FileDescriptor {
-        return try "NUL".withPlatformString {
-            let handle = CreateFileW(
-                $0,
-                DWORD(GENERIC_WRITE),
-                DWORD(FILE_SHARE_WRITE),
-                nil,
-                DWORD(OPEN_EXISTING),
-                DWORD(FILE_ATTRIBUTE_NORMAL),
-                nil
-            )
-            guard let handle = handle,
-                  handle != INVALID_HANDLE_VALUE else {
-                throw CocoaError.windowsError(
-                    underlying: GetLastError(),
-                    errorCode: .fileReadUnknown
-                )
-            }
-            let devnull = _open_osfhandle(
-                intptr_t(bitPattern: handle),
-                mode.rawValue
-            )
-            return FileDescriptor(rawValue: devnull)
-        }
-    }
+//    internal static func openDevNull(
+//        withAcessMode mode: FileDescriptor.AccessMode
+//    ) throws -> FileDescriptor {
+//        return try "NUL".withPlatformString {
+//            let handle = CreateFileW(
+//                $0,
+//                DWORD(GENERIC_WRITE),
+//                DWORD(FILE_SHARE_WRITE),
+//                nil,
+//                DWORD(OPEN_EXISTING),
+//                DWORD(FILE_ATTRIBUTE_NORMAL),
+//                nil
+//            )
+//            guard let handle = handle,
+//                  handle != INVALID_HANDLE_VALUE else {
+//                throw CocoaError.windowsError(
+//                    underlying: GetLastError(),
+//                    errorCode: .fileReadUnknown
+//                )
+//            }
+//            let devnull = _open_osfhandle(
+//                intptr_t(bitPattern: handle),
+//                mode.rawValue
+//            )
+//            return FileDescriptor(rawValue: devnull)
+//        }
+//    }
 
     var platformDescriptor: PlatformFileDescriptor {
         return HANDLE(bitPattern: _get_osfhandle(self.rawValue))!
@@ -1113,9 +1131,9 @@ extension FileDescriptor {
                 }
             }
             if let lastError = lastError {
-                let windowsError = CocoaError.windowsError(
-                    underlying: lastError,
-                    errorCode: .fileReadUnknown
+                let windowsError = SubprocessError(
+                    code: .init(.failedToReadFromSubprocess),
+                    underlyingError: .init(rawValue: lastError)
                 )
                 resultHandler(.failure(windowsError))
             } else {
@@ -1180,9 +1198,9 @@ extension FileDescriptor {
                 nil
             )
             if !writeSucceed {
-                let error = CocoaError.windowsError(
-                    underlying: GetLastError(),
-                    errorCode: .fileWriteUnknown
+                let error = SubprocessError(
+                    code: .init(.failedToWriteToSubprocess),
+                    underlyingError: .init(rawValue: GetLastError())
                 )
                 completion(Int(writtenBytes), error)
             } else {
@@ -1192,21 +1210,6 @@ extension FileDescriptor {
     }
 }
 
-extension String {
-    static let debugDescriptionErrorKey = "DebugDescription"
-}
-
-// MARK: - CocoaError + Win32
-internal let NSUnderlyingErrorKey = "NSUnderlyingError"
-
-extension CocoaError {
-    static func windowsError(underlying: DWORD, errorCode: Code) -> CocoaError {
-        let userInfo = [
-            NSUnderlyingErrorKey : Win32Error(underlying)
-        ]
-        return CocoaError(errorCode, userInfo: userInfo)
-    }
-}
 
 private extension Optional where Wrapped == String {
     func withOptionalCString<Result, Encoding>(
@@ -1239,7 +1242,10 @@ extension String {
         _ body: (UnsafePointer<WCHAR>) throws -> Result
     ) throws -> Result {
         guard !isEmpty else {
-            throw CocoaError(.fileReadInvalidFileName)
+            throw SubprocessError(
+                code: .init(.invalidWindowsPath(self)),
+                underlyingError: nil
+            )
         }
 
         var iter = self.utf8.makeIterator()
@@ -1253,9 +1259,9 @@ extension String {
             let dwLength: DWORD = GetFullPathNameW(pwszPath, 0, nil, nil)
             return try withUnsafeTemporaryAllocation(of: WCHAR.self, capacity: Int(dwLength)) {
                 guard GetFullPathNameW(pwszPath, DWORD($0.count), $0.baseAddress, nil) > 0 else {
-                    throw CocoaError.windowsError(
-                        underlying: GetLastError(),
-                        errorCode: .fileReadUnknown
+                    throw SubprocessError(
+                        code: .init(.invalidWindowsPath(self)),
+                        underlyingError: .init(rawValue: GetLastError())
                     )
                 }
 

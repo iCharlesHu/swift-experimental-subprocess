@@ -14,11 +14,6 @@ import System
 #else
 @preconcurrency import SystemPackage
 #endif
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
 
 
 // MARK: - Collected Result

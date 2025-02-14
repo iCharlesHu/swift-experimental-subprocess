@@ -76,6 +76,7 @@ public final class DiscardedOutput: OutputProtocol {
     private let devnull: Lock<FileDescriptor?>
 
     public func readFileDescriptor() throws -> FileDescriptor? {
+#if !os(Windows)
         return try self.devnull.withLock { fd in
             if let devnull = fd {
                 return devnull
@@ -84,6 +85,12 @@ public final class DiscardedOutput: OutputProtocol {
             fd = devnull
             return devnull
         }
+#else
+        // On Windows, instead of binding to dev null,
+        // we don't set the input handle in the `STARTUPINFOW`
+        // to signal no output
+        return nil
+#endif
     }
 
     public func consumeReadFileDescriptor() -> FileDescriptor? {
