@@ -14,22 +14,15 @@ import System
 #else
 @preconcurrency import SystemPackage
 #endif
-internal import Dispatch
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
-
-internal struct AsyncDataSequence: AsyncSequence, Sendable {
+internal struct AsyncBufferSequence: AsyncSequence, Sendable {
     internal typealias Failure = any Swift.Error
 
-    internal typealias Element = Data
+    internal typealias Element = Buffer
 
     @_nonSendable
     internal struct Iterator: AsyncIteratorProtocol {
-        internal typealias Element = Data
+        internal typealias Element = Buffer
 
         private let fileDescriptor: FileDescriptor
         private var buffer: [UInt8]
@@ -43,7 +36,7 @@ internal struct AsyncDataSequence: AsyncSequence, Sendable {
             self.finished = false
         }
 
-        internal mutating func next() async throws -> Data? {
+        internal mutating func next() async throws -> Buffer? {
             let data = try await self.fileDescriptor.readChunk(
                 upToLength: readBufferSize
             )

@@ -19,12 +19,6 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
-
 // Windows specific implementation
 @available(macOS 9999, *)
 extension Configuration {
@@ -1036,39 +1030,11 @@ extension FileDescriptor {
         )
     }
 
-//    internal static func openDevNull(
-//        withAcessMode mode: FileDescriptor.AccessMode
-//    ) throws -> FileDescriptor {
-//        return try "NUL".withPlatformString {
-//            let handle = CreateFileW(
-//                $0,
-//                DWORD(GENERIC_WRITE),
-//                DWORD(FILE_SHARE_WRITE),
-//                nil,
-//                DWORD(OPEN_EXISTING),
-//                DWORD(FILE_ATTRIBUTE_NORMAL),
-//                nil
-//            )
-//            guard let handle = handle,
-//                  handle != INVALID_HANDLE_VALUE else {
-//                throw CocoaError.windowsError(
-//                    underlying: GetLastError(),
-//                    errorCode: .fileReadUnknown
-//                )
-//            }
-//            let devnull = _open_osfhandle(
-//                intptr_t(bitPattern: handle),
-//                mode.rawValue
-//            )
-//            return FileDescriptor(rawValue: devnull)
-//        }
-//    }
-
     var platformDescriptor: PlatformFileDescriptor {
         return HANDLE(bitPattern: _get_osfhandle(self.rawValue))!
     }
 
-    internal func readChunk(upToLength maxLength: Int) async throws -> Data? {
+    internal func readChunk(upToLength maxLength: Int) async throws -> Buffer? {
         return try await withCheckedThrowingContinuation { continuation in
             self.readUntilEOF(
                 upToLength: maxLength
@@ -1077,7 +1043,7 @@ extension FileDescriptor {
                 case .failure(let error):
                     continuation.resume(throwing: error)
                 case .success(let bytes):
-                    continuation.resume(returning: Data(bytes))
+                    continuation.resume(returning: Buffer(data: bytes))
                 }
             }
         }
@@ -1085,7 +1051,7 @@ extension FileDescriptor {
 
     internal func readUntilEOF(
         upToLength maxLength: Int,
-        resultHandler: @escaping (Swift.Result<Array<UInt8>, any Error>) -> Void
+        resultHandler: sending @escaping (Swift.Result<Array<UInt8>, any Error>) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
             var totalBytesRead: Int = 0
@@ -1161,26 +1127,7 @@ extension FileDescriptor {
         }
     }
 
-    internal func write(
-        _ data: Data
-    ) async throws -> Int {
-        try await withCheckedThrowingContinuation { continuation in
-            // TODO: Figure out a better way to asynchornously write
-            DispatchQueue.global(qos: .userInitiated).async {
-                data.withUnsafeBytes {
-                    self.write($0) { writtenLength, error in
-                        if let error = error {
-                            continuation.resume(throwing: error)
-                        } else {
-                            continuation.resume(returning: writtenLength)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    internal func write(
+    package func write(
         _ ptr: UnsafeRawBufferPointer,
         completion: @escaping (Int, Swift.Error?) -> Void
     ) {
@@ -1272,19 +1219,6 @@ extension String {
     }
 }
 
-struct Win32Error: Error {
-    public typealias Code = DWORD
-    public let code: Code
-
-    public static var errorDomain: String {
-        return "NSWin32ErrorDomain"
-    }
-
-    public init(_ code: Code) {
-        self.code = code
-    }
-}
-
 internal extension UInt8 {
     static var _slash: UInt8 { UInt8(ascii: "/") }
     static var _backslash: UInt8 { UInt8(ascii: "\\") }
@@ -1292,6 +1226,15 @@ internal extension UInt8 {
 
     var isLetter: Bool? {
         return (0x41 ... 0x5a) ~= self || (0x61 ... 0x7a) ~= self
+    }
+}
+
+extension ManagedOutputProtocol {
+    internal func output(from data: [UInt8]) throws -> OutputType {
+        return try data.withUnsafeBytes {
+            let span = RawSpan(_unsafeBytes: $0)
+            return try self.output(from: span)
+        }
     }
 }
 

@@ -1,22 +1,20 @@
+//===----------------------------------------------------------------------===//
 //
-//  File.swift
-//  Subprocess
+// This source file is part of the Swift.org open source project
 //
-//  Created by Charles Hu on 2/7/25.
+// Copyright (c) 2025 Apple Inc. and the Swift project authors
+// Licensed under Apache License v2.0 with Runtime Library Exception
 //
-
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
+// See https://swift.org/LICENSE.txt for license information
+//
+//===----------------------------------------------------------------------===//
 
 #if canImport(System)
 import System
 #else
 @preconcurrency import SystemPackage
 #endif
-
+internal import Dispatch
 #if canImport(Synchronization)
 import Synchronization
 
@@ -168,36 +166,17 @@ public final class FileDescriptorOutput: OutputProtocol {
     }
 }
 
-/// A concrete `Output` type for subprocesses that collects output
-/// from the subprocess as `Data`. This option must be used with
-/// the `run()` method that returns a `CollectedResult`
-@available(macOS 9999, *)
-public final class DataOutput: ManagedOutputProtocol {
-    public typealias OutputType = Data
-    public let maxSize: Int
-    public let pipe: Pipe
-
-    public func output(from span: RawSpan) throws -> Data {
-        return Data(span)
-    }
-
-    internal init(limit: Int) {
-        self.maxSize = limit
-        self.pipe = Pipe()
-    }
-}
-
 
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `String` with the given encoding.
 /// This option must be used with he `run()` method that
 /// returns a `CollectedResult`.
 @available(macOS 9999, *)
-public final class StringOutput: ManagedOutputProtocol {
+public final class StringOutput<Encoding: Unicode.Encoding>: ManagedOutputProtocol {
     public typealias OutputType = String?
     public let maxSize: Int
-    internal let encoding: String.Encoding
     public let pipe: Pipe
+    private let encoding: Encoding.Type
 
     public func output(from span: RawSpan) throws -> String? {
         // FIXME: Span to String
@@ -205,13 +184,13 @@ public final class StringOutput: ManagedOutputProtocol {
         for index in 0 ..< span.byteCount {
             array.append(span.unsafeLoad(fromByteOffset: index, as: UInt8.self))
         }
-        return String(bytes: array, encoding: self.encoding)
+        return String(decodingBytes: array, as: self.encoding)
     }
 
-    internal init(limit: Int, encoding: String.Encoding) {
+    internal init(limit: Int, encoding: Encoding.Type) {
         self.maxSize = limit
-        self.encoding = encoding
         self.pipe = Pipe()
+        self.encoding = encoding
     }
 }
 
@@ -266,35 +245,20 @@ extension OutputProtocol where Self == FileDescriptorOutput {
 }
 
 @available(macOS 9999, *)
-extension OutputProtocol where Self == StringOutput {
+extension OutputProtocol {
     /// Create a `Subprocess` output that collects output as
     /// UTF8 String with 128kb limit.
-    public static var string: Self {
-        return .string(limit: 128 * 1024)
+    public static func string() -> Self where Self == StringOutput<UTF8> {
+        return .string(limit: 128 * 1024, encoding: UTF8.self)
     }
 
     /// Create a `Subprocess` output that collects output as
     /// `String` using the given encoding up to limit it bytes.
-    public static func string(
+    public static func string<Encoding: Unicode.Encoding>(
         limit: Int,
-        encoding: String.Encoding = .utf8
-    ) -> Self {
+        encoding: Encoding.Type
+    ) -> Self where Self == StringOutput<Encoding> {
         return .init(limit: limit, encoding: encoding)
-    }
-}
-
-@available(macOS 9999, *)
-extension OutputProtocol where Self == DataOutput {
-    /// Create a `Subprocess` output that collects output as `Data`
-    /// up to 128kb.
-    public static var data: Self {
-        return .data(limit: 128 * 1024)
-    }
-
-    /// Create a `Subprocess` output that collects output as `Data`
-    /// with given max number of bytes to collect.
-    public static func data(limit: Int) -> Self  {
-        return .init(limit: limit)
     }
 }
 
@@ -358,14 +322,20 @@ extension OutputProtocol where OutputType == Void {
     public func captureOutput() async throws -> Void { /* noop */ }
 }
 
-
-// MARK: - Workarounds
 @available(macOS 9999, *)
 extension ManagedOutputProtocol {
-    @_disfavoredOverload
-    public func output(from data: some DataProtocol) throws -> OutputType {
-        //FIXME: remove workaround for rdar://143992296
-        return try self.output(from: data.bytes)
+    internal func output(from data: DispatchData) throws -> OutputType {
+        guard !data.isEmpty else {
+            let empty = UnsafeRawBufferPointer(start: nil, count: 0)
+            let span = RawSpan(_unsafeBytes: empty)
+            return try self.output(from: span)
+        }
+
+        return try data.withUnsafeBytes { ptr in
+            let bufferPtr = UnsafeRawBufferPointer(start: ptr, count: data.count)
+            let span = RawSpan(_unsafeBytes: bufferPtr)
+            return try self.output(from: span)
+        }
     }
 }
 

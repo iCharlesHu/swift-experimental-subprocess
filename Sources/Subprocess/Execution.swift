@@ -27,12 +27,6 @@ import Musl
 import WinSDK
 #endif
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
-
 /// An object that repersents a subprocess that has been
 /// executed. You can use this object to send signals to the
 /// child process as well as stream its output and error.
@@ -74,12 +68,12 @@ extension Execution where Output == SequenceOutput {
     /// - `.output` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardOutput: some AsyncSequence<Data, any Swift.Error> {
+    public var standardOutput: some AsyncSequence<Buffer, any Swift.Error> {
         guard let fd = self.output
             .consumeReadFileDescriptor() else {
             fatalError("The standard output has already been consumed")
         }
-        return AsyncDataSequence(fileDescriptor: fd)
+        return AsyncBufferSequence(fileDescriptor: fd)
     }
 }
 
@@ -89,12 +83,12 @@ extension Execution where Error == SequenceOutput {
     /// - `.error` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardError: some AsyncSequence<Data, any Swift.Error> {
+    public var standardError: some AsyncSequence<Buffer, any Swift.Error> {
         guard let fd = self.error
             .consumeReadFileDescriptor() else {
             fatalError("The standard error has already been consumed")
         }
-        return AsyncDataSequence(fileDescriptor: fd)
+        return AsyncBufferSequence(fileDescriptor: fd)
     }
 }
 

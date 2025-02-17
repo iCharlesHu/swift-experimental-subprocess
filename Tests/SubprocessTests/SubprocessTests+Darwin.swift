@@ -11,8 +11,11 @@
 
 #if canImport(Darwin)
 
+import Foundation
+
 import _CShims
-import XCTest
+import Testing
+
 #if canImport(System)
 import System
 #else
@@ -21,9 +24,10 @@ import System
 @testable import Subprocess
 
 // MARK: PlatformOptions Tests
-@available(macOS 9999, *)
-final class SubprocessDarwinTests : XCTestCase {
-    func testSubprocessPlatformOptionsProcessConfiguratorUpdateSpawnAttr() async throws {
+@Suite(.serialized)
+struct SubprocessDarwinTests {
+    @available(macOS 9999, *)
+    @Test func testSubprocessPlatformOptionsProcessConfiguratorUpdateSpawnAttr() async throws {
         var platformOptions = PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = { spawnAttr, _ in
             // Set POSIX_SPAWN_SETSID flag, which implies calls
@@ -38,12 +42,13 @@ final class SubprocessDarwinTests : XCTestCase {
             .name("/bin/bash"),
             arguments: ["-c", "ps -o pid,pgid,tpgid -p $$"],
             platformOptions: platformOptions,
-            output: .string
+            output: .string()
         )
         try assertNewSessionCreated(with: psResult)
     }
 
-    func testSubprocessPlatformOptionsProcessConfiguratorUpdateFileAction() async throws {
+    @available(macOS 9999, *)
+    @Test func testSubprocessPlatformOptionsProcessConfiguratorUpdateFileAction() async throws {
         let intendedWorkingDir = FileManager.default.temporaryDirectory.path()
         var platformOptions = PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = { _, fileAttr in
@@ -55,10 +60,10 @@ final class SubprocessDarwinTests : XCTestCase {
         let pwdResult = try await Subprocess.run(
             .path("/bin/pwd"),
             platformOptions: platformOptions,
-            output: .string
+            output: .string()
         )
-        XCTAssertTrue(pwdResult.terminationStatus.isSuccess)
-        let currentDir = try XCTUnwrap(
+        #expect(pwdResult.terminationStatus.isSuccess)
+        let currentDir = try #require(
             pwdResult.standardOutput
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         // On Darwin, /var is linked to /private/var; /tmp is linked /private/tmp
@@ -66,10 +71,11 @@ final class SubprocessDarwinTests : XCTestCase {
         if expected.starts(with: "/var") || expected.starts(with: "/tmp") {
             expected = FilePath("/private").appending(expected.components)
         }
-        XCTAssertEqual(FilePath(currentDir), expected)
+        #expect(FilePath(currentDir) == expected)
     }
 
-    func testSuspendResumeProcess() async throws {
+    @available(macOS 9999, *)
+    @Test func testSuspendResumeProcess() async throws {
         _ = try await Subprocess.run(
             // This will intentionally hang
             .path("/bin/cat"),
@@ -80,12 +86,12 @@ final class SubprocessDarwinTests : XCTestCase {
             try subprocess.send(signal: .suspend)
             var suspendedStatus: Int32 = 0
             waitpid(subprocess.processIdentifier.value, &suspendedStatus, WNOHANG | WUNTRACED)
-            XCTAssertTrue(_was_process_suspended(suspendedStatus) > 0)
+            #expect(_was_process_suspended(suspendedStatus) > 0)
             // Now resume the process
             try subprocess.send(signal: .resume)
             var resumedStatus: Int32 = 0
             waitpid(subprocess.processIdentifier.value, &resumedStatus, WNOHANG | WUNTRACED)
-            XCTAssertTrue(_was_process_suspended(resumedStatus) == 0)
+            #expect(_was_process_suspended(resumedStatus) == 0)
 
             // Now kill the process
             try subprocess.send(signal: .terminate)

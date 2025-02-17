@@ -9,12 +9,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
-
 #if canImport(System)
 import System
 #else
@@ -156,22 +150,21 @@ public final class FileDescriptorInput: InputProtocol {
 /// Developers can specify the string encoding to use when
 /// encoding the string to data, which defaults to UTF-8.
 public final class StringInput<
-    InputString: StringProtocol & Sendable
+    InputString: StringProtocol & Sendable,
+    Encoding: _UnicodeEncoding & Sendable
 >: ManagedInputProtocol {
     private let string: InputString
-    internal let encoding: String.Encoding
     public let pipe: Pipe
 
     public func write(into writeFileDescriptor: FileDescriptor) async throws {
-        guard let data = self.string.data(using: self.encoding) else {
+        guard let array = self.string.byteArray(using: Encoding.self) else {
             return
         }
-        _ = try await writeFileDescriptor.write(data)
+        _ = try await writeFileDescriptor.write(array)
     }
 
-    internal init(string: InputString, encoding: String.Encoding) {
+    internal init(string: InputString, encoding: Encoding.Type) {
         self.string = string
-        self.encoding = encoding
         self.pipe = Pipe()
     }
 }
@@ -188,70 +181,6 @@ public final class ArrayInput: ManagedInputProtocol {
 
     internal init(array: [UInt8]) {
         self.array = array
-        self.pipe = Pipe()
-    }
-}
-
-/// A concrete `Input` type for subprocesses that reads input
-/// from a given `Data`.
-public final class DataInput: ManagedInputProtocol {
-    private let data: Data
-    public let pipe: Pipe
-
-    public func write(into writeFileDescriptor: FileDescriptor) async throws {
-        _ = try await writeFileDescriptor.write(self.data)
-    }
-
-    internal init(data: Data) {
-        self.data = data
-        self.pipe = Pipe()
-    }
-}
-
-/// A concrete `Input` type for subprocesses that accepts input
-/// from a specified sequence of `Data`. This type should be preferred
-/// over `UInt8SequenceInput` when dealing with
-/// large amount input data.
-public final class DataSequenceInput<
-    InputSequence: Sequence & Sendable
->: ManagedInputProtocol where InputSequence.Element == Data {
-    private let sequence: InputSequence
-    public let pipe: Pipe
-
-    public func write(into writeFileDescriptor: FileDescriptor) async throws {
-        var buffer = Data()
-        for chunk in self.sequence {
-            buffer.append(chunk)
-        }
-        _ = try await writeFileDescriptor.write(buffer)
-    }
-
-    internal init(underlying: InputSequence) {
-        self.sequence = underlying
-        self.pipe = Pipe()
-    }
-}
-
-/// A concrete `Input` type for subprocesses that reads input
-/// from a given async sequence of `Data`.
-public final class DataAsyncSequenceInput<
-    InputSequence: AsyncSequence & Sendable
->: ManagedInputProtocol where InputSequence.Element == Data {
-    private let sequence: InputSequence
-    public let pipe: Pipe
-
-    private func writeChunk(_ chunk: Data, into writeFileDescriptor: FileDescriptor) async throws {
-        _ = try await writeFileDescriptor.write(chunk)
-    }
-
-    public func write(into writeFileDescriptor: FileDescriptor) async throws {
-        for try await chunk in self.sequence {
-            try await self.writeChunk(chunk, into: writeFileDescriptor)
-        }
-    }
-
-    internal init(underlying: InputSequence) {
-        self.sequence = underlying
         self.pipe = Pipe()
     }
 }
@@ -298,30 +227,11 @@ extension InputProtocol {
         return ArrayInput(array: array)
     }
 
-    /// Create a Subprocess input from a `Data`
-    public static func data(_ data: Data) -> Self where Self == DataInput {
-        return DataInput(data: data)
-    }
-
-    /// Create a Subprocess input from a `Sequence` of `Data`.
-    public static func sequence<InputSequence: Sequence & Sendable>(
-        _ sequence: InputSequence
-    ) -> Self where Self == DataSequenceInput<InputSequence> {
-        return .init(underlying: sequence)
-    }
-
-    /// Create a Subprocess input from a `AsyncSequence` of `Data`.
-    public static func sequence<InputSequence: AsyncSequence & Sendable>(
-        _ asyncSequence: InputSequence
-    ) -> Self where Self == DataAsyncSequenceInput<InputSequence> {
-        return .init(underlying: asyncSequence)
-    }
-
     /// Create a Subprocess input from a type that conforms to `StringProtocol`
-    public static func string<InputString: StringProtocol & Sendable>(
+    public static func string<InputString: StringProtocol & Sendable, Encoding: _UnicodeEncoding & Sendable>(
         _ string: InputString,
-        using encoding: String.Encoding = .utf8
-    ) -> Self where Self == StringInput<InputString> {
+        using encoding: Encoding.Type
+    ) -> Self where Self == StringInput<InputString, Encoding> {
         return .init(string: string, encoding: encoding)
     }
 }
@@ -349,7 +259,7 @@ extension ManagedInputProtocol {
 /// A writer that writes to the standard input of the subprocess.
 public final actor StandardInputWriter: Sendable {
 
-    private let input: CustomWriteInput
+    package let input: CustomWriteInput
 
     init(input: CustomWriteInput) {
         self.input = input
@@ -367,52 +277,65 @@ public final actor StandardInputWriter: Sendable {
         return try await fd.write(array)
     }
 
-    /// Write a `Data` to the standard input of the subprocess.
-    /// - Parameter data: The sequence of bytes to write.
-    /// - Returns number of bytes written.
-    public func write(
-        _ data: Data
-    ) async throws -> Int {
-        guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
-            fatalError("Attempting to write to a file descriptor that's already closed")
-        }
-        return try await fd.write(data)
-    }
-
     /// Write a StringProtocol to the standard input of the subprocess.
     /// - Parameters:
     ///   - string: The string to write.
     ///   - encoding: The encoding to use when converting string to bytes
     /// - Returns number of bytes written.
-    public func write(
+    public func write<Encoding: _UnicodeEncoding>(
         _ string: some StringProtocol,
-        using encoding: String.Encoding = .utf8
+        using encoding: Encoding.Type = UTF8.self
     ) async throws -> Int {
-        guard encoding != .utf8 else {
-            return try await self.write(Data(string.utf8))
-        }
-        if let data = string.data(using: encoding) {
-            return try await self.write(data)
+        if let array = string.byteArray(using: encoding) {
+            return try await self.write(array)
         }
         return 0
-    }
-
-    /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
-    /// - Parameter sequence: The sequence of bytes to write.
-    /// - Returns number of bytes written.
-    public func write<AsyncSendableSequence: AsyncSequence & Sendable>(
-        _ asyncSequence: AsyncSendableSequence
-    ) async throws -> Int where AsyncSendableSequence.Element == Data {
-        var buffer = Data()
-        for try await data in asyncSequence {
-            buffer.append(data)
-        }
-        return try await self.write(buffer)
     }
 
     /// Signal all writes are finished
     public func finish() async throws {
         try self.input.closeWriteFileDescriptor()
+    }
+}
+
+extension StringProtocol {
+    package func byteArray<Encoding: Unicode.Encoding>(using encoding: Encoding.Type) -> [UInt8]? {
+        if Encoding.self == Unicode.ASCII.self {
+            let isASCII = self.utf8.allSatisfy {
+                return Character(Unicode.Scalar($0)).isASCII
+            }
+
+            guard isASCII else {
+                return nil
+            }
+            return Array(self.utf8)
+        }
+        if Encoding.self == UTF8.self {
+            return Array(self.utf8)
+        }
+        if Encoding.self == UTF16.self {
+            return Array(self.utf16).flatMap { input in
+                var uint16: UInt16 = input
+                return withUnsafeBytes(of: &uint16) { ptr in
+                    Array(ptr)
+                }
+            }
+        }
+        // TODO: More encodings
+        return nil
+    }
+}
+
+extension String {
+    package init<T: FixedWidthInteger, Encoding: Unicode.Encoding>(
+        decodingBytes bytes: [T], as encoding: Encoding.Type
+    ) {
+        self = bytes.withUnsafeBytes { raw in
+            String(
+                decoding: raw.bindMemory(to: Encoding.CodeUnit.self).lazy.map { $0 },
+                as: encoding
+            )
+        }
     }
 }
 

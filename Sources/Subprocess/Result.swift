@@ -14,7 +14,6 @@ import System
 #else
 @preconcurrency import SystemPackage
 #endif
-internal import Dispatch
 
 // MARK: - Result
 

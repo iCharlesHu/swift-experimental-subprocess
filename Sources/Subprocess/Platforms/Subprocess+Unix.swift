@@ -17,12 +17,6 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#elseif canImport(Foundation)
-import Foundation
-#endif
-
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Bionic)
@@ -35,7 +29,7 @@ import Musl
 
 import _CShims
 
-internal import Dispatch
+package import Dispatch
 
 // MARK: - Signals
 
@@ -134,11 +128,13 @@ extension Execution {
         do {
             try self.send(signal: .kill)
         } catch {
-            guard let posixError: POSIXError = error as? POSIXError else {
+            guard let posixError: SubprocessError = error as? SubprocessError else {
                 return error
             }
             // Ignore ESRCH (no such process)
-            if posixError.code != .ESRCH {
+            if let underlyingError = posixError.underlyingError,
+               underlyingError.rawValue != ESRCH
+            {
                 return error
             }
         }
@@ -394,7 +390,7 @@ extension FileDescriptor {
         return self
     }
 
-    internal func readChunk(upToLength maxLength: Int) async throws -> Data? {
+    package func readChunk(upToLength maxLength: Int) async throws -> Buffer? {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchIO.read(
                 fromFileDescriptor: self.rawValue,
@@ -402,13 +398,18 @@ extension FileDescriptor {
                 runningHandlerOn: .global()
             ) { data, error in
                 if error != 0 {
-                    continuation.resume(throwing: POSIXError(.init(rawValue: error) ?? .ENODEV))
+                    continuation.resume(
+                        throwing: SubprocessError(
+                            code: .init(.failedToReadFromSubprocess),
+                            underlyingError: .init(rawValue: error)
+                        )
+                    )
                     return
                 }
                 if data.isEmpty {
                     continuation.resume(returning: nil)
                 } else {
-                    continuation.resume(returning: Data(data))
+                    continuation.resume(returning: Buffer(data: data))
                 }
             }
         }
@@ -416,7 +417,7 @@ extension FileDescriptor {
 
     internal func readUntilEOF(
         upToLength maxLength: Int,
-        resultHandler: @escaping (Swift.Result<DispatchData, any Error>) -> Void
+        resultHandler: sending @escaping (Swift.Result<DispatchData, any Error>) -> Void
     ) {
         let dispatchIO = DispatchIO(
             type: .stream,
@@ -431,7 +432,14 @@ extension FileDescriptor {
         ) { done, data, error in
             guard error == 0, let chunkData = data else {
                 dispatchIO.close()
-                resultHandler(.failure(POSIXError(.init(rawValue: error) ?? .ENODEV)))
+                resultHandler(
+                    .failure(
+                        SubprocessError(
+                            code: .init(.failedToReadFromSubprocess),
+                            underlyingError: .init(rawValue: error)
+                        )
+                    )
+                )
                 return
             }
             // Easy case: if we are done and buffer is nil, this means
@@ -457,24 +465,7 @@ extension FileDescriptor {
         }
     }
 
-    internal func write(
-        _ data: Data
-    ) async throws -> Int {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, any Error>) in
-            let dispatchData = data.withUnsafeBytes {
-                return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
-            }
-            self.write(dispatchData) { writtenLength, error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: writtenLength)
-                }
-            }
-        }
-    }
-
-    internal func write(
+    package func write(
         _ array: [UInt8]
     ) async throws -> Int {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, any Error>) in
@@ -491,7 +482,7 @@ extension FileDescriptor {
         }
     }
 
-    internal func write(
+    package func write(
         _ dispatchData: DispatchData,
         queue: DispatchQueue = .global(),
         completion: @escaping (Int, Error?) -> Void
@@ -507,7 +498,13 @@ extension FileDescriptor {
                 completion(writtenLength, nil)
                 return
             }
-            completion(writtenLength, POSIXError(.init(rawValue: error) ?? .ENODEV))
+            completion(
+                writtenLength,
+                SubprocessError(
+                    code: .init(.failedToWriteToSubprocess),
+                    underlyingError: .init(rawValue: error)
+                )
+            )
         }
     }
 }

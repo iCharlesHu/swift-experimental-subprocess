@@ -17,10 +17,10 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
-#if canImport(Bionic)
-import Bionic
-#elseif canImport(Glibc)
+#if canImport(Glibc)
 import Glibc
+#elseif canImport(Bionic)
+import Bionic
 #elseif canImport(Musl)
 import Musl
 #endif
@@ -318,13 +318,6 @@ final class SendableSourceSignal: @unchecked Sendable {
 private func _setupMonitorSignalHandler() {
     // Only executed once
     setup
-}
-
-extension ManagedOutputProtocol {
-    internal func output(from data: DispatchData) throws -> OutputType {
-        //FIXME: remove workaround for rdar://143992296
-        return try self.output(from: data.bytes)
-    }
 }
 
 #endif // canImport(Glibc) || canImport(Bionic) || canImport(Musl)

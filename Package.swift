@@ -41,13 +41,45 @@ let package = Package(
             dependencies: [
                 "_CShims",
                 "Subprocess",
+                "TestResources",
                 .product(name: "SystemPackage", package: "swift-system"),
-            ],
-            resources: [
-                .copy("Resources")
             ],
             swiftSettings: [
                 .enableExperimentalFeature("Span")
+            ]
+        ),
+
+        .target(
+            name: "SubprocessFoundation",
+            dependencies: [
+                "Subprocess"
+            ],
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency"),
+                .enableExperimentalFeature("NonescapableTypes"),
+                .enableExperimentalFeature("LifetimeDependence"),
+                .enableExperimentalFeature("Span")
+            ]
+        ),
+        .testTarget(
+            name: "SubprocessFoundationTests",
+            dependencies: [
+                "SubprocessFoundation",
+                "TestResources"
+            ],
+            swiftSettings: [
+                .enableExperimentalFeature("Span")
+            ]
+        ),
+
+        .target(
+            name: "TestResources",
+            dependencies: [
+                .product(name: "SystemPackage", package: "swift-system"),
+            ],
+            path: "Tests/TestResources",
+            resources: [
+                .copy("Resources")
             ]
         ),
 
