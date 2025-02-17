@@ -12,7 +12,7 @@
 #ifndef process_shims_h
 #define process_shims_h
 
-#include "_CShimsTargetConditionals.h"
+#include "target_conditionals.h"
 
 #if !TARGET_OS_WINDOWS
 #include <unistd.h>

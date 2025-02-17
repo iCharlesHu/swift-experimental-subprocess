@@ -7,24 +7,28 @@ let package = Package(
     name: "Subprocess",
     platforms: [.macOS("15.0"), .iOS("18.0"), .tvOS("18.0"), .watchOS("11.0")],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
             name: "Subprocess",
-            targets: ["Subprocess"]),
+            targets: ["Subprocess"]
+        ),
+
+        .library(
+            name: "SubprocessFoundation",
+            targets: ["SubprocessFoundation"]
+        )
     ],
     dependencies: [
         .package(
             url: "https://github.com/apple/swift-system",
-            from: "1.0.0")
-        
+            from: "1.0.0"
+        )
+
     ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
         .target(
             name: "Subprocess",
             dependencies: [
-                "_CShims",
+                "_SubprocessCShims",
                 .product(name: "SystemPackage", package: "swift-system"),
 
             ],
@@ -39,7 +43,7 @@ let package = Package(
         .testTarget(
             name: "SubprocessTests",
             dependencies: [
-                "_CShims",
+                "_SubprocessCShims",
                 "Subprocess",
                 "TestResources",
                 .product(name: "SystemPackage", package: "swift-system"),
@@ -84,8 +88,8 @@ let package = Package(
         ),
 
         .target(
-            name: "_CShims",
-            path: "Sources/_CShims"
+            name: "_SubprocessCShims",
+            path: "Sources/_SubprocessCShims"
         ),
     ]
 )

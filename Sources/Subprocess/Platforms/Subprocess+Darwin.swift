@@ -19,12 +19,7 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
-#if FOUNDATION_FRAMEWORK
-@_implementationOnly import _FoundationCShims
-#else
-import _CShims
-#endif
-
+import _SubprocessCShims
 
 // MARK: - PlatformOptions
 

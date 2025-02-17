@@ -28,7 +28,7 @@ import Musl
 internal import Dispatch
 
 import Synchronization
-import _CShims
+import _SubprocessCShims
 
 // Linux specific implementations
 @available(macOS 9999, *)

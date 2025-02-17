@@ -17,6 +17,8 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
+import _SubprocessCShims
+
 #if canImport(Darwin)
 import Darwin
 #elseif canImport(Bionic)
@@ -26,8 +28,6 @@ import Glibc
 #elseif canImport(Musl)
 import Musl
 #endif
-
-import _CShims
 
 package import Dispatch
 

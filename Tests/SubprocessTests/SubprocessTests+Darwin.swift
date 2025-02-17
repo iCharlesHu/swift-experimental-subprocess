@@ -13,7 +13,7 @@
 
 import Foundation
 
-import _CShims
+import _SubprocessCShims
 import Testing
 
 #if canImport(System)

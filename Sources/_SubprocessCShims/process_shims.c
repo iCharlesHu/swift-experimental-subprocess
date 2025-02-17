@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "include/_CShimsTargetConditionals.h"
+#include "include/target_conditionals.h"
 #include "include/process_shims.h"
 
 #if !TARGET_OS_WINDOWS

@@ -26,7 +26,7 @@ import Musl
 #endif
 
 
-import _CShims
+import _SubprocessCShims
 import Testing
 @testable import Subprocess
 
