@@ -22,13 +22,15 @@ import WinSDK
 #endif
 
 public struct SubprocessError: Swift.Error, Hashable, Sendable {
+    /// The error code of this error
     public let code: SubprocessError.Code
+    /// The underlying error that caused this error, if any
     public let underlyingError: UnderlyingError?
 }
 
 // MARK: - Error Codes
-
 extension SubprocessError {
+    /// A SubprocessError Code
     public struct Code: Hashable, Sendable {
         internal enum Storage: Hashable, Sendable {
             case spawnFailed
@@ -84,6 +86,40 @@ extension SubprocessError {
     }
 }
 
+// MARK: - Description
+extension SubprocessError: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        switch self.code.storage {
+        case .spawnFailed:
+            return "Failed to spawn the new process."
+        case .executableNotFound(let executableName):
+            return "Executable \"\(executableName)\" is not found or cannot be executed."
+        case .failedToChangeWorkingDirectory(let workingDirectory):
+            return "Failed to set working directory to \"\(workingDirectory)\"."
+        case .failedToReadFromSubprocess:
+            return "Failed to read bytes from the child process."
+        case .failedToWriteToSubprocess:
+            return "Failed to write bytes to the child process."
+        case .failedToMonitorProcess:
+            return "Failed to monitor the state of child process."
+        case .failedToSendSignal(let signal):
+            return "Failed to send signal \(signal) to the child process."
+        case .failedToTerminate:
+            return "Failed to terminate the child process."
+        case .failedToSuspend:
+            return "Failed to suspend the child process."
+        case .failedToResume:
+            return "Failed to resume the child process."
+        case .failedToCreatePipe:
+            return "Failed to create a pipe to communicate to child process."
+        case .invalidWindowsPath(let badPath):
+            return "\"\(badPath)\" is not a valid Windows path."
+        }
+    }
+
+    public var debugDescription: String { self.description }
+}
+
 #if canImport(WinSDK)
 extension SubprocessError {
     public typealias UnderlyingError = WindowsError
@@ -102,9 +138,11 @@ extension SubprocessError {
 extension SubprocessError {
     public typealias UnderlyingError = POSIXError
 
+    /// An error that represents a POSIX error
     public struct POSIXError: Swift.Error, RawRepresentable, Hashable, Sendable {
         public typealias RawValue = Int32
 
+        /// The error number (`errno`)
         public let rawValue: Int32
 
         public init(rawValue: Int32) {
