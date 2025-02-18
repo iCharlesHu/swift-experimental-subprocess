@@ -431,6 +431,21 @@ extension SubprocessUnixTests {
         #expect(catResult.terminationStatus.isSuccess)
         #expect(catResult.value == expected)
     }
+
+    @available(macOS 9999, *)
+    @Test func testBufferOutput() async throws {
+        let expected: Data = try Data(
+            contentsOf: URL(filePath: theMysteriousIsland.string)
+        )
+        let inputFd: FileDescriptor = try .open(theMysteriousIsland, .readOnly)
+        let catResult = try await Subprocess.run(
+            .path("/bin/cat"),
+            input: .fileDescriptor(inputFd, closeAfterSpawningProcess: true),
+            output: .buffer(limit: 2048 * 1024),
+        )
+        #expect(catResult.terminationStatus.isSuccess)
+        #expect(expected.elementsEqual(catResult.standardOutput))
+    }
 }
 
 // MARK: - PlatformOption Tests

@@ -166,7 +166,6 @@ public final class FileDescriptorOutput: OutputProtocol {
     }
 }
 
-
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `String` with the given encoding.
 /// This option must be used with he `run()` method that
@@ -191,6 +190,50 @@ public final class StringOutput<Encoding: Unicode.Encoding>: ManagedOutputProtoc
         self.maxSize = limit
         self.pipe = Pipe()
         self.encoding = encoding
+    }
+}
+
+/// A concrete `Output` type for subprocesses that collects output
+/// from the subprocess as `Buffer`. This option must be used with
+/// the `run()` method that returns a `CollectedResult`
+@available(macOS 9999, *)
+public final class BufferOutput: ManagedOutputProtocol {
+    public typealias OutputType = Buffer
+    public let maxSize: Int
+    public let pipe: Pipe
+
+    public func captureOutput() async throws -> Buffer {
+        return try await withCheckedThrowingContinuation { continuation in
+            guard let readFd = self.consumeReadFileDescriptor() else {
+                fatalError("Trying to capture Subprocess output that has already been closed.")
+            }
+            readFd.readUntilEOF(upToLength: self.maxSize) { result in
+                do {
+                    switch result {
+                    case .success(let data):
+                        //FIXME: remove workaround for rdar://143992296
+                        let output = Buffer(data: data)
+                        try readFd.close()
+                        continuation.resume(returning: output)
+                    case .failure(let error):
+                        try readFd.close()
+                        continuation.resume(throwing: error)
+                    }
+                } catch {
+                    try? readFd.close()
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    public func output(from span: RawSpan) throws -> Buffer {
+        fatalError("Not implemented")
+    }
+
+    internal init(limit: Int) {
+        self.maxSize = limit
+        self.pipe = Pipe()
     }
 }
 
@@ -259,6 +302,19 @@ extension OutputProtocol {
         encoding: Encoding.Type
     ) -> Self where Self == StringOutput<Encoding> {
         return .init(limit: limit, encoding: encoding)
+    }
+}
+
+@available(macOS 9999, *)
+extension OutputProtocol where Self == BufferOutput {
+    /// Create a `Subprocess` output that collects output as
+    /// `Buffer` with 128kb limit.
+    public static var buffer: Self { .init(limit: 128 * 1024) }
+
+    /// Create a `Subprocess` output that collects output as
+    /// `Buffer` up to limit it bytes.
+    public static func buffer(limit: Int) -> Self {
+        return .init(limit: limit)
     }
 }
 
