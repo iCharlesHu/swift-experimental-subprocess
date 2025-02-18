@@ -28,7 +28,7 @@ private typealias Lock = LockedState
 public final class Pipe: Sendable {
     private let pipe: Lock<(readEnd: FileDescriptor?, writeEnd: FileDescriptor?)?>
 
-    public func readFileDescriptor(creatingIfNeeded: Bool) throws -> FileDescriptor? {
+    internal func readFileDescriptor(creatingIfNeeded: Bool) throws -> FileDescriptor? {
         return try self.pipe.withLock { pipeStore in
             if let pipe = pipeStore {
                 return pipe.readEnd
@@ -43,7 +43,7 @@ public final class Pipe: Sendable {
         }
     }
 
-    public func writeFileDescriptor(creatingIfNeeded: Bool) throws -> FileDescriptor? {
+    internal func writeFileDescriptor(creatingIfNeeded: Bool) throws -> FileDescriptor? {
         return try self.pipe.withLock { pipeStore in
             if let pipe = pipeStore {
                 return pipe.writeEnd
@@ -58,7 +58,7 @@ public final class Pipe: Sendable {
         }
     }
 
-    public func closeReadFileDescriptor() throws {
+    internal func closeReadFileDescriptor() throws {
         try self.pipe.withLock { pipeStore in
             guard let pipe = pipeStore else {
                 return
@@ -68,7 +68,7 @@ public final class Pipe: Sendable {
         }
     }
 
-    public func closeWriteFileDescriptor() throws {
+    internal func closeWriteFileDescriptor() throws {
         try self.pipe.withLock { pipeStore in
             guard let pipe = pipeStore else {
                 return
@@ -81,7 +81,7 @@ public final class Pipe: Sendable {
     /// Return the read `FileDescriptor` and remove it from the output
     /// such that the next call to `consumeReadFileDescriptor` will
     /// return `nil`.
-    public func consumeReadFileDescriptor() -> FileDescriptor? {
+    internal func consumeReadFileDescriptor() -> FileDescriptor? {
         return self.pipe.withLock { pipeStore in
             guard let pipe = pipeStore else {
                 return nil

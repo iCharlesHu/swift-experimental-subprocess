@@ -293,6 +293,18 @@ extension SubprocessUnixTests {
         // We should have read exactly 0 bytes
         #expect(catResult.standardOutput == "")
     }
+
+    @available(macOS 9999, *)
+    @Test func testStringInput() async throws {
+        let content = randomString(length: 64)
+        let catResult = try await Subprocess.run(
+            .path("/bin/cat"),
+            input: .string(content, using: UTF8.self)
+        )
+        #expect(catResult.terminationStatus.isSuccess)
+        // We should have read exactly 0 bytes
+        #expect(catResult.standardOutput == content)
+    }
 }
 
 // MARK: - Output Tests

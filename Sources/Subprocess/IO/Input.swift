@@ -46,6 +46,11 @@ public protocol InputProtocol: Sendable {
     func write(into writeFileDescriptor: FileDescriptor) async throws
 }
 
+/// `ManagedInputProtocol` is managed by `Subprocess` and
+/// utilizes its `Pipe` type to facilitate input writing.
+/// Developers have the option to implement custom
+/// input types by conforming to `ManagedInputProtocol`
+/// and implementing the `write(into:)` method.
 public protocol ManagedInputProtocol: InputProtocol {
     /// The underlying pipe used by this input in order to
     /// write input to child process
@@ -151,7 +156,7 @@ public final class FileDescriptorInput: InputProtocol {
 /// encoding the string to data, which defaults to UTF-8.
 public final class StringInput<
     InputString: StringProtocol & Sendable,
-    Encoding: _UnicodeEncoding & Sendable
+    Encoding: Unicode.Encoding
 >: ManagedInputProtocol {
     private let string: InputString
     public let pipe: Pipe
@@ -228,7 +233,19 @@ extension InputProtocol {
     }
 
     /// Create a Subprocess input from a type that conforms to `StringProtocol`
-    public static func string<InputString: StringProtocol & Sendable, Encoding: _UnicodeEncoding & Sendable>(
+    public static func string<
+        InputString: StringProtocol & Sendable
+    >(
+        _ string: InputString
+    ) -> Self where Self == StringInput<InputString, UTF8> {
+        return .init(string: string, encoding: UTF8.self)
+    }
+
+    /// Create a Subprocess input from a type that conforms to `StringProtocol`
+    public static func string<
+        InputString: StringProtocol & Sendable,
+        Encoding: Unicode.Encoding
+    >(
         _ string: InputString,
         using encoding: Encoding.Type
     ) -> Self where Self == StringInput<InputString, Encoding> {
@@ -282,7 +299,7 @@ public final actor StandardInputWriter: Sendable {
     ///   - string: The string to write.
     ///   - encoding: The encoding to use when converting string to bytes
     /// - Returns number of bytes written.
-    public func write<Encoding: _UnicodeEncoding>(
+    public func write<Encoding: Unicode.Encoding>(
         _ string: some StringProtocol,
         using encoding: Encoding.Type = UTF8.self
     ) async throws -> Int {

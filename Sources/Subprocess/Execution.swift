@@ -92,20 +92,6 @@ extension Execution where Error == SequenceOutput {
     }
 }
 
-// MARK: - Teardown
-#if canImport(Darwin) || canImport(Glibc) || canImport(Bionic) || canImport(Musl)
-extension Execution {
-    /// Performs a sequence of teardown steps on the Subprocess.
-    /// Teardown sequence always ends with a `.kill` signal
-    /// - Parameter sequence: The  steps to perform.
-    public func teardown(using sequence: [TeardownStep]) async {
-        await withUncancelledTask {
-            await self.runTeardownSequence(sequence)
-        }
-    }
-}
-#endif // canImport(Glibc) || canImport(Bionic) || canImport(Musl)
-
 // MARK: - Output Capture
 internal enum OutputCapturingState<Output: Sendable, Error: Sendable>: Sendable {
     case standardOutputCaptured(Output)

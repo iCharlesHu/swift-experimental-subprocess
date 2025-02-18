@@ -120,7 +120,7 @@ extension StandardInputWriter {
         return try await fd.write(data)
     }
 
-    /// Write a AsyncSequence of UInt8 to the standard input of the subprocess.
+    /// Write a AsyncSequence of Data to the standard input of the subprocess.
     /// - Parameter sequence: The sequence of bytes to write.
     /// - Returns number of bytes written.
     public func write<AsyncSendableSequence: AsyncSequence & Sendable>(

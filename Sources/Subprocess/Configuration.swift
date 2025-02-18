@@ -32,12 +32,6 @@ internal import Dispatch
 /// A collection of configurations parameters to use when
 /// spawning a subprocess.
 public struct Configuration: Sendable, Hashable {
-
-    internal enum RunState<Result: Sendable>: Sendable {
-        case workBody(Result)
-        case monitorChildProcess(TerminationStatus)
-    }
-
     /// The executable to run.
     public var executable: Executable
     /// The arguments to pass to the executable.

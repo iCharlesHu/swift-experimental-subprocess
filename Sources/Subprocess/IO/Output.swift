@@ -50,6 +50,11 @@ public protocol OutputProtocol: Sendable {
     func captureOutput() async throws -> OutputType
 }
 
+/// `ManagedOutputProtocol` is managed by `Subprocess` and
+/// utilizes its `Pipe` type to facilitate output reading.
+/// Developers have the option to implement custom input types
+/// by conforming to `ManagedOutputProtocol`
+/// and implementing the `output(from:)` method.
 @available(macOS 9999, *)
 public protocol ManagedOutputProtocol: OutputProtocol {
     /// The underlying pipe used by this output in order to

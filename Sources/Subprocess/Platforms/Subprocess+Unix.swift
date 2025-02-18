@@ -114,7 +114,10 @@ extension Execution {
     ///   - signal: The signal to send.
     ///   - shouldSendToProcessGroup: Whether this signal should be sent to
     ///     the entire process group.
-    public func send(signal: Signal, toProcessGroup shouldSendToProcessGroup: Bool = false) throws {
+    public func send(
+        signal: Signal,
+        toProcessGroup shouldSendToProcessGroup: Bool = false
+    ) throws {
         let pid = shouldSendToProcessGroup ? -(self.processIdentifier.value) : self.processIdentifier.value
         guard kill(pid, signal.rawValue) == 0 else {
             throw SubprocessError(

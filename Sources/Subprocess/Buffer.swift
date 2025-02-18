@@ -76,7 +76,7 @@ extension Buffer {
 #endif
         self.data = current
     }
-    
+
     /// Creates a new buffer by concatenating two buffers.
     /// - Parameters:
     ///   - lhs: first buffer to concatenate
