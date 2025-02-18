@@ -21,6 +21,7 @@ import Musl
 import WinSDK
 #endif
 
+/// Error thrown from Subprocess
 public struct SubprocessError: Swift.Error, Hashable, Sendable {
     /// The error code of this error
     public let code: SubprocessError.Code
