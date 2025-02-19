@@ -10,9 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if !canImport(Synchronization)
+
 #if canImport(os)
 internal import os
-#if FOUNDATION_FRAMEWORK && canImport(C.os.lock)
+#if canImport(C.os.lock)
 internal import C.os.lock
 #endif
 #elseif canImport(Bionic)
@@ -25,12 +27,14 @@ import Musl
 import WinSDK
 #endif
 
-package struct LockedState<State> {
+internal struct LockedState<State> {
 
     // Internal implementation for a cheap lock to aid sharing code across platforms
     private struct _Lock {
 #if canImport(os)
         typealias Primitive = os_unfair_lock
+#elseif os(FreeBSD)
+        typealias Primitive = pthread_mutex_t?
 #elseif canImport(Bionic) || canImport(Glibc) || canImport(Musl)
         typealias Primitive = pthread_mutex_t
 #elseif canImport(WinSDK)
@@ -46,17 +50,19 @@ package struct LockedState<State> {
         fileprivate static func initialize(_ platformLock: PlatformLock) {
 #if canImport(os)
             platformLock.initialize(to: os_unfair_lock())
-#elseif canImport(Bionic) || canImport(Glibc)
+#elseif canImport(Bionic) || canImport(Glibc) || canImport(Musl)
             pthread_mutex_init(platformLock, nil)
 #elseif canImport(WinSDK)
             InitializeSRWLock(platformLock)
 #elseif os(WASI)
             // no-op
+#else
+#error("LockedState._Lock.initialize is unimplemented on this platform")
 #endif
         }
 
         fileprivate static func deinitialize(_ platformLock: PlatformLock) {
-#if canImport(Bionic) || canImport(Glibc)
+#if canImport(Bionic) || canImport(Glibc) || canImport(Musl)
             pthread_mutex_destroy(platformLock)
 #endif
             platformLock.deinitialize(count: 1)
@@ -65,24 +71,28 @@ package struct LockedState<State> {
         static fileprivate func lock(_ platformLock: PlatformLock) {
 #if canImport(os)
             os_unfair_lock_lock(platformLock)
-#elseif canImport(Bionic) || canImport(Glibc)
+#elseif canImport(Bionic) || canImport(Glibc) || canImport(Musl)
             pthread_mutex_lock(platformLock)
 #elseif canImport(WinSDK)
             AcquireSRWLockExclusive(platformLock)
 #elseif os(WASI)
             // no-op
+#else
+#error("LockedState._Lock.lock is unimplemented on this platform")
 #endif
         }
 
         static fileprivate func unlock(_ platformLock: PlatformLock) {
 #if canImport(os)
             os_unfair_lock_unlock(platformLock)
-#elseif canImport(Bionic) || canImport(Glibc)
+#elseif canImport(Bionic) || canImport(Glibc) || canImport(Musl)
             pthread_mutex_unlock(platformLock)
 #elseif canImport(WinSDK)
             ReleaseSRWLockExclusive(platformLock)
 #elseif os(WASI)
             // no-op
+#else
+#error("LockedState._Lock.unlock is unimplemented on this platform")
 #endif
         }
     }
@@ -97,7 +107,7 @@ package struct LockedState<State> {
 
     private let _buffer: ManagedBuffer<State, _Lock.Primitive>
 
-    package init(initialState: State) {
+    internal init(_ initialState: State) {
         _buffer = _Buffer.create(minimumCapacity: 1, makingHeaderWith: { buf in
             buf.withUnsafeMutablePointerToElements {
                 _Lock.initialize($0)
@@ -106,11 +116,11 @@ package struct LockedState<State> {
         })
     }
 
-    package func withLock<T>(_ body: @Sendable (inout State) throws -> T) rethrows -> T {
+    internal func withLock<T>(_ body: @Sendable (inout State) throws -> T) rethrows -> T {
         try withLockUnchecked(body)
     }
 
-    package func withLockUnchecked<T>(_ body: (inout State) throws -> T) rethrows -> T {
+    internal func withLockUnchecked<T>(_ body: (inout State) throws -> T) rethrows -> T {
         try _buffer.withUnsafeMutablePointers { state, lock in
             _Lock.lock(lock)
             defer { _Lock.unlock(lock) }
@@ -119,7 +129,7 @@ package struct LockedState<State> {
     }
 
     // Ensures the managed state outlives the locked scope.
-    package func withLockExtendingLifetimeOfState<T>(_ body: @Sendable (inout State) throws -> T) rethrows -> T {
+    internal func withLockExtendingLifetimeOfState<T>(_ body: @Sendable (inout State) throws -> T) rethrows -> T {
         try _buffer.withUnsafeMutablePointers { state, lock in
             _Lock.lock(lock)
             return try withExtendedLifetime(state.pointee) {
@@ -128,31 +138,32 @@ package struct LockedState<State> {
             }
         }
     }
+}
 
-    package func lock() {
+extension LockedState where State == Void {
+    internal init() {
+        self.init(())
+    }
+
+    internal func withLock<R: Sendable>(_ body: @Sendable () throws -> R) rethrows -> R {
+        return try withLock { _ in
+            try body()
+        }
+    }
+
+    internal func lock() {
         _buffer.withUnsafeMutablePointerToElements { lock in
             _Lock.lock(lock)
         }
     }
 
-    package func unlock() {
+    internal func unlock() {
         _buffer.withUnsafeMutablePointerToElements { lock in
             _Lock.unlock(lock)
         }
     }
 }
 
-extension LockedState where State == Void {
-    package init() {
-        self.init(initialState: ())
-    }
-
-    package func withLock<R: Sendable>(_ body: @Sendable () throws -> R) rethrows -> R {
-        return try withLock { _ in
-            try body()
-        }
-    }
-}
-
 extension LockedState: @unchecked Sendable where State: Sendable {}
 
+#endif // !canImport(Synchronization)

@@ -12,7 +12,7 @@
 #ifndef process_shims_h
 #define process_shims_h
 
-#include "_CShimsTargetConditionals.h"
+#include "target_conditionals.h"
 
 #if !TARGET_OS_WINDOWS
 #include <unistd.h>
@@ -56,6 +56,10 @@ int _get_exit_code(int status);
 int _was_process_signaled(int status);
 int _get_signal_code(int status);
 int _was_process_suspended(int status);
+
+void _subprocess_lock_environ(void);
+void _subprocess_unlock_environ(void);
+char * _Nullable * _Nullable _subprocess_get_environ(void);
 
 #if TARGET_OS_LINUX
 int _shims_snprintf(
