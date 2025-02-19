@@ -1725,33 +1725,21 @@ extension Subprocess {
 
 extension SubprocessError: CustomStringConvertible, CustomDebugStringConvertible {}
 
-#if os(Windows)
 extension SubprocessError {
-    public typealias UnderlyingError = WindowsError
-
-    public struct WindowsError: Swift.Error, RawRepresentable, Hashable, Sendable {
+    /// The underlying error that caused this SubprocessError.
+    /// - On Unix-like systems, `UnderlyingError` wraps `errno` from libc;
+    /// - On Windows, `UnderlyingError` wraps Windows Error code
+    public struct UnderlyingError: Swift.Error, RawRepresentable, Hashable, Sendable {
+#if os(Window)
         public typealias RawValue = DWORD
-
-        public let rawValue: DWORD
-
-        public init(rawValue: DWORD)
-    }
-}
 #else
-extension SubprocessError {
-    public typealias UnderlyingError = POSIXError
-
-    /// An error that represents a POSIX error
-    public struct POSIXError: Swift.Error, RawRepresentable, Hashable, Sendable {
         public typealias RawValue = Int32
+#endif
 
-        /// The error number (`errno`)
-        public let rawValue: Int32
-
-        public init(rawValue: Int32)
+        public let rawValue: RawValue
+        public init(rawValue: RawValue)
     }
 }
-#endif
 ```
 
 
