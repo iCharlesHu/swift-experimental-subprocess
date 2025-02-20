@@ -44,7 +44,7 @@ public func run<
     workingDirectory: FilePath? = nil,
     platformOptions: PlatformOptions = PlatformOptions(),
     input: Input = .none,
-    output: Output = .string(),
+    output: Output = .string,
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error> {
     let result = try await Configuration(
@@ -99,7 +99,7 @@ public func run<
     workingDirectory: FilePath? = nil,
     platformOptions: PlatformOptions = PlatformOptions(),
     input: borrowing Span<InputElement>,
-    output: Output = .string(),
+    output: Output = .string,
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error> {
     return try await Configuration(

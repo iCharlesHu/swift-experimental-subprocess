@@ -76,7 +76,7 @@ extension SubprocessUnixTests {
     @available(macOS 9999, *)
     @Test func testExecutableAtPath() async throws {
         let expected = FileManager.default.currentDirectoryPath
-        let result = try await Subprocess.run(.path("/bin/pwd"), output: .string())
+        let result = try await Subprocess.run(.path("/bin/pwd"), output: .string)
         #expect(result.terminationStatus.isSuccess)
         // rdar://138670128
         let maybePath = result.standardOutput?
@@ -110,7 +110,7 @@ extension SubprocessUnixTests {
         let result = try await Subprocess.run(
             .path("/bin/bash"),
             arguments: ["-c", "echo Hello World!"],
-            output: .string()
+            output: .string
         )
         #expect(result.terminationStatus.isSuccess)
         // rdar://138670128
@@ -130,7 +130,7 @@ extension SubprocessUnixTests {
                 executablePathOverride: "apple",
                 remainingValues: ["-c", "echo $0"]
             ),
-            output: .string()
+            output: .string
         )
         #expect(result.terminationStatus.isSuccess)
         // rdar://138670128
@@ -151,7 +151,7 @@ extension SubprocessUnixTests {
                 executablePathOverride: nil,
                 remainingValues: [arguments]
             ),
-            output: .string()
+            output: .string
         )
         #expect(result.terminationStatus.isSuccess)
         // rdar://138670128
@@ -172,7 +172,7 @@ extension SubprocessUnixTests {
             .path("/bin/bash"),
             arguments: ["-c", "printenv PATH"],
             environment: .inherit,
-            output: .string()
+            output: .string
         )
         #expect(result.terminationStatus.isSuccess)
         // As a sanity check, make sure there's `/bin` in PATH
@@ -191,7 +191,7 @@ extension SubprocessUnixTests {
             environment: .inherit.updating([
                 "HOME": "/my/new/home"
             ]),
-            output: .string()
+            output: .string
         )
         #expect(result.terminationStatus.isSuccess)
         // rdar://138670128
@@ -210,7 +210,7 @@ extension SubprocessUnixTests {
             environment: .custom([
                 "PATH": "/bin:/usr/bin",
             ]),
-            output: .string()
+            output: .string
         )
         #expect(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
@@ -234,7 +234,7 @@ extension SubprocessUnixTests {
         let result = try await Subprocess.run(
             .path("/bin/pwd"),
             workingDirectory: nil,
-            output: .string()
+            output: .string
         )
         #expect(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
@@ -254,7 +254,7 @@ extension SubprocessUnixTests {
         let result = try await Subprocess.run(
             .path("/bin/pwd"),
             workingDirectory: workingDirectory,
-            output: .string()
+            output: .string
         )
         #expect(result.terminationStatus.isSuccess)
         // There shouldn't be any other environment variables besides
@@ -287,7 +287,7 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .path("/bin/cat"),
             input: .none,
-            output: .string()
+            output: .string
         )
         #expect(catResult.terminationStatus.isSuccess)
         // We should have read exactly 0 bytes
@@ -327,7 +327,7 @@ extension SubprocessUnixTests {
         let echoResult = try await Subprocess.run(
             .path("/bin/echo"),
             arguments: [expected],
-            output: .string()
+            output: .string
         )
         #expect(echoResult.terminationStatus.isSuccess)
         let output = try #require(
@@ -520,7 +520,7 @@ extension SubprocessUnixTests {
             .name("/usr/bin/swift"),
             arguments: [getgroupsSwift.string],
             platformOptions: platformOptions,
-            output: .string()
+            output: .string
         )
         #expect(idResult.terminationStatus.isSuccess)
         let ids = try #require(
@@ -545,7 +545,7 @@ extension SubprocessUnixTests {
             .name("/bin/bash"),
             arguments: ["-c", "ps -o pid,pgid -p $$"],
             platformOptions: platformOptions,
-            output: .string()
+            output: .string
         )
         #expect(psResult.terminationStatus.isSuccess)
         let resultValue = try #require(
@@ -569,7 +569,7 @@ extension SubprocessUnixTests {
             .name("/bin/bash"),
             arguments: ["-c", "ps -o pid,pgid,tpgid -p $$"],
             platformOptions: platformOptions,
-            output: .string()
+            output: .string
         )
         try assertNewSessionCreated(with: psResult)
     }
@@ -673,7 +673,7 @@ extension SubprocessUnixTests {
             .name("/usr/bin/id"),
             arguments: [argument],
             platformOptions: platformOptions,
-            output: .string()
+            output: .string
         )
         #expect(idResult.terminationStatus.isSuccess)
         let id = try #require(idResult.standardOutput)

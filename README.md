@@ -237,7 +237,7 @@ public func run<
     workingDirectory: FilePath? = nil,
     platformOptions: PlatformOptions = PlatformOptions(),
     input: Input = .none,
-    output: Output = .string(),
+    output: Output = .string,
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error>
 
@@ -267,7 +267,7 @@ public func run<
     workingDirectory: FilePath? = nil,
     platformOptions: PlatformOptions = PlatformOptions(),
     input: borrowing Span<InputElement>,
-    output: Output = .string(),
+    output: Output = .string,
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error>
 
@@ -395,7 +395,7 @@ let inputData = Array("Hello SwiftFoundation".utf8)
 let cat = try await run(
     .name("cat"),
     input: .array(inputData),
-    output: .string()
+    output: .string
 )
 print("Cat result: \(cat.standardOutput!)")
 ```
@@ -1394,7 +1394,7 @@ extension OutputProtocol where Self == DataOutput {
 Here are some examples of using different outputs:
 
 ```swift
-let ls = try await run(.name("ls"), output: .string())
+let ls = try await run(.name("ls"), output: .string)
 // The output has been collected as `String`, up to 128kb limit
 print("ls output: \(ls.standardOutout!)")
 

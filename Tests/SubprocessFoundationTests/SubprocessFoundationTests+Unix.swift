@@ -195,7 +195,7 @@ extension SubprocessFoundationTests {
         let limitResult = try await Subprocess.run(
             .path("/bin/bash"),
             arguments: ["-c", "ulimit -n"],
-            output: .string()
+            output: .string
         )
         guard let limitString = limitResult
             .standardOutput?

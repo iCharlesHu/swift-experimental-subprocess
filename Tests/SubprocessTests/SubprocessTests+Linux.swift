@@ -27,7 +27,7 @@ struct SubprocessLinuxTests {
             .name("/usr/bin/id"),
             arguments: ["-g"],
             platformOptions: platformOptions,
-            output: .string()
+            output: .string
         )
         #expect(idResult.terminationStatus.isSuccess)
         let id = try #require(idResult.standardOutput)

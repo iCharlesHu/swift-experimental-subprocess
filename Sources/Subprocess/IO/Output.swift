@@ -293,13 +293,16 @@ extension OutputProtocol where Self == FileDescriptorOutput {
 }
 
 @available(macOS 9999, *)
-extension OutputProtocol {
+extension OutputProtocol where Self == StringOutput<UTF8> {
     /// Create a `Subprocess` output that collects output as
     /// UTF8 String with 128kb limit.
-    public static func string() -> Self where Self == StringOutput<UTF8> {
-        return .string(limit: 128 * 1024, encoding: UTF8.self)
+    public static var string: Self {
+        .init(limit: 128 * 1024, encoding: UTF8.self)
     }
+}
 
+@available(macOS 9999, *)
+extension OutputProtocol {
     /// Create a `Subprocess` output that collects output as
     /// `String` using the given encoding up to limit it bytes.
     public static func string<Encoding: Unicode.Encoding>(
