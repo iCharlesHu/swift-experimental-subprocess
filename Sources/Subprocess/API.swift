@@ -30,7 +30,6 @@ import System
 ///   - input: The input to send to the executable.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
-///   - body: The custom execution body to manually control the running process
 /// - Returns a CollectedResult containing the result of the run.
 @available(macOS 9999, *)
 public func run<
@@ -85,7 +84,6 @@ public func run<
 ///   - input: span to write to subprocess' standard input.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
-///   - body: The custom execution body to manually control the running process
 /// - Returns a CollectedResult containing the result of the run.
 @available(macOS 9999, *)
 public func run<
@@ -126,6 +124,7 @@ public func run<
 ///   - input: The input to send to the executable.
 ///   - output: How to manage the executable standard ouput.
 ///   - error: How to manager executable standard error.
+///   - isolation: the isolation context to run the body closure.
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
@@ -163,6 +162,7 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
 ///     when running the executable.
 ///   - output:How to handle executable's standard output
 ///   - error: How to handle executable's standard error
+///   - isolation: the isolation context to run the body closure.
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
@@ -195,6 +195,7 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///   - configuration: The `Subprocess` configuration to run.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
+///   - isolation: the isolation context to run the body closure.
 ///   - body: The custom configuration body to manually control
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
