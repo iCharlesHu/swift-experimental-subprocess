@@ -201,6 +201,12 @@ Let's break down the example above:
 
 ## Detailed Design
 
+The latest API documentation can be viewed by running the following command:
+
+```
+swift package --disable-sandbox preview-documentation --target Subprocess
+```
+
 ### `Subprocess` and `SubprocessFoundation` Modules
 
 Within this package, we propose two modules: `Subprocess` and `SubprocessFoundation`. `Subprocess` serves as the “core” module, relying solely on `swift-system` and the standard library. `SubprocessFoundation` extends `Subprocess` by depending on and incorporating types from `Foundation`.
