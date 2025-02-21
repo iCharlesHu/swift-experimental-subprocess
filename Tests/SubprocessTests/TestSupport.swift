@@ -9,70 +9,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(WinSDK)
-import WinSDK
-#endif
-
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
 import Foundation
 #endif
-
-import SystemPackage
-import class Foundation.Bundle
-import struct Foundation.URL
-
-internal var prideAndPrejudice: FilePath {
-    let path = Bundle.module.url(
-        forResource: "PrideAndPrejudice",
-        withExtension: "txt",
-        subdirectory: "Resources"
-    )!._fileSystemPath
-    return FilePath(path)
-}
-
-internal var theMysteriousIsland: FilePath {
-    let path = Bundle.module.url(
-        forResource: "TheMysteriousIsland",
-        withExtension: "txt",
-        subdirectory: "Resources"
-    )!._fileSystemPath
-    return FilePath(path)
-}
-
-internal var getgroupsSwift: FilePath {
-    let path = Bundle.module.url(
-        forResource: "getgroups",
-        withExtension: "swift",
-        subdirectory: "Resources"
-    )!._fileSystemPath
-    return FilePath(path)
-}
-
-internal var windowsTester: FilePath {
-    let path = Bundle.module.url(
-        forResource: "windows-tester",
-        withExtension: "ps1",
-        subdirectory: "Resources"
-    )!._fileSystemPath
-    return FilePath(path)
-}
-
-extension Foundation.URL {
-    var _fileSystemPath: String {
-#if canImport(WinSDK)
-        var path = self.path(percentEncoded: false)
-        if path.starts(with: "/") {
-            path.removeFirst()
-            return path
-        }
-        return path
-#else
-        return self.path(percentEncoded: false)
-#endif
-    }
-}
 
 internal func randomString(length: Int, lettersOnly: Bool = false) -> String {
     let letters: String

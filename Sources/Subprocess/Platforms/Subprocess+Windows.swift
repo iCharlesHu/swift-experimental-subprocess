@@ -12,21 +12,25 @@
 #if canImport(WinSDK)
 
 import WinSDK
-import Dispatch
-import SystemPackage
-import FoundationEssentials
+internal import Dispatch
+#if canImport(System)
+import System
+#else
+@preconcurrency import SystemPackage
+#endif
 
 // Windows specific implementation
-extension Subprocess.Configuration {
+@available(macOS 9999, *)
+extension Configuration {
     internal func spawn<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        Input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Subprocess.Execution<Input, Output, Error> {
+    ) throws -> Execution<Output, Error> {
         // Spawn differently depending on whether
         // we need to spawn as a user
         if let userCredentials = self.platformOptions.userCredentials {
@@ -46,14 +50,14 @@ extension Subprocess.Configuration {
     }
 
     internal func spawnDirect<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        Input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error
-    ) throws -> Subprocess.Execution<Input, Output, Error> {
+    ) throws -> Execution<Output, Error> {
         let (
             applicationName,
             commandAndArgs,
@@ -99,9 +103,9 @@ extension Subprocess.Configuration {
                                 output: output,
                                 error: error
                             )
-                            throw CocoaError.windowsError(
-                                underlying: windowsError,
-                                errorCode: .fileWriteUnknown
+                            throw SubprocessError(
+                                code: .init(.spawnFailed),
+                                underlyingError: .init(rawValue: windowsError)
                             )
                         }
                     }
@@ -116,9 +120,9 @@ extension Subprocess.Configuration {
                 output: output,
                 error: error
             )
-            throw CocoaError.windowsError(
-                underlying: windowsError,
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: windowsError)
             )
         }
         guard CloseHandle(processInfo.hProcess) else {
@@ -128,18 +132,17 @@ extension Subprocess.Configuration {
                 output: output,
                 error: error
             )
-            throw CocoaError.windowsError(
-                underlying: windowsError,
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: windowsError)
             )
         }
-        let pid = Subprocess.ProcessIdentifier(
+        let pid = ProcessIdentifier(
             value: processInfo.dwProcessId,
             threadID: processInfo.dwThreadId
         )
-        return Subprocess.Execution(
+        return Execution(
             processIdentifier: pid,
-            input: input,
             output: output,
             error: error,
             consoleBehavior: self.platformOptions.consoleBehavior
@@ -147,15 +150,15 @@ extension Subprocess.Configuration {
     }
 
     internal func spawnAsUser<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        Input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
         error: Error,
-        userCredentials: Subprocess.PlatformOptions.UserCredentials
-    ) throws -> Subprocess.Execution<Input, Output, Error> {
+        userCredentials: PlatformOptions.UserCredentials
+    ) throws -> Execution<Output, Error> {
         let (
             applicationName,
             commandAndArgs,
@@ -211,9 +214,9 @@ extension Subprocess.Configuration {
                                             output: output,
                                             error: error
                                         )
-                                        throw CocoaError.windowsError(
-                                            underlying: windowsError,
-                                            errorCode: .fileWriteUnknown
+                                        throw SubprocessError(
+                                            code: .init(.spawnFailed),
+                                            underlyingError: .init(rawValue: windowsError)
                                         )
                                     }
                                 }
@@ -231,9 +234,9 @@ extension Subprocess.Configuration {
                 output: output,
                 error: error
             )
-            throw CocoaError.windowsError(
-                underlying: windowsError,
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: windowsError)
             )
         }
         guard CloseHandle(processInfo.hProcess) else {
@@ -243,18 +246,17 @@ extension Subprocess.Configuration {
                 output: output,
                 error: error
             )
-            throw CocoaError.windowsError(
-                underlying: windowsError,
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.spawnFailed),
+                underlyingError: .init(rawValue: windowsError)
             )
         }
-        let pid = Subprocess.ProcessIdentifier(
+        let pid = ProcessIdentifier(
             value: processInfo.dwProcessId,
             threadID: processInfo.dwThreadId
         )
-        return Subprocess.Execution(
+        return Execution(
             processIdentifier: pid,
-            input: input,
             output: output,
             error: error,
             consoleBehavior: self.platformOptions.consoleBehavior
@@ -263,125 +265,126 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - Platform Specific Options
-extension Subprocess {
-    /// The collection of platform-specific settings
-    /// to configure the subprocess when running
-    public struct PlatformOptions: Sendable {
-        /// A `UserCredentials` to use spawning the subprocess
-        /// as a different user
-        public struct UserCredentials: Sendable, Hashable {
-            // The name of the user. This is the name
-            // of the user account to run as.
-            public var username: String
-            // The clear-text password for the account.
-            public var password: String
-            // The name of the domain or server whose account database
-            // contains the account.
-            public var domain: String?
-        }
 
-        /// `ConsoleBehavior` defines how should the console appear
-        /// when spawning a new process
-        public struct ConsoleBehavior: Sendable, Hashable {
-            internal enum Storage: Sendable, Hashable {
-                case createNew
-                case detatch
-                case inherit
-            }
-
-            internal let storage: Storage
-
-            private init(_ storage: Storage) {
-                self.storage = storage
-            }
-
-            /// The subprocess has a new console, instead of
-            /// inheriting its parent's console (the default).
-            public static let createNew: Self = .init(.createNew)
-            /// For console processes, the new process does not
-            /// inherit its parent's console (the default).
-            /// The new process can call the `AllocConsole`
-            /// function at a later time to create a console.
-            public static let detatch: Self = .init(.detatch)
-            /// The subprocess inherits its parent's console.
-            public static let inherit: Self = .init(.inherit)
-        }
-
-        /// `ConsoleBehavior` defines how should the window appear
-        /// when spawning a new process
-        public struct WindowStyle: Sendable, Hashable {
-            internal enum Storage: Sendable, Hashable {
-                case normal
-                case hidden
-                case maximized
-                case minimized
-            }
-
-            internal let storage: Storage
-
-            internal var platformStyle: WORD {
-                switch self.storage {
-                case .hidden: return WORD(SW_HIDE)
-                case .maximized: return WORD(SW_SHOWMAXIMIZED)
-                case .minimized: return WORD(SW_SHOWMINIMIZED)
-                default: return WORD(SW_SHOWNORMAL)
-                }
-            }
-
-            private init(_ storage: Storage) {
-                self.storage = storage
-            }
-
-            /// Activates and displays a window of normal size
-            public static let normal: Self = .init(.normal)
-            /// Does not activate a new window
-            public static let hidden: Self = .init(.hidden)
-            /// Activates the window and displays it as a maximized window.
-            public static let maximized: Self = .init(.maximized)
-            /// Activates the window and displays it as a minimized window.
-            public static let minimized: Self = .init(.minimized)
-        }
-
-        /// Sets user credentials when starting the process as another user
-        public var userCredentials: UserCredentials? = nil
-        /// The console behavior of the new process,
-        /// default to inheriting the console from parent process
-        public var consoleBehavior: ConsoleBehavior = .inherit
-        /// Window style to use when the process is started
-        public var windowStyle: WindowStyle = .normal
-        /// Whether to create a new process group for the new
-        /// process. The process group includes all processes
-        /// that are descendants of this root process.
-        /// The process identifier of the new process group
-        /// is the same as the process identifier.
-        public var createProcessGroup: Bool = false
-        /// A closure to configure platform-specific
-        /// spawning constructs. This closure enables direct
-        /// configuration or override of underlying platform-specific
-        /// spawn settings that `Subprocess` utilizes internally,
-        /// in cases where Subprocess does not provide higher-level
-        /// APIs for such modifications.
-        ///
-        /// On Windows, Subprocess uses `CreateProcessW()` as the
-        /// underlying spawning mechanism. This closure allows
-        /// modification of the `dwCreationFlags` creation flag
-        /// and startup info `STARTUPINFOW` before
-        /// they are sent to `CreateProcessW()`.
-        public var preSpawnProcessConfigurator: (
-            @Sendable (
-                inout DWORD,
-                inout STARTUPINFOW
-            ) throws -> Void
-        )? = nil
-
-        public init() {}
+/// The collection of platform-specific settings
+/// to configure the subprocess when running
+@available(macOS 9999, *)
+public struct PlatformOptions: Sendable {
+    /// A `UserCredentials` to use spawning the subprocess
+    /// as a different user
+    public struct UserCredentials: Sendable, Hashable {
+        // The name of the user. This is the name
+        // of the user account to run as.
+        public var username: String
+        // The clear-text password for the account.
+        public var password: String
+        // The name of the domain or server whose account database
+        // contains the account.
+        public var domain: String?
     }
+
+    /// `ConsoleBehavior` defines how should the console appear
+    /// when spawning a new process
+    public struct ConsoleBehavior: Sendable, Hashable {
+        internal enum Storage: Sendable, Hashable {
+            case createNew
+            case detatch
+            case inherit
+        }
+
+        internal let storage: Storage
+
+        private init(_ storage: Storage) {
+            self.storage = storage
+        }
+
+        /// The subprocess has a new console, instead of
+        /// inheriting its parent's console (the default).
+        public static let createNew: Self = .init(.createNew)
+        /// For console processes, the new process does not
+        /// inherit its parent's console (the default).
+        /// The new process can call the `AllocConsole`
+        /// function at a later time to create a console.
+        public static let detatch: Self = .init(.detatch)
+        /// The subprocess inherits its parent's console.
+        public static let inherit: Self = .init(.inherit)
+    }
+
+    /// `ConsoleBehavior` defines how should the window appear
+    /// when spawning a new process
+    public struct WindowStyle: Sendable, Hashable {
+        internal enum Storage: Sendable, Hashable {
+            case normal
+            case hidden
+            case maximized
+            case minimized
+        }
+
+        internal let storage: Storage
+
+        internal var platformStyle: WORD {
+            switch self.storage {
+            case .hidden: return WORD(SW_HIDE)
+            case .maximized: return WORD(SW_SHOWMAXIMIZED)
+            case .minimized: return WORD(SW_SHOWMINIMIZED)
+            default: return WORD(SW_SHOWNORMAL)
+            }
+        }
+
+        private init(_ storage: Storage) {
+            self.storage = storage
+        }
+
+        /// Activates and displays a window of normal size
+        public static let normal: Self = .init(.normal)
+        /// Does not activate a new window
+        public static let hidden: Self = .init(.hidden)
+        /// Activates the window and displays it as a maximized window.
+        public static let maximized: Self = .init(.maximized)
+        /// Activates the window and displays it as a minimized window.
+        public static let minimized: Self = .init(.minimized)
+    }
+
+    /// Sets user credentials when starting the process as another user
+    public var userCredentials: UserCredentials? = nil
+    /// The console behavior of the new process,
+    /// default to inheriting the console from parent process
+    public var consoleBehavior: ConsoleBehavior = .inherit
+    /// Window style to use when the process is started
+    public var windowStyle: WindowStyle = .normal
+    /// Whether to create a new process group for the new
+    /// process. The process group includes all processes
+    /// that are descendants of this root process.
+    /// The process identifier of the new process group
+    /// is the same as the process identifier.
+    public var createProcessGroup: Bool = false
+    /// A closure to configure platform-specific
+    /// spawning constructs. This closure enables direct
+    /// configuration or override of underlying platform-specific
+    /// spawn settings that `Subprocess` utilizes internally,
+    /// in cases where Subprocess does not provide higher-level
+    /// APIs for such modifications.
+    ///
+    /// On Windows, Subprocess uses `CreateProcessW()` as the
+    /// underlying spawning mechanism. This closure allows
+    /// modification of the `dwCreationFlags` creation flag
+    /// and startup info `STARTUPINFOW` before
+    /// they are sent to `CreateProcessW()`.
+    public var preSpawnProcessConfigurator: (
+        @Sendable (
+            inout DWORD,
+            inout STARTUPINFOW
+        ) throws -> Void
+    )? = nil
+
+    public init() {}
 }
 
-extension Subprocess.PlatformOptions: Hashable {
+@available(macOS 9999, *)
+extension PlatformOptions: Hashable {
     public static func == (
-        lhs: Subprocess.PlatformOptions,
-        rhs: Subprocess.PlatformOptions
+        lhs: PlatformOptions,
+        rhs: PlatformOptions
     ) -> Bool {
         // Since we can't compare closure equality,
         // as long as preSpawnProcessConfigurator is set
@@ -400,16 +403,17 @@ extension Subprocess.PlatformOptions: Hashable {
         hasher.combine(windowStyle)
         hasher.combine(createProcessGroup)
         // Since we can't really hash closures,
-        // use an UUID such that as long as
+        // use a random number such that as long as
         // `preSpawnProcessConfigurator` is set, it will
         // never equal to other PlatformOptions
         if self.preSpawnProcessConfigurator != nil {
-            hasher.combine(UUID())
+            hasher.combine(Int.random(in: 0 ..< .max))
         }
     }
 }
 
-extension Subprocess.PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
+@available(macOS 9999, *)
+extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
         return """
@@ -433,10 +437,11 @@ PlatformOptions(
 }
 
 // MARK: - Process Monitoring
+@available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
-    forProcessWithIdentifier pid: Subprocess.ProcessIdentifier
-) async throws -> Subprocess.TerminationStatus {
+    forProcessWithIdentifier pid: ProcessIdentifier
+) async throws -> TerminationStatus {
     // Once the continuation resumes, it will need to unregister the wait, so
     // yield the wait handle back to the calling scope.
     var waitHandle: HANDLE?
@@ -468,9 +473,11 @@ internal func monitorProcessTermination(
         guard RegisterWaitForSingleObject(
             &waitHandle, processHandle, callback, context, INFINITE, flags
         ) else {
-            continuation.resume(throwing: CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown)
+            continuation.resume(
+                throwing: SubprocessError(
+                    code: .init(.failedToMonitorProcess),
+                    underlyingError: .init(rawValue: GetLastError())
+                )
             )
             return
         }
@@ -491,7 +498,8 @@ internal func monitorProcessTermination(
 }
 
 // MARK: - Subprocess Control
-extension Subprocess.Execution {
+@available(macOS 9999, *)
+extension Execution {
     /// Terminate the current subprocess with the given exit code
     /// - Parameter exitCode: The exit code to use for the subprocess.
     public func terminate(withExitCode exitCode: DWORD) throws {
@@ -501,18 +509,18 @@ extension Subprocess.Execution {
             false,
             self.processIdentifier.value
         ) else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToTerminate),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
         defer {
             CloseHandle(processHandle)
         }
         guard TerminateProcess(processHandle, exitCode) else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToTerminate),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
     }
@@ -525,9 +533,9 @@ extension Subprocess.Execution {
             false,
             self.processIdentifier.value
         ) else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToSuspend),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
         defer {
@@ -543,12 +551,15 @@ extension Subprocess.Execution {
                 to: Optional<(@convention(c) (HANDLE) -> LONG)>.self
             )
         guard let NTSuspendProcess = NTSuspendProcess else {
-            throw CocoaError(.executableNotLoadable)
+            throw SubprocessError(
+                code: .init(.failedToSuspend),
+                underlyingError: .init(rawValue: GetLastError())
+            )
         }
         guard NTSuspendProcess(processHandle) >= 0 else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToSuspend),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
     }
@@ -561,9 +572,9 @@ extension Subprocess.Execution {
             false,
             self.processIdentifier.value
         ) else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToResume),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
         defer {
@@ -579,12 +590,15 @@ extension Subprocess.Execution {
             to: Optional<(@convention(c) (HANDLE) -> LONG)>.self
         )
         guard let NTResumeProcess = NTResumeProcess else {
-            throw CocoaError(.executableNotLoadable)
+            throw SubprocessError(
+                code: .init(.failedToResume),
+                underlyingError: .init(rawValue: GetLastError())
+            )
         }
         guard NTResumeProcess(processHandle) >= 0 else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileWriteUnknown
+            throw SubprocessError(
+                code: .init(.failedToResume),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
     }
@@ -600,26 +614,30 @@ extension Subprocess.Execution {
 }
 
 // MARK: - Executable Searching
-extension Subprocess.Executable {
+@available(macOS 9999, *)
+extension Executable {
     // Technically not needed for CreateProcess since
     // it takes process name. It's here to support
     // Executable.resolveExecutablePath
-    internal func resolveExecutablePath(withPathValue pathValue: String?) -> String? {
+    internal func resolveExecutablePath(withPathValue pathValue: String?) throws -> String {
         switch self.storage {
         case .executable(let executableName):
-            return executableName.withCString(
+            return try executableName.withCString(
                 encodedAs: UTF16.self
-            ) { exeName -> String? in
-                return pathValue.withOptionalCString(
+            ) { exeName -> String in
+                return try pathValue.withOptionalCString(
                     encodedAs: UTF16.self
-                ) { path -> String? in
+                ) { path -> String in
                     let pathLenth = SearchPathW(
                         path,
                         exeName,
                         nil, 0, nil, nil
                     )
                     guard pathLenth > 0 else {
-                        return nil
+                        throw SubprocessError(
+                            code: .init(.executableNotFound(executableName)),
+                            underlyingError: .init(rawValue: GetLastError())
+                        )
                     }
                     return withUnsafeTemporaryAllocation(
                         of: WCHAR.self, capacity: Int(pathLenth) + 1
@@ -642,47 +660,66 @@ extension Subprocess.Executable {
 }
 
 // MARK: - Environment Resolution
-extension Subprocess.Environment {
+extension Environment {
     internal static let pathEnvironmentVariableName = "Path"
 
     internal func pathValue() -> String? {
         switch self.config {
         case .inherit(let overrides):
             // If PATH value exists in overrides, use it
-            if let value = overrides[.string(Self.pathEnvironmentVariableName)] {
-                return value.stringValue
+            if let value = overrides[Self.pathEnvironmentVariableName] {
+                return value
             }
             // Fall back to current process
-            return ProcessInfo.processInfo.environment[Self.pathEnvironmentVariableName]
+            return Self.currentEnvironmentValues()[Self.pathEnvironmentVariableName]
         case .custom(let fullEnvironment):
-            if let value = fullEnvironment[.string(Self.pathEnvironmentVariableName)] {
-                return value.stringValue
+            if let value = fullEnvironment[Self.pathEnvironmentVariableName] {
+                return value
             }
             return nil
         }
     }
-}
 
-// MARK: - ProcessIdentifier
-extension Subprocess {
-    /// A platform independent identifier for a subprocess.
-    public struct ProcessIdentifier: Sendable, Hashable, Codable {
-        /// Windows specifc process identifier value
-        public let value: DWORD
-        /// Windows specific thread identifier associated with process
-        public let threadID: DWORD
-
-        internal init(
-            value: DWORD,
-            threadID: DWORD
-        ) {
-            self.value = value
-            self.threadID = threadID
+    internal static func withCopiedEnv<R>(_ body: ([UnsafeMutablePointer<CChar>]) -> R) -> R {
+        var values: [UnsafeMutablePointer<CChar>] = []
+        guard let pwszEnvironmentBlock = GetEnvironmentStringsW() else {
+            return body([])
         }
+        defer { FreeEnvironmentStringsW(pwszEnvironmentBlock) }
+
+        var pwszEnvironmentEntry: LPWCH? = pwszEnvironmentBlock
+        while let value = pwszEnvironmentEntry {
+            let entry = String(decodingCString: value, as: UTF16.self)
+            if entry.isEmpty { break }
+            values.append(entry.withCString { _strdup($0)! })
+            pwszEnvironmentEntry = pwszEnvironmentEntry?.advanced(by: wcslen(value) + 1)
+        }
+        defer { values.forEach { free($0) } }
+        return body(values)
     }
 }
 
-extension Subprocess.ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
+// MARK: - ProcessIdentifier
+
+/// A platform independent identifier for a subprocess.
+@available(macOS 9999, *)
+public struct ProcessIdentifier: Sendable, Hashable, Codable {
+    /// Windows specifc process identifier value
+    public let value: DWORD
+    /// Windows specific thread identifier associated with process
+    public let threadID: DWORD
+
+    internal init(
+        value: DWORD,
+        threadID: DWORD
+    ) {
+        self.value = value
+        self.threadID = threadID
+    }
+}
+
+@available(macOS 9999, *)
+extension ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         return "(processID: \(self.value), threadID: \(self.threadID))"
     }
@@ -693,7 +730,8 @@ extension Subprocess.ProcessIdentifier: CustomStringConvertible, CustomDebugStri
 }
 
 // MARK: - Private Utils
-extension Subprocess.Configuration {
+@available(macOS 9999, *)
+extension Configuration {
     private func preSpawn() throws -> (
         applicationName: String?,
         commandAndArgs: String,
@@ -705,32 +743,19 @@ extension Subprocess.Configuration {
         switch self.environment.config {
         case .custom(let customValues):
             // Use the custom values directly
-            for customKey in customValues.keys {
-                guard case .string(let stringKey) = customKey,
-                      let valueContainer = customValues[customKey],
-                      case .string(let stringValue) = valueContainer else {
-                    fatalError("Windows does not support non unicode String as environments")
-                }
-                env.updateValue(stringValue, forKey: stringKey)
-            }
+            env = customValues
         case .inherit(let updateValues):
             // Combine current environment
-            env = ProcessInfo.processInfo.environment
-            for updatingKey in updateValues.keys {
-                // Override the current environment values
-                guard case .string(let stringKey) = updatingKey,
-                      let valueContainer = updateValues[updatingKey],
-                      case .string(let stringValue) = valueContainer else {
-                    fatalError("Windows does not support non unicode String as environments")
-                }
-                env.updateValue(stringValue, forKey: stringKey)
+            env = Environment.currentEnvironmentValues()
+            for (key, value) in updateValues {
+                env.updateValue(value, forKey: key)
             }
         }
         // On Windows, the PATH is required in order to locate dlls needed by
         // the process so we should also pass that to the child
-        let pathVariableName = Subprocess.Environment.pathEnvironmentVariableName
+        let pathVariableName = Environment.pathEnvironmentVariableName
         if env[pathVariableName] == nil,
-           let parentPath = ProcessInfo.processInfo.environment[pathVariableName] {
+           let parentPath = Environment.currentEnvironmentValues()[pathVariableName] {
             env[pathVariableName] = parentPath
         }
         // The environment string must be terminated by a double
@@ -747,9 +772,11 @@ extension Subprocess.Configuration {
         ) = try self.generateWindowsCommandAndAgruments()
         // Validate workingDir
         guard Self.pathAccessible(self.workingDirectory.string) else {
-            throw CocoaError(.fileNoSuchFile, userInfo: [
-                .debugDescriptionErrorKey : "Failed to set working directory to \(self.workingDirectory)"
-            ])
+            throw SubprocessError(
+                code: .init(
+                    .failedToChangeWorkingDirectory(self.workingDirectory.string)),
+                underlyingError: nil
+            )
         }
         return (
             applicationName: applicationName,
@@ -776,9 +803,9 @@ extension Subprocess.Configuration {
     }
 
     private func generateStartupInfo<
-        Input: Subprocess.InputProtocol,
-        Output: Subprocess.OutputProtocol,
-        Error: Subprocess.OutputProtocol
+        Input: InputProtocol,
+        Output: OutputProtocol,
+        Error: OutputProtocol
     >(
         withInput input: Input,
         output: Output,
@@ -847,12 +874,12 @@ extension Subprocess.Configuration {
             // actually resolve the path. However, to maintain
             // the same behavior as other platforms, still check
             // here to make sure the executable actually exists
-            guard self.executable.resolveExecutablePath(
-                withPathValue: self.environment.pathValue()
-            ) != nil else {
-                throw CocoaError(.executableNotLoadable, userInfo: [
-                    .debugDescriptionErrorKey : "\(self.executable.description) is not an executable"
-                ])
+            do {
+                _ = try self.executable.resolveExecutablePath(
+                    withPathValue: self.environment.pathValue()
+                )
+            } catch {
+                throw error
             }
             executableNameOrPath = name
         }
@@ -952,19 +979,17 @@ extension Subprocess.Configuration {
 }
 
 // MARK: - PlatformFileDescriptor Type
-extension Subprocess {
-    internal typealias PlatformFileDescriptor = HANDLE
-}
+@available(macOS 9999, *)
+internal typealias PlatformFileDescriptor = HANDLE
 
 // MARK: - Read Buffer Size
-extension Subprocess {
-    @inline(__always)
-    internal static var readBufferSize: Int {
-        // FIXME: Use Platform.pageSize here
-        var sysInfo: SYSTEM_INFO = SYSTEM_INFO()
-        GetSystemInfo(&sysInfo)
-        return Int(sysInfo.dwPageSize)
-    }
+@available(macOS 9999, *)
+@inline(__always)
+internal var readBufferSize: Int {
+    // FIXME: Use Platform.pageSize here
+    var sysInfo: SYSTEM_INFO = SYSTEM_INFO()
+    GetSystemInfo(&sysInfo)
+    return Int(sysInfo.dwPageSize)
 }
 
 // MARK: - Pipe Support
@@ -985,9 +1010,9 @@ extension FileDescriptor {
               writeHandle != INVALID_HANDLE_VALUE,
            let readHandle: HANDLE = readHandle,
            let writeHandle: HANDLE = writeHandle else {
-            throw CocoaError.windowsError(
-                underlying: GetLastError(),
-                errorCode: .fileReadUnknown
+            throw SubprocessError(
+                code: .init(.failedToCreatePipe),
+                underlyingError: .init(rawValue: GetLastError())
             )
         }
         let readFd = _open_osfhandle(
@@ -1005,126 +1030,111 @@ extension FileDescriptor {
         )
     }
 
-    internal static func openDevNull(
-        withAcessMode mode: FileDescriptor.AccessMode
-    ) throws -> FileDescriptor {
-        return try "NUL".withPlatformString {
-            let handle = CreateFileW(
-                $0,
-                DWORD(GENERIC_WRITE),
-                DWORD(FILE_SHARE_WRITE),
-                nil,
-                DWORD(OPEN_EXISTING),
-                DWORD(FILE_ATTRIBUTE_NORMAL),
-                nil
-            )
-            guard let handle = handle,
-                  handle != INVALID_HANDLE_VALUE else {
-                throw CocoaError.windowsError(
-                    underlying: GetLastError(),
-                    errorCode: .fileReadUnknown
-                )
-            }
-            let devnull = _open_osfhandle(
-                intptr_t(bitPattern: handle),
-                mode.rawValue
-            )
-            return FileDescriptor(rawValue: devnull)
-        }
-    }
-
-    var platformDescriptor: Subprocess.PlatformFileDescriptor {
+    var platformDescriptor: PlatformFileDescriptor {
         return HANDLE(bitPattern: _get_osfhandle(self.rawValue))!
     }
 
-    internal func readChunk(upToLength maxLength: Int) async throws -> Data? {
-        let result = try await self.readUntilEOF(upToLength: maxLength)
-        guard !result.isEmpty else {
-            return nil
+    internal func readChunk(upToLength maxLength: Int) async throws -> Buffer? {
+        return try await withCheckedThrowingContinuation { continuation in
+            self.readUntilEOF(
+                upToLength: maxLength
+            ) { result in
+                switch result {
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                case .success(let bytes):
+                    continuation.resume(returning: Buffer(data: bytes))
+                }
+            }
         }
-        return result
     }
 
-    internal func readUntilEOF(upToLength maxLength: Int) async throws -> Data {
-        // TODO: Figure out a better way to asynchornously read
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                var totalBytesRead: Int = 0
-                var lastError: DWORD? = nil
-                let values = Array<UInt8>(
-                    unsafeUninitializedCapacity: maxLength
-                ) { buffer, initializedCount in
-                    while true {
-                        guard let baseAddress = buffer.baseAddress else {
-                            initializedCount = 0
-                            break
-                        }
-                        let bufferPtr = baseAddress.advanced(by: totalBytesRead)
-                        var bytesRead: DWORD = 0
-                        let readSucceed = ReadFile(
-                            self.platformDescriptor,
-                            UnsafeMutableRawPointer(mutating: bufferPtr),
-                            DWORD(maxLength - totalBytesRead),
-                            &bytesRead,
-                            nil
-                        )
-                        if !readSucceed {
-                            // Windows throws ERROR_BROKEN_PIPE when the pipe is closed
-                            let error = GetLastError()
-                            if error == ERROR_BROKEN_PIPE {
-                                // We are done reading
-                                initializedCount = totalBytesRead
-                            } else {
-                                // We got some error
-                                lastError = error
-                                initializedCount = 0
-                            }
-                            break
+    internal func readUntilEOF(
+        upToLength maxLength: Int,
+        resultHandler: sending @escaping (Swift.Result<Array<UInt8>, any Error>) -> Void
+    ) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            var totalBytesRead: Int = 0
+            var lastError: DWORD? = nil
+            let values = Array<UInt8>(
+                unsafeUninitializedCapacity: maxLength
+            ) { buffer, initializedCount in
+                while true {
+                    guard let baseAddress = buffer.baseAddress else {
+                        initializedCount = 0
+                        break
+                    }
+                    let bufferPtr = baseAddress.advanced(by: totalBytesRead)
+                    var bytesRead: DWORD = 0
+                    let readSucceed = ReadFile(
+                        self.platformDescriptor,
+                        UnsafeMutableRawPointer(mutating: bufferPtr),
+                        DWORD(maxLength - totalBytesRead),
+                        &bytesRead,
+                        nil
+                    )
+                    if !readSucceed {
+                        // Windows throws ERROR_BROKEN_PIPE when the pipe is closed
+                        let error = GetLastError()
+                        if error == ERROR_BROKEN_PIPE {
+                            // We are done reading
+                            initializedCount = totalBytesRead
                         } else {
-                            // We succesfully read the current round
-                            totalBytesRead += Int(bytesRead)
+                            // We got some error
+                            lastError = error
+                            initializedCount = 0
                         }
+                        break
+                    } else {
+                        // We succesfully read the current round
+                        totalBytesRead += Int(bytesRead)
+                    }
 
-                        if totalBytesRead >= maxLength {
-                            initializedCount = min(maxLength, totalBytesRead)
-                            break
+                    if totalBytesRead >= maxLength {
+                        initializedCount = min(maxLength, totalBytesRead)
+                        break
+                    }
+                }
+            }
+            if let lastError = lastError {
+                let windowsError = SubprocessError(
+                    code: .init(.failedToReadFromSubprocess),
+                    underlyingError: .init(rawValue: lastError)
+                )
+                resultHandler(.failure(windowsError))
+            } else {
+                resultHandler(.success(values))
+            }
+        }
+    }
+
+    internal func write(
+        _ array: [UInt8]
+    ) async throws -> Int {
+        try await withCheckedThrowingContinuation { continuation in
+            // TODO: Figure out a better way to asynchornously write
+            DispatchQueue.global(qos: .userInitiated).async {
+                array.withUnsafeBytes {
+                    self.write($0) { writtenLength, error in
+                        if let error = error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume(returning: writtenLength)
                         }
                     }
                 }
-                if let lastError = lastError {
-                    continuation.resume(throwing: CocoaError.windowsError(
-                        underlying: lastError,
-                        errorCode: .fileReadUnknown)
-                    )
-                } else {
-                    continuation.resume(returning: Data(values))
-                }
             }
         }
     }
 
-    internal func write<WriteSequence: Sequence & Sendable>(
-        _ data: WriteSequence
-    ) async throws where WriteSequence.Element == UInt8 {
-        return try await withCheckedThrowingContinuation { continuation in
-            self.write(data) { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-                continuation.resume()
-            }
-        }
-    }
-
-    internal func write<WriteSequence: Sequence & Sendable>(
-        _ sequence: WriteSequence,
-        completion: @escaping (Error?) -> Void
-    ) where WriteSequence.Element == UInt8 {
+    package func write(
+        _ ptr: UnsafeRawBufferPointer,
+        completion: @escaping (Int, Swift.Error?) -> Void
+    ) {
         func _write(
             _ ptr: UnsafeRawBufferPointer,
             count: Int,
-            completion: @escaping (Error?) -> Void
+            completion: @escaping (Int, Swift.Error?) -> Void
         ) {
             var writtenBytes: DWORD = 0
             let writeSucceed = WriteFile(
@@ -1135,51 +1145,18 @@ extension FileDescriptor {
                 nil
             )
             if !writeSucceed {
-                let error = CocoaError.windowsError(
-                    underlying: GetLastError(),
-                    errorCode: .fileWriteUnknown
+                let error = SubprocessError(
+                    code: .init(.failedToWriteToSubprocess),
+                    underlyingError: .init(rawValue: GetLastError())
                 )
-                completion(error)
+                completion(Int(writtenBytes), error)
             } else {
-                completion(nil)
-            }
-        }
-        // TODO: Figure out a better way to asynchornously write
-        DispatchQueue.global(qos: .userInitiated).async {
-            if let array = sequence as? [UInt8] {
-                array.withUnsafeBytes { ptr in
-                    _write(ptr, count: array.count, completion: completion)
-                }
-            } else if let data = sequence as? Data {
-                data.withUnsafeBytes { ptr in
-                    _write(ptr, count: data.count, completion: completion)
-                }
-            } else {
-                // Slow case: copy the buffer
-                let array = Array(sequence)
-                array.withUnsafeBytes { ptr in
-                    _write(ptr, count: array.count, completion: completion)
-                }
+                completion(Int(writtenBytes), nil)
             }
         }
     }
 }
 
-extension String {
-    static let debugDescriptionErrorKey = "DebugDescription"
-}
-
-// MARK: - CocoaError + Win32
-internal let NSUnderlyingErrorKey = "NSUnderlyingError"
-
-extension CocoaError {
-    static func windowsError(underlying: DWORD, errorCode: Code) -> CocoaError {
-        let userInfo = [
-            NSUnderlyingErrorKey : Win32Error(underlying)
-        ]
-        return CocoaError(errorCode, userInfo: userInfo)
-    }
-}
 
 private extension Optional where Wrapped == String {
     func withOptionalCString<Result, Encoding>(
@@ -1212,7 +1189,10 @@ extension String {
         _ body: (UnsafePointer<WCHAR>) throws -> Result
     ) throws -> Result {
         guard !isEmpty else {
-            throw CocoaError(.fileReadInvalidFileName)
+            throw SubprocessError(
+                code: .init(.invalidWindowsPath(self)),
+                underlyingError: nil
+            )
         }
 
         var iter = self.utf8.makeIterator()
@@ -1226,9 +1206,9 @@ extension String {
             let dwLength: DWORD = GetFullPathNameW(pwszPath, 0, nil, nil)
             return try withUnsafeTemporaryAllocation(of: WCHAR.self, capacity: Int(dwLength)) {
                 guard GetFullPathNameW(pwszPath, DWORD($0.count), $0.baseAddress, nil) > 0 else {
-                    throw CocoaError.windowsError(
-                        underlying: GetLastError(),
-                        errorCode: .fileReadUnknown
+                    throw SubprocessError(
+                        code: .init(.invalidWindowsPath(self)),
+                        underlyingError: .init(rawValue: GetLastError())
                     )
                 }
 
@@ -1239,19 +1219,6 @@ extension String {
     }
 }
 
-struct Win32Error: Error {
-    public typealias Code = DWORD
-    public let code: Code
-
-    public static var errorDomain: String {
-        return "NSWin32ErrorDomain"
-    }
-
-    public init(_ code: Code) {
-        self.code = code
-    }
-}
-
 internal extension UInt8 {
     static var _slash: UInt8 { UInt8(ascii: "/") }
     static var _backslash: UInt8 { UInt8(ascii: "\\") }
@@ -1259,6 +1226,15 @@ internal extension UInt8 {
 
     var isLetter: Bool? {
         return (0x41 ... 0x5a) ~= self || (0x61 ... 0x7a) ~= self
+    }
+}
+
+extension ManagedOutputProtocol {
+    internal func output(from data: [UInt8]) throws -> OutputType {
+        return try data.withUnsafeBytes {
+            let span = RawSpan(_unsafeBytes: $0)
+            return try self.output(from: span)
+        }
     }
 }
 

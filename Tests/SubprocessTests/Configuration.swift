@@ -2,7 +2,7 @@
 import XCTest
 import SystemPackage
 
-struct Ls: Subprocess.ConfigurationBuilder {
+struct Ls: ConfigurationBuilder {
     var options: [Option]
 
     var paths: [FilePath]
@@ -23,8 +23,8 @@ struct Ls: Subprocess.ConfigurationBuilder {
         self.paths = paths
     }
 
-    public func config() -> Subprocess.Configuration {
-        return Subprocess.Configuration(
+    public func config() -> Configuration {
+        return Configuration(
             executable: .named("ls"),
             arguments: .init(self.options.map( { $0.argument } ) + self.paths.map( { $0.description } ))
         )
@@ -33,7 +33,7 @@ struct Ls: Subprocess.ConfigurationBuilder {
 
 final class SubprocessConfigurationTests: XCTestCase {
     public func testCommandBuilder() async throws {
-        let result = try await Subprocess.run(
+        let result = try await run(
             Ls(.long, paths: ".")
         )
         print(result.standardOutput)
