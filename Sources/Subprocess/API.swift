@@ -204,6 +204,7 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///   - error: The method to use for redirecting the standard error.
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a CollectedResult containing the result of the run.
+@available(macOS 9999, *)
 public func run<
     Input: InputProtocol,
     Output: OutputProtocol,
@@ -214,21 +215,22 @@ public func run<
     output: Output = .string,
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error> {
-    let result = try await configuration.config().run(input: input, output: output, error: error) { execution in
-        let (standardOutput, standardError) = try await execution.captureIOs()
+    let result = try await configuration.config().run(input: input, output: output, error: error){ execution in
+        let (
+            standardOutput,
+            standardError,
+        ) = try await execution.captureIOs()
         return (
             processIdentifier: execution.processIdentifier,
             standardOutput: standardOutput,
-            standardError: standardError
+            standardError: standardError,
         )
     }
     return CollectedResult(
         processIdentifier: result.value.processIdentifier,
         terminationStatus: result.terminationStatus,
-        output: output,
-        error: error,
-        standardOutputData: result.value.standardOutput,
-        standardErrorData: result.value.standardError
+        standardOutput: result.value.standardOutput,
+        standardError: result.value.standardError,
     )
 }
 
