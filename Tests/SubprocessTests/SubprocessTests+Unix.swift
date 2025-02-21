@@ -433,10 +433,11 @@ extension SubprocessUnixTests {
             arguments: [theMysteriousIsland.string],
             output: .sequence,
             error: .discarded
-        ) { subprocess in
+        ) { execution in
             var buffer = Data()
-            for try await chunk in subprocess.standardOutput {
-                buffer += chunk
+            for try await chunk in execution.standardOutput {
+                let currentChunk = chunk.withUnsafeBytes { Data($0) }
+                buffer += currentChunk
             }
             return buffer
         }
@@ -453,7 +454,7 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .path("/bin/cat"),
             input: .fileDescriptor(inputFd, closeAfterSpawningProcess: true),
-            output: .buffer(limit: 2048 * 1024),
+            output: .bytes(limit: 2048 * 1024),
         )
         #expect(catResult.terminationStatus.isSuccess)
         #expect(expected.elementsEqual(catResult.standardOutput))
@@ -604,8 +605,9 @@ extension SubprocessUnixTests {
                 group.addTask {
                     var outputs: [String] = []
                     for try await bit in subprocess.standardOutput {
-                        let bitString = String(decoding: bit, as: UTF8.self)
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        let bitString = bit.withUnsafeBytes { ptr in
+                            return String(decoding: ptr, as: UTF8.self)
+                        }.trimmingCharacters(in: .whitespacesAndNewlines)
                         if bitString.contains("\n") {
                             outputs.append(contentsOf: bitString.split(separator: "\n").map{ String($0) })
                         } else {

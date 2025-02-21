@@ -68,7 +68,7 @@ extension Execution where Output == SequenceOutput {
     /// - `.output` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardOutput: some AsyncSequence<Buffer, any Swift.Error> {
+    public var standardOutput: some AsyncSequence<SequenceOutput.Buffer, any Swift.Error> {
         guard let fd = self.output
             .consumeReadFileDescriptor() else {
             fatalError("The standard output has already been consumed")
@@ -83,7 +83,7 @@ extension Execution where Error == SequenceOutput {
     /// - `.error` wasn't set to `.redirectToSequence` when the subprocess was spawned;
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
-    public var standardError: some AsyncSequence<Buffer, any Swift.Error> {
+    public var standardError: some AsyncSequence<SequenceOutput.Buffer, any Swift.Error> {
         guard let fd = self.error
             .consumeReadFileDescriptor() else {
             fatalError("The standard error has already been consumed")

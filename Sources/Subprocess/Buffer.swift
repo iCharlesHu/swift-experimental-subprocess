@@ -11,46 +11,27 @@
 
 @preconcurrency internal import Dispatch
 
-/// A random and sequential accessible sequence of zero or more bytes.
-public struct Buffer: Sendable {
+extension SequenceOutput {
+    /// A immutable collection of bytes
+    public struct Buffer: Sendable {
 #if os(Windows)
-    private var data: [UInt8]
+        private var data: [UInt8]
 
-    internal init(data: [UInt8]) {
-        self.data = data
-    }
+        internal init(data: [UInt8]) {
+            self.data = data
+        }
 #else
-    private var data: DispatchData
+        private var data: DispatchData
 
-    internal init(data: DispatchData) {
-        self.data = data
-    }
-#endif
-    
-    
-    /// Access the raw bytes stored in this buffer
-    /// - Parameter body: A closure with an `UnsafeRawBufferPointer` parameter that
-    ///   points to the contiguous storage for the type. If no such storage exists,
-    ///   the method creates it. If body has a return value, this method also returns
-    ///   that value. The argument is valid only for the duration of the
-    ///   closure’s execution.
-    /// - Returns: The return value, if any, of the body closure parameter.
-    public func withUnsafeBytes<ResultType>(
-        _ body: (UnsafeRawBufferPointer) throws -> ResultType
-    ) rethrows -> ResultType {
-#if os(Windows)
-        return try self.data.withUnsafeBytes(body)
-#else
-        return try self.data.withUnsafeBytes { ptr in
-            let bytes = UnsafeRawBufferPointer(start: ptr, count: self.data.count)
-            return try body(bytes)
+        internal init(data: DispatchData) {
+            self.data = data
         }
 #endif
     }
 }
 
 // MARK: - Properties
-extension Buffer {
+extension SequenceOutput.Buffer {
     /// Number of bytes stored in the buffer
     public var count: Int {
         return self.data.count
@@ -62,47 +43,81 @@ extension Buffer {
     }
 }
 
-// MARK: - Operators
-extension Buffer {
-    
-    /// Appends the specified buffer to the end of this buffer.
-    /// - Parameter other: buffer to append
-    public mutating func append(_ other: Buffer) {
-        var current = self.data
+// MARK: - Accessors
+extension SequenceOutput.Buffer {
+    /// Access the raw bytes stored in this buffer
+    /// - Parameter body: A closure with an `UnsafeRawBufferPointer` parameter that
+    ///   points to the contiguous storage for the type. If no such storage exists,
+    ///   the method creates it. If body has a return value, this method also returns
+    ///   that value. The argument is valid only for the duration of the
+    ///   closure’s SequenceOutput.
+    /// - Returns: The return value, if any, of the body closure parameter.
+    public func withUnsafeBytes<ResultType>(
+        _ body: (UnsafeRawBufferPointer) throws -> ResultType
+    ) rethrows -> ResultType {
 #if os(Windows)
-        current.append(contentsOf: other.data)
+        return try self.data.withUnsafeBytes(body)
 #else
-        current.append(other.data)
+        // Although DispatchData was designed to be uncontiguous, in practice
+        // we found that almost all DispatchData are contiguous.
+        return try self.data.withUnsafeBytes { ptr in
+            let bytes = UnsafeRawBufferPointer(start: ptr, count: self.data.count)
+            return try body(bytes)
+        }
 #endif
-        self.data = current
     }
 
-    /// Creates a new buffer by concatenating two buffers.
-    /// - Parameters:
-    ///   - lhs: first buffer to concatenate
-    ///   - rhs: second buffer to concatenate
-    /// - Returns: the new buffer
-    public static func +(lhs: Buffer, rhs: Buffer) -> Buffer {
-        var result = lhs
-        result.append(rhs)
-        return result
+    // Access the storge backing this Buffer
+    @available(macOS 9999, *)
+    var bytes: RawSpan {
+        var backing: SpanBacking?
+        self.data.enumerateBytes { buffer, byteIndex, stop in
+            if _fastPath(backing == nil) {
+                // In practice, almost all `DispatchData` is contiguous
+                backing = .pointer(buffer)
+            } else {
+                // This DispatchData is not contiguous. We need to copy
+                // the bytes out
+                let contents = Array(buffer)
+                switch backing! {
+                case .pointer(let ptr):
+                    // Convert the ptr to array
+                    let existing = Array(ptr)
+                    backing = .array(existing + contents)
+                case .array(let array):
+                    backing = .array(array + contents)
+                }
+            }
+        }
+        guard let backing = backing else {
+            let empty = UnsafeRawBufferPointer(start: nil, count: 0)
+            let span = RawSpan(_unsafeBytes: empty)
+            return _overrideLifetime(of: span, to: self)
+        }
+        switch backing {
+        case .pointer(let ptr):
+            let span = RawSpan(_unsafeElements: ptr)
+            return _overrideLifetime(of: span, to: self)
+        case .array(let array):
+            let ptr = array.withUnsafeBytes { $0 }
+            let span = RawSpan(_unsafeBytes: ptr)
+            return _overrideLifetime(of: span, to: self)
+        }
     }
-    
-    /// Appends the elements of a buffer to a buffer.
-    /// - Parameters:
-    ///   - lhs: the buffer to append to
-    ///   - rhs: a buffer
-    public static func +=(lhs: inout Buffer, rhs: Buffer) {
-        lhs.append(rhs)
+
+    private enum SpanBacking {
+        case pointer(UnsafeBufferPointer<UInt8>)
+        case array([UInt8])
     }
 }
 
+
 // MARK: - Hashable, Equatable
-extension Buffer: Equatable, Hashable {
+extension SequenceOutput.Buffer: Equatable, Hashable {
 #if os(Windows)
     // Compiler generated conformances
 #else
-    public static func == (lhs: Buffer, rhs: Buffer) -> Bool {
+    public static func == (lhs: SequenceOutput.Buffer, rhs: SequenceOutput.Buffer) -> Bool {
         return lhs.data.elementsEqual(rhs.data)
     }
 
@@ -118,24 +133,3 @@ extension Buffer: Equatable, Hashable {
 #endif
 }
 
-// MARK: - RandomAccessCollection
-extension Buffer: RandomAccessCollection {
-    public typealias Index = Int
-    public typealias Element = UInt8
-    public typealias SubSequence = Slice<Buffer>
-    public typealias Indices = Range<Int>
-
-    public subscript(position: Int) -> UInt8 {
-        _read {
-            yield self.data[position]
-        }
-    }
-    
-    public var startIndex: Int {
-        return self.data.startIndex
-    }
-    
-    public var endIndex: Int {
-        return self.data.endIndex
-    }
-}

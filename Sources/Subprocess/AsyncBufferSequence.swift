@@ -18,11 +18,11 @@ import System
 internal struct AsyncBufferSequence: AsyncSequence, Sendable {
     internal typealias Failure = any Swift.Error
 
-    internal typealias Element = Buffer
+    internal typealias Element = SequenceOutput.Buffer
 
     @_nonSendable
     internal struct Iterator: AsyncIteratorProtocol {
-        internal typealias Element = Buffer
+        internal typealias Element = SequenceOutput.Buffer
 
         private let fileDescriptor: FileDescriptor
         private var buffer: [UInt8]
@@ -36,7 +36,7 @@ internal struct AsyncBufferSequence: AsyncSequence, Sendable {
             self.finished = false
         }
 
-        internal mutating func next() async throws -> Buffer? {
+        internal mutating func next() async throws -> SequenceOutput.Buffer? {
             let data = try await self.fileDescriptor.readChunk(
                 upToLength: readBufferSize
             )

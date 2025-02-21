@@ -393,7 +393,7 @@ extension FileDescriptor {
         return self
     }
 
-    package func readChunk(upToLength maxLength: Int) async throws -> Buffer? {
+    package func readChunk(upToLength maxLength: Int) async throws -> SequenceOutput.Buffer? {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchIO.read(
                 fromFileDescriptor: self.rawValue,
@@ -412,7 +412,7 @@ extension FileDescriptor {
                 if data.isEmpty {
                     continuation.resume(returning: nil)
                 } else {
-                    continuation.resume(returning: Buffer(data: data))
+                    continuation.resume(returning: SequenceOutput.Buffer(data: data))
                 }
             }
         }

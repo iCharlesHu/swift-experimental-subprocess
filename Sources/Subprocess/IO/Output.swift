@@ -199,15 +199,15 @@ public final class StringOutput<Encoding: Unicode.Encoding>: ManagedOutputProtoc
 }
 
 /// A concrete `Output` type for subprocesses that collects output
-/// from the subprocess as `Buffer`. This option must be used with
+/// from the subprocess as `[UInt8]`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
 @available(macOS 9999, *)
-public final class BufferOutput: ManagedOutputProtocol {
-    public typealias OutputType = Buffer
+public final class BytesOutput: ManagedOutputProtocol {
+    public typealias OutputType = [UInt8]
     public let maxSize: Int
     public let pipe: Pipe
 
-    public func captureOutput() async throws -> Buffer {
+    public func captureOutput() async throws -> [UInt8] {
         return try await withCheckedThrowingContinuation { continuation in
             guard let readFd = self.consumeReadFileDescriptor() else {
                 fatalError("Trying to capture Subprocess output that has already been closed.")
@@ -217,9 +217,8 @@ public final class BufferOutput: ManagedOutputProtocol {
                     switch result {
                     case .success(let data):
                         //FIXME: remove workaround for rdar://143992296
-                        let output = Buffer(data: data)
                         try readFd.close()
-                        continuation.resume(returning: output)
+                        continuation.resume(returning: data.array())
                     case .failure(let error):
                         try readFd.close()
                         continuation.resume(throwing: error)
@@ -232,7 +231,7 @@ public final class BufferOutput: ManagedOutputProtocol {
         }
     }
 
-    public func output(from span: RawSpan) throws -> Buffer {
+    public func output(from span: RawSpan) throws -> [UInt8] {
         fatalError("Not implemented")
     }
 
@@ -314,14 +313,14 @@ extension OutputProtocol {
 }
 
 @available(macOS 9999, *)
-extension OutputProtocol where Self == BufferOutput {
+extension OutputProtocol where Self == BytesOutput {
     /// Create a `Subprocess` output that collects output as
     /// `Buffer` with 128kb limit.
-    public static var buffer: Self { .init(limit: 128 * 1024) }
+    public static var bytes: Self { .init(limit: 128 * 1024) }
 
     /// Create a `Subprocess` output that collects output as
     /// `Buffer` up to limit it bytes.
-    public static func buffer(limit: Int) -> Self {
+    public static func bytes(limit: Int) -> Self {
         return .init(limit: limit)
     }
 }
@@ -400,6 +399,21 @@ extension ManagedOutputProtocol {
             let span = RawSpan(_unsafeBytes: bufferPtr)
             return try self.output(from: span)
         }
+    }
+}
+
+extension DispatchData {
+    internal func array() -> [UInt8] {
+        var result: [UInt8]?
+        self.enumerateBytes { buffer, byteIndex, stop in
+            let currentChunk = Array(UnsafeRawBufferPointer(buffer))
+            if result == nil {
+                result = currentChunk
+            } else {
+                result?.append(contentsOf: currentChunk)
+            }
+        }
+        return result ?? []
     }
 }
 

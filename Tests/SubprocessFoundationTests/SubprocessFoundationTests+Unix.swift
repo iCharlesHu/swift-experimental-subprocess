@@ -126,7 +126,8 @@ struct SubprocessFoundationTests {
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
-                buffer += chunk
+                let currentChunk = chunk.withUnsafeBytes { Data($0) }
+                buffer += currentChunk
             }
             return buffer
         }
@@ -162,7 +163,8 @@ struct SubprocessFoundationTests {
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
-                buffer += chunk
+                let currentChunk = chunk.withUnsafeBytes { Data($0) }
+                buffer += currentChunk
             }
             return buffer
         }

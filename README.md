@@ -1237,7 +1237,7 @@ The core `Subprocess` module comes with the following concrete output types:
 - `DiscardedOutput`: indicates that the `Subprocess` should not collect or redirect output from the child process.
 - `FileDescriptorOutput`: writes output to a specified `FileDescriptor`. Developers have the option to instruct the `Subprocess` to automatically close the provided `FileDescriptor` after the subprocess is spawned.
 - `StringOutput`: collects output from the subprocess as `String` with the given encoding.
-- `BufferOutput`: collects output from subprocess as `Buffer`.
+- `BytesOutput`: collects output from subprocess as `[UInt8]`.
 - `SequenceOutput`: redirects the child output to the `.standardOutput` or `.standardError` property of `Execution`. This output type is only applicable to the `run()` family that takes a custom closure.
 
 
@@ -1307,10 +1307,10 @@ public struct FileDescriptorOutput: OutputProtocol { }
 public struct StringOutput<Encoding: Unicode.Encoding>: ManagedOutputProtocol { }
 
 /// A concrete `Output` type for subprocesses that collects output
-/// from the subprocess as `Buffer`. This option must be used with
+/// from the subprocess as `[UInt8]`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
 @available(macOS 9999, *)
-public final class BufferOutput: ManagedOutputProtocol { }
+public final class BytesOutput: ManagedOutputProtocol { }
 
 /// A concrete `Output` type for subprocesses that redirects
 /// the child output to the `.standardOutput` or `.standardError`
@@ -1355,14 +1355,14 @@ extension OutputProtocol {
 }
 
 @available(macOS 9999, *) // Span equivelent
-extension OutputProtocol where Self == BufferOutput {
+extension OutputProtocol where Self == BytesOutput {
     /// Create a `Subprocess` output that collects output as
     /// `Buffer` with 128kb limit.
-    public static var buffer: Self
+    public static var bytes: Self
 
     /// Create a `Subprocess` output that collects output as
     /// `Buffer` up to limit it bytes.
-    public static func buffer(limit: Int) -> Self
+    public static func bytes(limit: Int) -> Self
 }
 ```
 
@@ -1421,77 +1421,61 @@ let result = try await run(
 ```
 
 
-### `Buffer`
+### `SequenceOutput.Buffer`
 
-Since the core `Subprocess` module does not depend on `Foundation`, it necessitates its own buffer type for outputs. `Buffer` is designed to serve as a simple container of “collection of bytes” that conforms to `RandomAccessCollection`. `Buffer` enables `Subprocess` to minimize the frequency of data copying by retaining references to internal data types, a capability that `Array<UInt8>` lacks.
-
-`Buffer` is primarily utilized by `SequenceOutput` and, naturally, `BufferOutput`.
+When utilizing the closure-based `run()` method with `SequenceOutput`, developers have the option to ‘stream’ the standard output or standard error of the subprocess as an `AsyncSequence`. To enhance performance, it’s more efficient to stream a collection of bytes at once rather than individually. Since the core `Subprocess` module doesn’t rely on `Foundation`, we propose introducing a simple `struct Buffer` to serve as our ‘collection of bytes’. This `Buffer` enables `Subprocess` to reduce the frequency of data copying by maintaining references to internal data types.
 
 ```swift
-/// A random and sequential accessible sequence of zero or more bytes.
-public struct Buffer: Sendable, Hashable, Equatable {
-    /// Number of bytes stored in the buffer
-    public var count: Int { get }
+extension SequenceOutput {
+    /// A immutable collection of bytes
+    public struct Buffer: Sendable, Hashable, Equatable {
+        /// Number of bytes stored in the buffer
+        public var count: Int { get }
 
-    /// A Boolean value indicating whether the collection is empty.
-    public var isEmpty: Bool { get }
+        /// A Boolean value indicating whether the collection is empty.
+        public var isEmpty: Bool { get }
 
-    /// Access the raw bytes stored in this buffer
-    /// - Parameter body: A closure with an `UnsafeRawBufferPointer` parameter that
-    ///   points to the contiguous storage for the type. If no such storage exists,
-    ///   the method creates it. If body has a return value, this method also returns
-    ///   that value. The argument is valid only for the duration of the
-    ///   closure’s execution.
-    /// - Returns: The return value, if any, of the body closure parameter.
-    public func withUnsafeBytes<ResultType>(
-        _ body: (UnsafeRawBufferPointer) throws -> ResultType
-    ) rethrows -> ResultType
+        /// Access the raw bytes stored in this buffer
+        /// - Parameter body: A closure with an `UnsafeRawBufferPointer` parameter that
+        ///   points to the contiguous storage for the type. If no such storage exists,
+        ///   the method creates it. If body has a return value, this method also returns
+        ///   that value. The argument is valid only for the duration of the
+        ///   closure’s execution.
+        /// - Returns: The return value, if any, of the body closure parameter.
+        public func withUnsafeBytes<ResultType>(
+            _ body: (UnsafeRawBufferPointer) throws -> ResultType
+        ) rethrows -> ResultType
 
-    /// Appends the specified buffer to the end of this buffer.
-    /// - Parameter other: buffer to append
-    public mutating func append(_ other: Buffer)
-
-    /// Creates a new buffer by concatenating two buffers.
-    /// - Parameters:
-    ///   - lhs: first buffer to concatenate
-    ///   - rhs: second buffer to concatenate
-    /// - Returns: the new buffer
-    public static func +(lhs: Buffer, rhs: Buffer) -> Buffer
-
-    /// Appends the elements of a buffer to a buffer.
-    /// - Parameters:
-    ///   - lhs: the buffer to append to
-    ///   - rhs: a buffer
-    public static func +=(lhs: inout Buffer, rhs: Buffer)
+        /// Access the bytes stored in this buffer as `RawSpan`
+        @available(macOS 9999, *) // Span equivalent
+        var bytes: RawSpan { get }
+    }
 }
 
-extension Buffer: RandomAccessCollection {
-    public typealias Index = Int
-    public typealias Element = UInt8
-    public typealias SubSequence = Slice<Buffer>
-    public typealias Indices = Range<Int>
-}
 ```
 
-Since `Buffer` conforms to `RandomAccessCollection` (hence `Sequence`), you can use `Buffer` on many standard library methods "out of the box":
+`Buffer` is designed specifically to meet the specific needs of `Subprocess` rather than serving as a general-purpose byte container. It’s immutable, and the main method to access data from a `Buffer` is through `RawSpan`.
 
 ```swift
-// Construct string
-let result = try await run(
-    .name("my-process")
+let catResult = try await Subprocess.run(
+    .path("..."),
+    output: .sequence,
+    error: .discarded
 ) { execution in
-    for buffer: Buffer in execution.standardOutput {
-        let string = String(decoding: buffer, as: UTF8.self)
+    for try await chunk in execution.standardOutput {
+        // Pending String RawSpan support
+        let value = String(chunk.bytes, as: UTF8.self)
+        if value.contains("Done") {
+            await execution.teardown(
+                using: [
+                    .sendSignal(.quit, allowedDurationToExit: .milliseconds(500)),
+                ]
+            )
+            return true
+        }
     }
-    return true
+    return false
 }
-
-// Convert `Buffer` to `Data`
-let result = try await run(
-    .name("my-process"),
-    output: .buffer
-)
-let data = Data(result.standardOutput)
 ```
 
 
