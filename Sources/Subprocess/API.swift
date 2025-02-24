@@ -46,29 +46,18 @@ public func run<
     output: Output = .string,
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error> {
-    let result = try await Configuration(
+    let configuration = Configuration(
         executable: executable,
         arguments: arguments,
         environment: environment,
         workingDirectory: workingDirectory,
         platformOptions: platformOptions
     )
-    .run(input: input, output: output, error: error) { execution in
-        let (
-            standardOutput,
-            standardError,
-        ) = try await execution.captureIOs()
-        return (
-            processIdentifier: execution.processIdentifier,
-            standardOutput: standardOutput,
-            standardError: standardError,
-        )
-    }
-    return CollectedResult(
-        processIdentifier: result.value.processIdentifier,
-        terminationStatus: result.terminationStatus,
-        standardOutput: result.value.standardOutput,
-        standardError: result.value.standardError,
+    return try await run(
+        configuration,
+        input: input,
+        output: output,
+        error: error
     )
 }
 
@@ -189,6 +178,48 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 
 
 // MARK: - Configuration Based
+
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime and its IOs.
+/// - Parameters:
+///   - configuration: The `Subprocess` configuration to run.
+///   - input: The input to send to the executable.
+///   - output: The method to use for redirecting the standard output.
+///   - error: The method to use for redirecting the standard error.
+/// - Returns a CollectedResult containing the result of the run.
+@available(macOS 9999, *)
+public func run<
+    Input: InputProtocol,
+    Output: OutputProtocol,
+    Error: OutputProtocol
+>(
+    _ configuration: Configuration,
+    input: Input = .none,
+    output: Output = .string,
+    error: Error = .discarded
+) async throws -> CollectedResult<Output, Error> {
+    let result = try await configuration.run(
+        input: input,
+        output: output,
+        error: error
+    )  { execution in
+        let (
+            standardOutput,
+            standardError,
+        ) = try await execution.captureIOs()
+        return (
+            processIdentifier: execution.processIdentifier,
+            standardOutput: standardOutput,
+            standardError: standardError,
+        )
+    }
+    return CollectedResult(
+        processIdentifier: result.value.processIdentifier,
+        terminationStatus: result.terminationStatus,
+        standardOutput: result.value.standardOutput,
+        standardError: result.value.standardError,
+    )
+}
 
 /// Run a executable with given parameters specified by a `Configuration`
 /// - Parameters:

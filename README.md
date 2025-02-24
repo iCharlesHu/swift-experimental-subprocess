@@ -333,38 +333,25 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
 
-/// Run a executable with given parameters specified by a `Configuration`
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime and its IOs.
 /// - Parameters:
 ///   - configuration: The `Subprocess` configuration to run.
+///   - input: The input to send to the executable.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
-///   - body: The custom configuration body to manually control
-///       the running process and write to its standard input.
-/// - Returns a ExecutableResult type containing the return value
-///     of the closure.
-public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
+/// - Returns a CollectedResult containing the result of the run.
+@available(macOS 9999, *)
+public func run<
+    Input: InputProtocol,
+    Output: OutputProtocol,
+    Error: OutputProtocol
+>(
     _ configuration: Configuration,
-    output: Output,
-    error: Error,
-    isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
-) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
-
-/// Run a executable with given parameters specified by a `Configuration`
-/// and discard its standard error
-/// - Parameters:
-///   - configuration: The `Subprocess` configuration to run.
-///   - output: The method to use for redirecting the standard output.
-///   - body: The custom configuration body to manually control
-///       the running process and write to its standard input.
-/// - Returns a ExecutableResult type containing the return value
-///     of the closure.
-public func run<Result, Output: OutputProtocol>(
-    _ configuration: Configuration,
-    output: Output,
-    isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, DiscardedOutput>, StandardInputWriter) async throws -> Result)
-) async throws -> ExecutionResult<Result> where Output.OutputType == Void
+    input: Input = .none,
+    output: Output = .string,
+    error: Error = .discarded
+) async throws -> CollectedResult<Output, Error>
 
 /// Run a executable with given parameters specified by a `Configuration`,
 /// redirect its standard output to sequence and discard its standard error.
