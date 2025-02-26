@@ -302,7 +302,7 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>) async throws -> Result)
+    body: ((Execution<Output, Error>) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
 
 
@@ -330,7 +330,7 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
+    body: ((Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
 
 /// Run a executable with given parameters and a custom closure
@@ -364,7 +364,7 @@ public func run<
 public func run<Result>(
     _ configuration: Configuration,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<SequenceOutput, DiscardedOutput>, StandardInputWriter) async throws -> Result)
+    body: ((Execution<SequenceOutput, DiscardedOutput>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result>
 ```
 
@@ -621,12 +621,12 @@ extension Execution {
 /// duration allowed for the child process to exit before proceeding
 /// to the next step.
 public struct TeardownStep: Sendable, Hashable {
-    /// Sends `signal` to the process and allows `allowedDurationToExit`
+    /// Sends `signal` to the process and allows `allowedDurationToNextStep`
     /// for the process to exit before proceeding to the next step.
     /// The final step in the sequence will always send a `.kill` signal.
     public static func sendSignal(
         _ signal: Signal,
-        allowedDurationToExit: Duration
+        allowedDurationToNextStep: Duration
     ) -> Self
 }
 
@@ -634,7 +634,7 @@ extension Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal
     /// - Parameter sequence: The  steps to perform.
-    public func teardown(using sequence: [TeardownStep]) async
+    public func teardown(using sequence: some Sequence<TeardownStep> & Sendable) async
 }
 #endif // canImport(Glibc) || canImport(Darwin)
 ```
@@ -648,8 +648,8 @@ let result = try await run(
 ) { execution in
     // ... more work
     await execution.teardown(using: [
-        .sendSignal(.quit, allowedDurationToExit: .milliseconds(100)),
-        .sendSignal(.terminate, allowedDurationToExit: .milliseconds(100)),
+        .sendSignal(.quit, allowedDurationToNextStep: .milliseconds(100)),
+        .sendSignal(.terminate, allowedDurationToNextStep: .milliseconds(100)),
     ])
 }
 ```
@@ -725,6 +725,14 @@ public final actor StandardInputWriter {
     /// - Returns number of bytes written.
     public func write(
         _ array: [UInt8]
+    ) async throws -> Int
+
+    /// Write a `RawSpan` to the standard input of the subprocess.
+    /// - Parameter span: The span to write
+    /// - Returns number of bytes written
+    @available(macOS 9999, *)
+    public func write(
+        _ span: borrowing RawSpan
     ) async throws -> Int
 
     /// Write a StringProtocol to the standard input of the subprocess.
@@ -1455,7 +1463,7 @@ let catResult = try await Subprocess.run(
         if value.contains("Done") {
             await execution.teardown(
                 using: [
-                    .sendSignal(.quit, allowedDurationToExit: .milliseconds(500)),
+                    .sendSignal(.quit, allowedDurationToNextStep: .milliseconds(500)),
                 ]
             )
             return true

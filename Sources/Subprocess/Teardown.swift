@@ -36,14 +36,14 @@ public struct TeardownStep: Sendable, Hashable {
     /// Sends `signal` to the process and allows `allowedDurationToExit`
     /// for the process to exit before proceeding to the next step.
     /// The final step in the sequence will always send a `.kill` signal.
-    public static func sendSignal(
-        _ signal: Signal,
-        allowedDurationToExit: Duration
+    public static func send(
+        signal: Signal,
+        allowedDurationToNextStep: Duration
     ) -> Self {
         return Self(
             storage: .sendSignal(
                 signal,
-                allowedDuration: allowedDurationToExit
+                allowedDuration: allowedDurationToNextStep
             )
         )
     }
@@ -54,7 +54,7 @@ extension Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal
     /// - Parameter sequence: The  steps to perform.
-    public func teardown(using sequence: [TeardownStep]) async {
+    public func teardown(using sequence: some Sequence<TeardownStep> & Sendable) async {
         await withUncancelledTask {
             await self.runTeardownSequence(sequence)
         }
@@ -69,7 +69,7 @@ internal enum TeardownStepCompletion {
 }
 
 extension Execution {
-    internal func runTeardownSequence(_ sequence: [TeardownStep]) async {
+    internal func runTeardownSequence(_ sequence: some Sequence<TeardownStep> & Sendable) async {
         // First insert the `.kill` step
         let finalSequence = sequence + [TeardownStep(storage: .kill)]
         for step in finalSequence {

@@ -589,6 +589,7 @@ extension SubprocessUnixTests {
                 exit 2
                 """,
             ],
+            input: .none,
             output: .sequence,
             error: .discarded
         ) { subprocess in
@@ -597,9 +598,9 @@ extension SubprocessUnixTests {
                     try await Task.sleep(for: .milliseconds(200))
                     // Send shut down signal
                     await subprocess.teardown(using: [
-                        .sendSignal(.quit, allowedDurationToExit: .milliseconds(500)),
-                        .sendSignal(.terminate, allowedDurationToExit: .milliseconds(500)),
-                        .sendSignal(.interrupt, allowedDurationToExit: .milliseconds(1000))
+                        .send(signal: .quit, allowedDurationToNextStep: .milliseconds(500)),
+                        .send(signal: .terminate, allowedDurationToNextStep: .milliseconds(500)),
+                        .send(signal: .interrupt, allowedDurationToNextStep: .milliseconds(1000))
                     ])
                 }
                 group.addTask {

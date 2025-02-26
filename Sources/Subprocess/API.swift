@@ -18,8 +18,8 @@ import System
 
 // MARK: - Collected Result
 
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a executable with given parameters asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - executable: The executable to run.
 ///   - arguments: The arguments to pass to the executable.
@@ -61,8 +61,8 @@ public func run<
     )
 }
 
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a executable with given parameters asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - executable: The executable to run.
 ///   - arguments: The arguments to pass to the executable.
@@ -127,7 +127,7 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>) async throws -> Result)
+    body: ((Execution<Output, Error>) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
     return try await Configuration(
         executable: executable,
@@ -164,7 +164,7 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
+    body: ((Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
     return try await Configuration(
         executable: executable,
@@ -236,7 +236,7 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
+    body: ((Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
     return try await configuration.run(output: output, error: error, body)
 }
