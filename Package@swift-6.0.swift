@@ -1,4 +1,4 @@
-// swift-tools-version: 6.1
+// swift-tools-version: 6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -11,12 +11,6 @@ let package = Package(
             name: "Subprocess",
             targets: ["Subprocess"]
         ),
-    ],
-    traits: [
-        "SubprocessFoundation",
-        .default(
-            enabledTraits: ["SubprocessFoundation"]
-        )
     ],
     dependencies: [
         .package(
@@ -34,14 +28,14 @@ let package = Package(
             dependencies: [
                 "_SubprocessCShims",
                 .product(name: "SystemPackage", package: "swift-system"),
-
             ],
             path: "Sources/Subprocess",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
                 .enableExperimentalFeature("NonescapableTypes"),
                 .enableExperimentalFeature("LifetimeDependence"),
-                .enableExperimentalFeature("Span")
+                .enableExperimentalFeature("Span"),
+                .define("SubprocessFoundation")
             ]
         ),
         .testTarget(

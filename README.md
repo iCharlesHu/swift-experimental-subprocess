@@ -95,7 +95,8 @@
     - `Executable`:
         - Renamed `.named` to `.name`.
         - Renamed `.at` to `.path`.
-    - Split `Subprocess` into two modules: `Subprocess` with no `Foundation` dependency and `SubprocessFoundation` with `Foundation` dependency
+    - Split `Subprocess` into main and `SubprocessFoundation` Traits:
+        - `SubprocessFoundation` traits adds `Foundation` dependency and interop.
     - Introduce `struct Buffer`
 
 ## Introduction
@@ -207,9 +208,11 @@ The latest API documentation can be viewed by running the following command:
 swift package --disable-sandbox preview-documentation --target Subprocess
 ```
 
-### `Subprocess` and `SubprocessFoundation` Modules
+### `SubprocessFoundation` Trait
 
-Within this package, we propose two modules: `Subprocess` and `SubprocessFoundation`. `Subprocess` serves as the “core” module, relying solely on `swift-system` and the standard library. `SubprocessFoundation` extends `Subprocess` by depending on and incorporating types from `Foundation`.
+The core `Subprocess` package is designed to only rely on the standard library and [swift-system](https://github.com/apple/swift-system) (for `FileDescriptor` and `FilePath`). Starting with Swift 6.1 or later, we suggest leveraging the new [`traits` feature](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0450-swiftpm-package-traits.md) to introduce a `SubprocessFoundation` trait, which will be enabled by default. When this trait is on, `Subprocess` includes a dependency on `Foundation` and adds extensions on Foundation types like `Data`.
+
+For Swift 6.0 and earlier versions, `SubprocessFoundation` is effectively always enabled.
 
 
 ### The `run()` Family of Methods
@@ -750,9 +753,10 @@ public final actor StandardInputWriter {
 }
 ```
 
-`SubprocessFoundation` extends `StandardInputWriter` to work with `Data`:
+`SubprocessFoundation` trait extends `StandardInputWriter` to work with `Data`:
 
 ```swift
+#if SubprocessFoundation
 import Foundation
 
 extension StandardInputWriter {
@@ -770,6 +774,7 @@ extension StandardInputWriter {
         _ asyncSequence: AsyncSendableSequence
     ) async throws -> Int where AsyncSendableSequence.Element == Data
 }
+#endif
 ```
 
 
@@ -1156,13 +1161,14 @@ extension InputProtocol {
 }
 ```
 
-`SubprocessFoundation` adds the following concrete input types that work with `Data`:
+`SubprocessFoundation` trait adds the following concrete input types that work with `Data`:
 
 - `DataInput`: reads input from a given `Data`.
 - `DataSequenceInput`: reads input from a given sequence of `Data`.
 - `DataAsyncSequenceInput`: reads input from a given async sequence of `Data`.
 
 ```swift
+#if SubprocessFoundation
 import Foundation
 
 /// A concrete `Input` type for subprocesses that reads input
@@ -1198,6 +1204,7 @@ extension InputProtocol {
         _ asyncSequence: InputSequence
     ) -> Self where Self == DataAsyncSequenceInput<InputSequence>
 }
+#endif
 ```
 
 Here are some examples:
@@ -1362,12 +1369,13 @@ extension OutputProtocol where Self == BytesOutput {
 ```
 
 
-`SubprocessFoundation` adds one additional concrete input:
+`SubprocessFoundation` trait adds one additional concrete input:
 
 - `DataOutput`: collects output from the subprocess as `Data`.
 
 
 ```swift
+#if SubprocessFoundation
 import Foundation
 
 /// A concrete `Output` type for subprocesses that collects output
@@ -1390,6 +1398,7 @@ extension OutputProtocol where Self == DataOutput {
         return .init(limit: limit)
     }
 }
+#endif
 ```
 
 Here are some examples of using different outputs:

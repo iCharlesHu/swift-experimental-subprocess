@@ -9,13 +9,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if SubprocessFoundation
+
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #elseif canImport(Foundation)
 import Foundation
 #endif
 
-import Subprocess
 internal import Dispatch
 
 @available(macOS 9999, *)
@@ -71,3 +72,5 @@ extension DataProtocol {
         }
     }
 }
+
+#endif // SubprocessFoundation

@@ -9,6 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if SubprocessFoundation
+
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #elseif canImport(Foundation)
@@ -21,7 +23,6 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
-import Subprocess
 internal import Dispatch
 
 /// A concrete `Input` type for subprocesses that reads input
@@ -174,3 +175,4 @@ extension FileDescriptor {
 #endif
 }
 
+#endif // SubprocessFoundation
