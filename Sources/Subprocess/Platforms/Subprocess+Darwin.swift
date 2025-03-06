@@ -137,14 +137,16 @@ PlatformOptions(
 
 // MARK: - Spawn
 extension Configuration {
+    @available(macOS 9999, *)
     internal func spawn<
-        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
-        withInput input: Input,
+        withInput inputPipe: CreatedPipe,
         output: Output,
-        error: Error
+        outputPipe: CreatedPipe,
+        error: Error,
+        errorPipe: CreatedPipe
     ) throws -> Execution<Output, Error> {
         let (executablePath,
             env, argv,
@@ -168,21 +170,21 @@ extension Configuration {
         }
         // Input
         var result: Int32 = -1
-        if let inputRead = try input.readFileDescriptor() {
-            result = posix_spawn_file_actions_adddup2(&fileActions, inputRead.rawValue, 0)
+        if let inputRead = inputPipe.readFileDescriptor {
+            result = posix_spawn_file_actions_adddup2(&fileActions, inputRead.wrapped.rawValue, 0)
             guard result == 0 else {
-                try self.cleanupAll(input: input, output: output, error: error)
+                try self.cleanupPreSpawn(input: inputPipe, output: outputPipe, error: errorPipe)
                 throw SubprocessError(
                     code: .init(.spawnFailed),
                     underlyingError: .init(rawValue: result)
                 )
             }
         }
-        if let inputWrite = try input.writeFileDescriptor() {
+        if let inputWrite = inputPipe.writeFileDescriptor {
             // Close parent side
-            result = posix_spawn_file_actions_addclose(&fileActions, inputWrite.rawValue)
+            result = posix_spawn_file_actions_addclose(&fileActions, inputWrite.wrapped.rawValue)
             guard result == 0 else {
-                try self.cleanupAll(input: input, output: output, error: error)
+                try self.cleanupPreSpawn(input: inputPipe, output: outputPipe, error: errorPipe)
                 throw SubprocessError(
                     code: .init(.spawnFailed),
                     underlyingError: .init(rawValue: result)
@@ -190,21 +192,21 @@ extension Configuration {
             }
         }
         // Output
-        if let outputWrite = try output.writeFileDescriptor() {
-            result = posix_spawn_file_actions_adddup2(&fileActions, outputWrite.rawValue, 1)
+        if let outputWrite = outputPipe.writeFileDescriptor {
+            result = posix_spawn_file_actions_adddup2(&fileActions, outputWrite.wrapped.rawValue, 1)
             guard result == 0 else {
-                try self.cleanupAll(input: input, output: output, error: error)
+                try self.cleanupPreSpawn(input: inputPipe, output: outputPipe, error: errorPipe)
                 throw SubprocessError(
                     code: .init(.spawnFailed),
                     underlyingError: .init(rawValue: result)
                 )
             }
         }
-        if let outputRead = try output.readFileDescriptor() {
+        if let outputRead = outputPipe.readFileDescriptor {
             // Close parent side
-            result = posix_spawn_file_actions_addclose(&fileActions, outputRead.rawValue)
+            result = posix_spawn_file_actions_addclose(&fileActions, outputRead.wrapped.rawValue)
             guard result == 0 else {
-                try self.cleanupAll(input: input, output: output, error: error)
+                try self.cleanupPreSpawn(input: inputPipe, output: outputPipe, error: errorPipe)
                 throw SubprocessError(
                     code: .init(.spawnFailed),
                     underlyingError: .init(rawValue: result)
@@ -212,21 +214,21 @@ extension Configuration {
             }
         }
         // Error
-        if let errorWrite = try error.writeFileDescriptor() {
-            result = posix_spawn_file_actions_adddup2(&fileActions, errorWrite.rawValue, 2)
+        if let errorWrite = errorPipe.writeFileDescriptor {
+            result = posix_spawn_file_actions_adddup2(&fileActions, errorWrite.wrapped.rawValue, 2)
             guard result == 0 else {
-                try self.cleanupAll(input: input, output: output, error: error)
+                try self.cleanupPreSpawn(input: inputPipe, output: outputPipe, error: errorPipe)
                 throw SubprocessError(
                     code: .init(.spawnFailed),
                     underlyingError: .init(rawValue: result)
                 )
             }
         }
-        if let errorRead = try error.readFileDescriptor() {
+        if let errorRead = errorPipe.readFileDescriptor {
             // Close parent side
-            result = posix_spawn_file_actions_addclose(&fileActions, errorRead.rawValue)
+            result = posix_spawn_file_actions_addclose(&fileActions, errorRead.wrapped.rawValue)
             guard result == 0 else {
-                try self.cleanupAll(input: input, output: output, error: error)
+                try self.cleanupPreSpawn(input: inputPipe, output: outputPipe, error: errorPipe)
                 throw SubprocessError(
                     code: .init(.spawnFailed),
                     underlyingError: .init(rawValue: result)
@@ -272,7 +274,7 @@ extension Configuration {
 
         // Error handling
         if chdirError != 0 || spawnAttributeError != 0 {
-            try self.cleanupAll(input: input, output: output, error: error)
+            try self.cleanupPreSpawn(input: inputPipe, output: outputPipe, error: errorPipe)
             if spawnAttributeError != 0 {
                 throw SubprocessError(
                     code: .init(.spawnFailed),
@@ -307,7 +309,7 @@ extension Configuration {
         }
         // Spawn error
         if spawnError != 0 {
-            try self.cleanupAll(input: input, output: output, error: error)
+            try self.cleanupPreSpawn(input: inputPipe, output: outputPipe, error: errorPipe)
             throw SubprocessError(
                 code: .init(.spawnFailed),
                 underlyingError: .init(rawValue: spawnError)
@@ -316,7 +318,9 @@ extension Configuration {
         return Execution(
             processIdentifier: .init(value: pid),
             output: output,
-            error: error
+            error: error,
+            outputPipe: outputPipe,
+            errorPipe: errorPipe
         )
     }
 }

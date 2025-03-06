@@ -98,7 +98,7 @@ extension SubprocessError: CustomStringConvertible, CustomDebugStringConvertible
         case .failedToChangeWorkingDirectory(let workingDirectory):
             return "Failed to set working directory to \"\(workingDirectory)\"."
         case .failedToReadFromSubprocess:
-            return "Failed to read bytes from the child process."
+            return "Failed to read bytes from the child process with underlying error: \(self.underlyingError!)"
         case .failedToWriteToSubprocess:
             return "Failed to write bytes to the child process."
         case .failedToMonitorProcess:

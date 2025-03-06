@@ -58,123 +58,7 @@ public struct Configuration: Sendable, Hashable {
         self.platformOptions = platformOptions
     }
 
-    /// Close each input individually, and throw the first error if there's multiple errors thrown
-    @Sendable
-    private func cleanup<
-        Input: InputProtocol,
-        Output: OutputProtocol,
-        Error: OutputProtocol
-    >(
-        execution: Execution<Output, Error>,
-        input: Input,
-        childSide: Bool, parentSide: Bool,
-        attemptToTerminateSubProcess: Bool
-    ) async throws {
-        func safeClose(_ work: () throws -> Void) -> Swift.Error? {
-            do {
-                try work()
-                return nil
-            } catch {
-                return error
-            }
-        }
-
-        guard childSide || parentSide || attemptToTerminateSubProcess else {
-            return
-        }
-
-        var exitError: Swift.Error? = nil
-        // Attempt to teardown the subprocess
-        if attemptToTerminateSubProcess {
-#if os(Windows)
-            exitError = execution.tryTerminate()
-#else
-            await execution.teardown(
-                using: self.platformOptions.teardownSequence
-            )
-#endif
-        }
-
-        var inputError: Swift.Error?
-        var outputError: Swift.Error?
-        var errorError: Swift.Error? // lol
-
-        if childSide {
-            inputError = safeClose(input.closeReadFileDescriptor)
-            outputError = safeClose(execution.output.closeWriteFileDescriptor)
-            errorError = safeClose(execution.error.closeWriteFileDescriptor)
-        }
-
-        if parentSide {
-            inputError = safeClose(input.closeWriteFileDescriptor)
-            outputError = safeClose(execution.output.closeReadFileDescriptor)
-            errorError = safeClose(execution.error.closeReadFileDescriptor)
-        }
-
-        if let inputError = inputError {
-            throw inputError
-        }
-
-        if let outputError = outputError {
-            throw outputError
-        }
-
-        if let errorError = errorError {
-            throw errorError
-        }
-
-        if let exitError = exitError {
-            throw exitError
-        }
-    }
-
-    /// Close each input individually, and throw the first error if there's multiple errors thrown
-    @Sendable
-    internal func cleanupAll<
-        Input: InputProtocol,
-        Output: OutputProtocol,
-        Error: OutputProtocol
-    >(
-        input: Input,
-        output: Output,
-        error: Error
-    ) throws {
-        var inputError: Swift.Error?
-        var outputError: Swift.Error?
-        var errorError: Swift.Error?
-
-        do {
-            try input.closeReadFileDescriptor()
-            try input.closeWriteFileDescriptor()
-        } catch {
-            inputError = error
-        }
-
-        do {
-            try output.closeReadFileDescriptor()
-            try output.closeWriteFileDescriptor()
-        } catch {
-            outputError = error
-        }
-
-        do {
-            try error.closeReadFileDescriptor()
-            try error.closeWriteFileDescriptor()
-        } catch {
-            errorError = error
-        }
-
-        if let inputError = inputError {
-            throw inputError
-        }
-        if let outputError = outputError {
-            throw outputError
-        }
-        if let errorError = errorError {
-            throw errorError
-        }
-    }
-
+    @available(macOS 9999, *)
     internal func run<
         Result,
         Output: OutputProtocol,
@@ -189,53 +73,51 @@ public struct Configuration: Sendable, Hashable {
         ) async throws -> Result
     ) async throws -> ExecutionResult<Result> {
         let input = CustomWriteInput()
+
+        let inputPipe = try input.createPipe()
+        let outputPipe = try output.createPipe()
+        let errorPipe = try error.createPipe()
+
         let execution = try self.spawn(
-            withInput: input,
+            withInput: inputPipe,
             output: output,
-            error: error
+            outputPipe: outputPipe,
+            error: error,
+            errorPipe: errorPipe
         )
         // After spawn, cleanup child side fds
         try await self.cleanup(
             execution: execution,
-            input: input,
+            inputPipe: inputPipe,
+            outputPipe: outputPipe,
+            errorPipe: errorPipe,
             childSide: true,
             parentSide: false,
             attemptToTerminateSubProcess: false
         )
-        return try await withAsyncTaskCancellationHandler {
-            async let waitingStatus = try await monitorProcessTermination(forProcessWithIdentifier: execution.processIdentifier)
+        return try await withAsyncTaskCleanupHandler {
+            async let waitingStatus = try await monitorProcessTermination(
+                forProcessWithIdentifier: execution.processIdentifier
+            )
             // Body runs in the same isolation
-            do {
-                let result = try await body(execution, .init(input: input))
-                // Clean up parent side when body finishes
-                try await self.cleanup(
-                    execution: execution,
-                    input: input,
-                    childSide: false,
-                    parentSide: true,
-                    attemptToTerminateSubProcess: false
-                )
-                let status: TerminationStatus = try await waitingStatus
-                return ExecutionResult(terminationStatus: status, value: result)
-            } catch {
-                // Cleanup everything
-                try await self.cleanup(
-                    execution: execution,
-                    input: input,
-                    childSide: false,
-                    parentSide: true,
-                    attemptToTerminateSubProcess: false
-                )
-                throw error
-            }
-        } onCancel: {
+            let result = try await body(
+                execution,
+                .init(fileDescriptor: inputPipe.writeFileDescriptor!)
+            )
+            return ExecutionResult(
+                terminationStatus: try await waitingStatus,
+                value: result
+            )
+        } onCleanup: {
             // Attempt to terminate the child process
             // Since the task has already been cancelled,
             // this is the best we can do
             try? await self.cleanup(
                 execution: execution,
-                input: input,
-                childSide: true,
+                inputPipe: inputPipe,
+                outputPipe: outputPipe,
+                errorPipe: errorPipe,
+                childSide: false,
                 parentSide: true,
                 attemptToTerminateSubProcess: true
             )
@@ -254,20 +136,30 @@ public struct Configuration: Sendable, Hashable {
         isolation: isolated (any Actor)? = #isolation
     ) async throws -> CollectedResult<Output, Error> {
         let writerInput = CustomWriteInput()
+
+        let inputPipe = try writerInput.createPipe()
+        let outputPipe = try output.createPipe()
+        let errorPipe = try error.createPipe()
+
         let execution = try self.spawn(
-            withInput: writerInput,
+            withInput: inputPipe,
             output: output,
-            error: error
+            outputPipe: outputPipe,
+            error: error,
+            errorPipe: errorPipe
         )
         // After spawn, clean up child side
         try await self.cleanup(
             execution: execution,
-            input: writerInput,
+            inputPipe: inputPipe,
+            outputPipe: outputPipe,
+            errorPipe: errorPipe,
             childSide: true,
             parentSide: false,
             attemptToTerminateSubProcess: false
         )
-        return try await withAsyncTaskCancellationHandler {
+
+        return try await withAsyncTaskCleanupHandler {
             // Spawn parallel tasks to monitor exit status
             // and capture outputs. Input writing must happen
             // in this scope for Span
@@ -279,7 +171,7 @@ public struct Configuration: Sendable, Hashable {
                 standardError,
             ) = try await execution.captureIOs()
             // Write input in the same scope
-            guard let writeFd = try writerInput.writeFileDescriptor() else {
+            guard let writeFd = inputPipe.writeFileDescriptor else {
                 fatalError("Trying to write to an input that has been closed")
             }
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Swift.Error>) in
@@ -293,7 +185,7 @@ public struct Configuration: Sendable, Hashable {
                     )
                     #endif
 
-                    writeFd.write(bytes) { _, error in
+                    writeFd.wrapped.write(bytes) { _, error in
                         if let error = error {
                             continuation.resume(throwing: error)
                         } else {
@@ -303,28 +195,30 @@ public struct Configuration: Sendable, Hashable {
                 }
 
             }
-            try writerInput.closeWriteFileDescriptor()
-
-            return CollectedResult(
+            try writeFd.safelyClose()
+            return CollectedResult<Output, Error>(
                 processIdentifier: execution.processIdentifier,
                 terminationStatus: try await terminationStatus,
                 standardOutput: try await standardOutput,
                 standardError: try await standardError
             )
-        } onCancel: {
+        } onCleanup: {
             // Attempt to terminate the child process
             // Since the task has already been cancelled,
             // this is the best we can do
             try? await self.cleanup(
                 execution: execution,
-                input: writerInput,
-                childSide: true,
+                inputPipe: inputPipe,
+                outputPipe: outputPipe,
+                errorPipe: errorPipe,
+                childSide: false,
                 parentSide: true,
                 attemptToTerminateSubProcess: true
             )
         }
     }
 
+    @available(macOS 9999, *)
     internal func run<
         Result,
         Input: InputProtocol,
@@ -337,75 +231,68 @@ public struct Configuration: Sendable, Hashable {
         isolation: isolated (any Actor)? = #isolation,
         _ body: ((Execution<Output, Error>) async throws -> Result)
     ) async throws -> ExecutionResult<Result> {
+
+        let inputPipe = try input.createPipe()
+        let outputPipe = try output.createPipe()
+        let errorPipe = try error.createPipe()
+
         let execution = try self.spawn(
-            withInput: input,
+            withInput: inputPipe,
             output: output,
-            error: error
+            outputPipe: outputPipe,
+            error: error,
+            errorPipe: errorPipe
         )
         // After spawn, clean up child side
         try await self.cleanup(
             execution: execution,
-            input: input,
+            inputPipe: inputPipe,
+            outputPipe: outputPipe,
+            errorPipe: errorPipe,
             childSide: true,
             parentSide: false,
             attemptToTerminateSubProcess: false
         )
 
-        return try await withAsyncTaskCancellationHandler {
-            do {
-                return try await withThrowingTaskGroup(
-                    of: TerminationStatus?.self,
-                    returning: ExecutionResult.self
-                ) { group in
-                    group.addTask {
-                        if let writeFd = try input.writeFileDescriptor() {
-                            try await input.write(into: writeFd)
-                            try input.closeWriteFileDescriptor()
-                        }
-                        return nil
+        return try await withAsyncTaskCleanupHandler {
+            return try await withThrowingTaskGroup(
+                of: TerminationStatus?.self,
+                returning: ExecutionResult.self
+            ) { group in
+                group.addTask {
+                    if let writeFd = inputPipe.writeFileDescriptor {
+                        let writer = StandardInputWriter(fileDescriptor: writeFd)
+                        try await input.write(with: writer)
+                        try await writer.finish()
                     }
-                    group.addTask {
-                        return try await monitorProcessTermination(
-                            forProcessWithIdentifier: execution.processIdentifier
-                        )
-                    }
-
-                    // Body runs in the same isolation
-                    let result = try await body(execution)
-                    // After body finishes, cleanup parent side
-                    try await self.cleanup(
-                        execution: execution,
-                        input: input,
-                        childSide: false,
-                        parentSide: true,
-                        attemptToTerminateSubProcess: false
-                    )
-                    var status: TerminationStatus? = nil
-                    while let monitorResult = try await group.next() {
-                        if let monitorResult = monitorResult {
-                            status = monitorResult
-                        }
-                    }
-                    return ExecutionResult(terminationStatus: status!, value: result)
+                    return nil
                 }
-            } catch {
-                try await self.cleanup(
-                    execution: execution,
-                    input: input,
-                    childSide: false,
-                    parentSide: true,
-                    attemptToTerminateSubProcess: false
-                )
-                throw error
+                group.addTask {
+                    return try await monitorProcessTermination(
+                        forProcessWithIdentifier: execution.processIdentifier
+                    )
+                }
+
+                // Body runs in the same isolation
+                let result = try await body(execution)
+                var status: TerminationStatus? = nil
+                while let monitorResult = try await group.next() {
+                    if let monitorResult = monitorResult {
+                        status = monitorResult
+                    }
+                }
+                return ExecutionResult(terminationStatus: status!, value: result)
             }
-        } onCancel: {
+        } onCleanup: {
             // Attempt to terminate the child process
             // Since the task has already been cancelled,
             // this is the best we can do
             try? await self.cleanup(
                 execution: execution,
-                input: input,
-                childSide: true,
+                inputPipe: inputPipe,
+                outputPipe: outputPipe,
+                errorPipe: errorPipe,
+                childSide: false,
                 parentSide: true,
                 attemptToTerminateSubProcess: true
             )
@@ -437,6 +324,138 @@ Configuration(
     platformOptions: \(self.platformOptions.description(withIndent: 1))
 )
 """
+    }
+}
+
+// MARK: - Cleanup
+extension Configuration {
+    /// Close each input individually, and throw the first error if there's multiple errors thrown
+    @Sendable
+    @available(macOS 9999, *)
+    private func cleanup<
+        Output: OutputProtocol,
+        Error: OutputProtocol
+    >(
+        execution: Execution<Output, Error>,
+        inputPipe: CreatedPipe,
+        outputPipe: CreatedPipe,
+        errorPipe: CreatedPipe,
+        childSide: Bool,
+        parentSide: Bool,
+        attemptToTerminateSubProcess: Bool
+    ) async throws {
+        func captureError(_ work: () throws -> Void) -> Swift.Error? {
+            do {
+                try work()
+                return nil
+            } catch {
+                // Ignore badFileDescriptor for double close
+                return error
+            }
+        }
+
+        guard childSide || parentSide || attemptToTerminateSubProcess else {
+            return
+        }
+
+        var exitError: Swift.Error? = nil
+        // Attempt to teardown the subprocess
+        if attemptToTerminateSubProcess {
+#if os(Windows)
+            exitError = execution.tryTerminate()
+#else
+            await execution.teardown(
+                using: self.platformOptions.teardownSequence
+            )
+#endif
+        }
+
+        var inputError: Swift.Error?
+        var outputError: Swift.Error?
+        var errorError: Swift.Error? // lol
+
+        if childSide {
+            inputError = captureError {
+                try inputPipe.readFileDescriptor?.safelyClose()
+            }
+            outputError = captureError {
+                try outputPipe.writeFileDescriptor?.safelyClose()
+            }
+            errorError = captureError {
+                try errorPipe.writeFileDescriptor?.safelyClose()
+            }
+        }
+
+        if parentSide {
+            inputError = captureError {
+                try inputPipe.writeFileDescriptor?.safelyClose()
+            }
+            outputError = captureError {
+                try outputPipe.readFileDescriptor?.safelyClose()
+            }
+            errorError = captureError {
+                try errorPipe.readFileDescriptor?.safelyClose()
+            }
+        }
+
+        if let inputError = inputError {
+            throw inputError
+        }
+
+        if let outputError = outputError {
+            throw outputError
+        }
+
+        if let errorError = errorError {
+            throw errorError
+        }
+
+        if let exitError = exitError {
+            throw exitError
+        }
+    }
+
+    /// Close each input individually, and throw the first error if there's multiple errors thrown
+    @Sendable
+    internal func cleanupPreSpawn(
+        input: CreatedPipe,
+        output: CreatedPipe,
+        error: CreatedPipe
+    ) throws {
+        var inputError: Swift.Error?
+        var outputError: Swift.Error?
+        var errorError: Swift.Error?
+
+        do {
+            try input.readFileDescriptor?.safelyClose()
+            try input.writeFileDescriptor?.safelyClose()
+        } catch {
+            inputError = error
+        }
+
+        do {
+            try output.readFileDescriptor?.safelyClose()
+            try output.writeFileDescriptor?.safelyClose()
+        } catch {
+            outputError = error
+        }
+
+        do {
+            try error.readFileDescriptor?.safelyClose()
+            try error.writeFileDescriptor?.safelyClose()
+        } catch {
+            errorError = error
+        }
+
+        if let inputError = inputError {
+            throw inputError
+        }
+        if let outputError = outputError {
+            throw outputError
+        }
+        if let errorError = errorError {
+            throw errorError
+        }
     }
 }
 
@@ -763,6 +782,62 @@ internal enum StringOrRawBytes: Sendable, Hashable {
     }
 }
 
+/// A simple wrapper on `FileDescriptor` plus a flag indicating
+/// whether it should be closed automactially when done.
+internal struct TrackedFileDescriptor: Hashable {
+    internal let closeWhenDone: Bool
+    internal let wrapped: FileDescriptor
+
+    internal init(
+        _ wrapped: FileDescriptor,
+        closeWhenDone: Bool
+    ) {
+        self.wrapped = wrapped
+        self.closeWhenDone = closeWhenDone
+    }
+
+    internal func safelyClose() throws {
+        guard self.closeWhenDone else {
+            return
+        }
+
+        do {
+            try self.wrapped.close()
+        } catch {
+            guard let errno: Errno = error as? Errno else {
+                throw error
+            }
+            if errno != .badFileDescriptor {
+                throw errno
+            }
+        }
+    }
+}
+
+internal struct CreatedPipe {
+    internal let readFileDescriptor: TrackedFileDescriptor?
+    internal let writeFileDescriptor: TrackedFileDescriptor?
+
+    internal init(
+        readFileDescriptor: TrackedFileDescriptor?,
+        writeFileDescriptor: TrackedFileDescriptor?
+    ) {
+        self.readFileDescriptor = readFileDescriptor
+        self.writeFileDescriptor = writeFileDescriptor
+    }
+
+    internal init(closeWhenDone: Bool) throws {
+        let pipe = try FileDescriptor.pipe()
+
+        self.readFileDescriptor = .init(
+            pipe.readEnd, closeWhenDone: closeWhenDone
+        )
+        self.writeFileDescriptor = .init(
+            pipe.writeEnd, closeWhenDone: closeWhenDone
+        )
+    }
+}
+
 extension FilePath {
     static var currentWorkingDirectory: Self {
         let path = getcwd(nil, 0)!
@@ -817,9 +892,9 @@ public enum QualityOfService: Int, Sendable {
     case `default`          = -1
 }
 
-internal func withAsyncTaskCancellationHandler<Result>(
+internal func withAsyncTaskCleanupHandler<Result>(
     _ body: () async throws -> Result,
-    onCancel handler: @Sendable @escaping () async -> Void,
+    onCleanup handler: @Sendable @escaping () async -> Void,
     isolation: isolated (any Actor)? = #isolation
 ) async rethrows -> Result {
     return try await withThrowingTaskGroup(
@@ -833,9 +908,14 @@ internal func withAsyncTaskCancellationHandler<Result>(
             await handler()
         }
 
-        let result = try await body()
-        group.cancelAll()
-        return result
+        do {
+            let result = try await body()
+            group.cancelAll()
+            return result
+        } catch {
+            await handler()
+            throw error
+        }
     }
 }
 

@@ -22,10 +22,9 @@ import Foundation
 /// from the subprocess as `Data`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
 @available(macOS 9999, *)
-public final class DataOutput: ManagedOutputProtocol {
+public final class DataOutput: OutputProtocol {
     public typealias OutputType = Data
     public let maxSize: Int
-    public let pipe: Subprocess.Pipe
 
     public func output(from span: RawSpan) throws -> Data {
         return Data(span)
@@ -33,7 +32,6 @@ public final class DataOutput: ManagedOutputProtocol {
 
     internal init(limit: Int) {
         self.maxSize = limit
-        self.pipe = Subprocess.Pipe()
     }
 }
 
@@ -54,7 +52,7 @@ extension OutputProtocol where Self == DataOutput {
 
 // MARK: - Workarounds
 @available(macOS 9999, *)
-extension ManagedOutputProtocol {
+extension OutputProtocol {
     @_disfavoredOverload
     public func output(from data: some DataProtocol) throws -> OutputType {
         //FIXME: remove workaround for rdar://143992296
