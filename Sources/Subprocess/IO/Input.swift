@@ -51,7 +51,7 @@ extension InputProtocol {
 /// `NoInput` redirects the standard input of the subprocess
 /// to `/dev/null`, while on Windows, it does not bind any
 /// file handle to the subprocess standard input handle.
-public final class NoInput: InputProtocol {
+public struct NoInput: InputProtocol {
     internal func createPipe() throws -> CreatedPipe {
 #if os(Windows)
         // On Windows, instead of binding to dev null,
@@ -82,7 +82,7 @@ public final class NoInput: InputProtocol {
 /// Developers have the option to instruct the `Subprocess` to
 /// automatically close the provided `FileDescriptor`
 /// after the subprocess is spawned.
-public final class FileDescriptorInput: InputProtocol {
+public struct FileDescriptorInput: InputProtocol {
     private let fileDescriptor: FileDescriptor
     private let closeAfterSpawningProcess: Bool
 
@@ -113,7 +113,7 @@ public final class FileDescriptorInput: InputProtocol {
 /// from a given type conforming to `StringProtocol`.
 /// Developers can specify the string encoding to use when
 /// encoding the string to data, which defaults to UTF-8.
-public final class StringInput<
+public struct StringInput<
     InputString: StringProtocol & Sendable,
     Encoding: Unicode.Encoding
 >: InputProtocol {
@@ -133,7 +133,7 @@ public final class StringInput<
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given `UInt8` Array.
-public final class ArrayInput: InputProtocol {
+public struct ArrayInput: InputProtocol {
     private let array: [UInt8]
 
     public func write(with writer: StandardInputWriter) async throws {
@@ -147,7 +147,7 @@ public final class ArrayInput: InputProtocol {
 
 /// A concrete `Input` type for subprocess that indicates that
 /// the Subprocess should read its input from `StandardInputWriter`.
-public final class CustomWriteInput: InputProtocol {
+public struct CustomWriteInput: InputProtocol {
     public func write(with writer: StandardInputWriter) async throws {
         // NOOP
     }
@@ -227,7 +227,7 @@ public final actor StandardInputWriter: Sendable {
     /// Write a `RawSpan` to the standard input of the subprocess.
     /// - Parameter span: The span to write
     /// - Returns number of bytes written
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     public func write(_ span: borrowing RawSpan) async throws -> Int {
         return try await self.fileDescriptor.wrapped.write(span)
     }

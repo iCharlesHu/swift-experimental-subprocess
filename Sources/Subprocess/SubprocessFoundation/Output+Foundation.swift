@@ -21,8 +21,8 @@ import Foundation
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `Data`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
-@available(macOS 9999, *)
-public final class DataOutput: OutputProtocol {
+@available(SubprocessSpan, *)
+public struct DataOutput: OutputProtocol {
     public typealias OutputType = Data
     public let maxSize: Int
 
@@ -35,7 +35,7 @@ public final class DataOutput: OutputProtocol {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol where Self == DataOutput {
     /// Create a `Subprocess` output that collects output as `Data`
     /// up to 128kb.
@@ -51,7 +51,7 @@ extension OutputProtocol where Self == DataOutput {
 }
 
 // MARK: - Workarounds
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol {
     @_disfavoredOverload
     public func output(from data: some DataProtocol) throws -> OutputType {

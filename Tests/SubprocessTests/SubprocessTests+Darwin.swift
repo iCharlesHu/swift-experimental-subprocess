@@ -27,7 +27,7 @@ import System
 @Suite(.serialized)
 struct SubprocessDarwinTests {
     @Test func testSubprocessPlatformOptionsProcessConfiguratorUpdateSpawnAttr() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         var platformOptions = PlatformOptions()
@@ -50,7 +50,7 @@ struct SubprocessDarwinTests {
     }
 
     @Test func testSubprocessPlatformOptionsProcessConfiguratorUpdateFileAction() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let intendedWorkingDir = FileManager.default.temporaryDirectory.path()
@@ -79,7 +79,7 @@ struct SubprocessDarwinTests {
     }
 
     @Test func testSuspendResumeProcess() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         _ = try await Subprocess.run(

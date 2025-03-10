@@ -20,7 +20,7 @@ import System
 #endif
 
 // Windows specific implementation
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension Configuration {
     internal func spawn<
         Input: InputProtocol,
@@ -268,7 +268,7 @@ extension Configuration {
 
 /// The collection of platform-specific settings
 /// to configure the subprocess when running
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 public struct PlatformOptions: Sendable {
     /// A `UserCredentials` to use spawning the subprocess
     /// as a different user
@@ -380,7 +380,7 @@ public struct PlatformOptions: Sendable {
     public init() {}
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension PlatformOptions: Hashable {
     public static func == (
         lhs: PlatformOptions,
@@ -412,7 +412,7 @@ extension PlatformOptions: Hashable {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
@@ -437,7 +437,7 @@ PlatformOptions(
 }
 
 // MARK: - Process Monitoring
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: ProcessIdentifier
@@ -498,7 +498,7 @@ internal func monitorProcessTermination(
 }
 
 // MARK: - Subprocess Control
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension Execution {
     /// Terminate the current subprocess with the given exit code
     /// - Parameter exitCode: The exit code to use for the subprocess.
@@ -614,7 +614,7 @@ extension Execution {
 }
 
 // MARK: - Executable Searching
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension Executable {
     // Technically not needed for CreateProcess since
     // it takes process name. It's here to support
@@ -702,7 +702,7 @@ extension Environment {
 // MARK: - ProcessIdentifier
 
 /// A platform independent identifier for a subprocess.
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 public struct ProcessIdentifier: Sendable, Hashable, Codable {
     /// Windows specifc process identifier value
     public let value: DWORD
@@ -718,7 +718,7 @@ public struct ProcessIdentifier: Sendable, Hashable, Codable {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         return "(processID: \(self.value), threadID: \(self.threadID))"
@@ -730,7 +730,7 @@ extension ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertib
 }
 
 // MARK: - Private Utils
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension Configuration {
     private func preSpawn() throws -> (
         applicationName: String?,
@@ -979,11 +979,11 @@ extension Configuration {
 }
 
 // MARK: - PlatformFileDescriptor Type
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 internal typealias PlatformFileDescriptor = HANDLE
 
 // MARK: - Read Buffer Size
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 @inline(__always)
 internal var readBufferSize: Int {
     // FIXME: Use Platform.pageSize here

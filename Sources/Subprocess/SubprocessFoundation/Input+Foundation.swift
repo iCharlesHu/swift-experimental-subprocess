@@ -27,7 +27,7 @@ internal import Dispatch
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given `Data`.
-public final class DataInput: InputProtocol {
+public struct DataInput: InputProtocol {
     private let data: Data
 
     public func write(with writer: StandardInputWriter) async throws {
@@ -41,7 +41,7 @@ public final class DataInput: InputProtocol {
 
 /// A concrete `Input` type for subprocesses that accepts input
 /// from a specified sequence of `Data`.
-public final class DataSequenceInput<
+public struct DataSequenceInput<
     InputSequence: Sequence & Sendable
 >: InputProtocol where InputSequence.Element == Data {
     private let sequence: InputSequence
@@ -61,7 +61,7 @@ public final class DataSequenceInput<
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given async sequence of `Data`.
-public final class DataAsyncSequenceInput<
+public struct DataAsyncSequenceInput<
     InputSequence: AsyncSequence & Sendable
 >: InputProtocol where InputSequence.Element == Data {
     private let sequence: InputSequence

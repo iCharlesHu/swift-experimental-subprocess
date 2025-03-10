@@ -23,18 +23,18 @@ internal import Dispatch
 /// Instead of developing custom implementations of `OutputProtocol`,
 /// it is recommended to utilize the default implementations provided
 /// by the `Subprocess` library to specify the output handling requirements.
+@available(SubprocessSpan, *)
 public protocol OutputProtocol: Sendable {
     associatedtype OutputType: Sendable
 
     /// Convert the output from Data to expected output type
-    @available(macOS 15.4, *)
     func output(from span: RawSpan) throws -> OutputType
 
     /// The max amount of data to collect for this output.
     var maxSize: Int { get }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol {
     /// The max amount of data to collect for this output.
     public var maxSize: Int { 128 * 1024 }
@@ -46,8 +46,8 @@ extension OutputProtocol {
 /// redirects the standard output of the subprocess to `/dev/null`,
 /// while on Windows, it does not bind any file handle to the
 /// subprocess standard output handle.
-@available(macOS 9999, *)
-public final class DiscardedOutput: OutputProtocol {
+@available(SubprocessSpan, *)
+public struct DiscardedOutput: OutputProtocol {
     public typealias OutputType = Void
 
     internal func createPipe() throws -> CreatedPipe {
@@ -73,8 +73,8 @@ public final class DiscardedOutput: OutputProtocol {
 /// Developers have the option to instruct the `Subprocess` to
 /// automatically close the provided `FileDescriptor`
 /// after the subprocess is spawned.
-@available(macOS 9999, *)
-public final class FileDescriptorOutput: OutputProtocol {
+@available(SubprocessSpan, *)
+public struct FileDescriptorOutput: OutputProtocol {
     public typealias OutputType = Void
 
     private let closeAfterSpawningProcess: Bool
@@ -103,8 +103,8 @@ public final class FileDescriptorOutput: OutputProtocol {
 /// from the subprocess as `String` with the given encoding.
 /// This option must be used with he `run()` method that
 /// returns a `CollectedResult`.
-@available(macOS 9999, *)
-public final class StringOutput<Encoding: Unicode.Encoding>: OutputProtocol {
+@available(SubprocessSpan, *)
+public struct StringOutput<Encoding: Unicode.Encoding>: OutputProtocol {
     public typealias OutputType = String?
     public let maxSize: Int
     private let encoding: Encoding.Type
@@ -127,8 +127,8 @@ public final class StringOutput<Encoding: Unicode.Encoding>: OutputProtocol {
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `[UInt8]`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
-@available(macOS 9999, *)
-public final class BytesOutput: OutputProtocol {
+@available(SubprocessSpan, *)
+public struct BytesOutput: OutputProtocol {
     public typealias OutputType = [UInt8]
     public let maxSize: Int
 
@@ -139,18 +139,11 @@ public final class BytesOutput: OutputProtocol {
                 fatalError("Trying to capture output without file descriptor")
             }
             fileDescriptor.wrapped.readUntilEOF(upToLength: self.maxSize) { result in
-                do {
-                    switch result {
-                    case .success(let data):
-                        //FIXME: remove workaround for rdar://143992296
-                        try fileDescriptor.safelyClose()
-                        continuation.resume(returning: data.array())
-                    case .failure(let error):
-                        try fileDescriptor.safelyClose()
-                        continuation.resume(throwing: error)
-                    }
-                } catch {
-                    try? fileDescriptor.safelyClose()
+                switch result {
+                case .success(let data):
+                    //FIXME: remove workaround for rdar://143992296
+                    continuation.resume(returning: data.array())
+                case .failure(let error):
                     continuation.resume(throwing: error)
                 }
             }
@@ -170,20 +163,20 @@ public final class BytesOutput: OutputProtocol {
 /// the child output to the `.standardOutput` (a sequence) or `.standardError`
 /// property of `Execution`. This output type is
 /// only applicable to the `run()` family that takes a custom closure.
-@available(macOS 9999, *)
-public final class SequenceOutput: OutputProtocol {
+@available(SubprocessSpan, *)
+public struct SequenceOutput: OutputProtocol {
     public typealias OutputType = Void
 
     internal init() { }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol where Self == DiscardedOutput {
     /// Create a Subprocess output that discards the output
     public static var discarded: Self { .init() }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol where Self == FileDescriptorOutput {
     /// Create a Subprocess output that writes output to a `FileDescriptor`
     /// and optionally close the `FileDescriptor` once process spawned.
@@ -195,7 +188,7 @@ extension OutputProtocol where Self == FileDescriptorOutput {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol where Self == StringOutput<UTF8> {
     /// Create a `Subprocess` output that collects output as
     /// UTF8 String with 128kb limit.
@@ -204,7 +197,7 @@ extension OutputProtocol where Self == StringOutput<UTF8> {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol {
     /// Create a `Subprocess` output that collects output as
     /// `String` using the given encoding up to limit it bytes.
@@ -216,7 +209,7 @@ extension OutputProtocol {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol where Self == BytesOutput {
     /// Create a `Subprocess` output that collects output as
     /// `Buffer` with 128kb limit.
@@ -229,7 +222,7 @@ extension OutputProtocol where Self == BytesOutput {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol where Self == SequenceOutput {
     /// Create a `Subprocess` output that redirects the output
     /// to the `.standardOutput` (or `.standardError`) property
@@ -238,7 +231,7 @@ extension OutputProtocol where Self == SequenceOutput {
 }
 
 // MARK: - Default Implementations
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol {
     @_disfavoredOverload
     internal func createPipe() throws -> CreatedPipe {
@@ -275,14 +268,11 @@ extension OutputProtocol {
                     case .success(let data):
                         //FIXME: remove workaround for rdar://143992296
                         let output = try self.output(from: data)
-//                        try fileDescriptor.safelyClose()
                         continuation.resume(returning: output)
                     case .failure(let error):
-//                        try fileDescriptor.safelyClose()
                         continuation.resume(throwing: error)
                     }
                 } catch {
-//                    try? fileDescriptor.safelyClose()
                     continuation.resume(throwing: error)
                 }
             }
@@ -290,7 +280,7 @@ extension OutputProtocol {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol where OutputType == Void {
     internal func captureOutput(from fileDescriptor: TrackedFileDescriptor?) async throws -> Void { }
 
@@ -298,7 +288,7 @@ extension OutputProtocol where OutputType == Void {
     public func output(from span: RawSpan) throws -> Void { /* noop */ }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension OutputProtocol {
     internal func output(from data: DispatchData) throws -> OutputType {
         guard !data.isEmpty else {

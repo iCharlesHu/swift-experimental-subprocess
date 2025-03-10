@@ -108,7 +108,7 @@ extension ProcessIdentifier : CustomStringConvertible, CustomDebugStringConverti
     public var debugDescription: String { "\(self.value)" }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension Execution {
     /// Send the given signal to the child process.
     /// - Parameters:
@@ -394,7 +394,7 @@ extension FileDescriptor {
         return self
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     package func readChunk(upToLength maxLength: Int) async throws -> SequenceOutput.Buffer? {
         return try await withCheckedThrowingContinuation { continuation in
             DispatchIO.read(
@@ -470,7 +470,7 @@ extension FileDescriptor {
         }
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     package func write(
         _ span: borrowing RawSpan
     ) async throws -> Int {

@@ -11,7 +11,7 @@
 
 @preconcurrency internal import Dispatch
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension SequenceOutput {
     /// A immutable collection of bytes
     public struct Buffer: Sendable {
@@ -32,7 +32,7 @@ extension SequenceOutput {
 }
 
 // MARK: - Properties
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension SequenceOutput.Buffer {
     /// Number of bytes stored in the buffer
     public var count: Int {
@@ -46,7 +46,7 @@ extension SequenceOutput.Buffer {
 }
 
 // MARK: - Accessors
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension SequenceOutput.Buffer {
     /// Access the raw bytes stored in this buffer
     /// - Parameter body: A closure with an `UnsafeRawBufferPointer` parameter that
@@ -71,7 +71,7 @@ extension SequenceOutput.Buffer {
     }
 
     // Access the storge backing this Buffer
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     var bytes: RawSpan {
         var backing: SpanBacking?
         self.data.enumerateBytes { buffer, byteIndex, stop in
@@ -116,7 +116,7 @@ extension SequenceOutput.Buffer {
 
 
 // MARK: - Hashable, Equatable
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension SequenceOutput.Buffer: Equatable, Hashable {
 #if os(Windows)
     // Compiler generated conformances

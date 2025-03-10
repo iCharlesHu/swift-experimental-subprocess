@@ -31,7 +31,7 @@ struct SubprocessWindowsTests {
 
 // MARK: - Executable Tests
 extension SubprocessWindowsTests {
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testExecutableNamed() async throws {
         // Simple test to make sure we can run a common utility
         let message = "Hello, world from Swift!"
@@ -51,7 +51,7 @@ extension SubprocessWindowsTests {
         )
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testExecutableNamedCannotResolve() async throws {
         do {
             _ = try await Subprocess.run(.name("do-not-exist"))
@@ -66,7 +66,7 @@ extension SubprocessWindowsTests {
         }
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testExecutableAtPath() async throws {
         let expected = FileManager.default.currentDirectoryPath
         let result = try await Subprocess.run(
@@ -82,7 +82,7 @@ extension SubprocessWindowsTests {
         )
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testExecutableAtPathCannotResolve() async {
         do {
             // Since we are using the path directly,
@@ -103,7 +103,7 @@ extension SubprocessWindowsTests {
 
 // MARK: - Argument Tests
 extension SubprocessWindowsTests {
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testArgumentsFromArray() async throws {
         let message = "Hello, World!"
         let args: [String] = [
@@ -127,7 +127,7 @@ extension SubprocessWindowsTests {
 
 // MARK: - Environment Tests
 extension SubprocessWindowsTests {
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testEnvironmentInherit() async throws {
         let result = try await Subprocess.run(
             self.cmdExe,
@@ -143,7 +143,7 @@ extension SubprocessWindowsTests {
         #expect(pathValue.contains("C:\\Windows\\system32"))
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testEnvironmentInheritOverride() async throws {
         let result = try await Subprocess.run(
             self.cmdExe,
@@ -161,7 +161,7 @@ extension SubprocessWindowsTests {
         )
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test(.enabled(if: ProcessInfo.processInfo.environment["SystemRoot"] != nil))
     func testEnvironmentCustom() async throws {
         let result = try await Subprocess.run(
@@ -186,7 +186,7 @@ extension SubprocessWindowsTests {
 
 // MARK: - Working Directory Tests
 extension SubprocessWindowsTests {
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testWorkingDirectoryDefaultValue() async throws {
         // By default we should use the working directory of the parent process
         let workingDirectory = FileManager.default.currentDirectoryPath
@@ -206,7 +206,7 @@ extension SubprocessWindowsTests {
         )
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testWorkingDirectoryCustomValue() async throws {
         let workingDirectory = FilePath(
             FileManager.default.temporaryDirectory._fileSystemPath
@@ -231,7 +231,7 @@ extension SubprocessWindowsTests {
 
 // MARK: - Input Tests
 extension SubprocessWindowsTests {
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testInputNoInput() async throws {
         let catResult = try await Subprocess.run(
             self.cmdExe,
@@ -244,7 +244,7 @@ extension SubprocessWindowsTests {
         #expect(catResult.standardOutput.isEmpty)
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testInputFileDescriptor() async throws {
         // Make sure we can read long text from standard input
         let expected: Data = try Data(
@@ -272,7 +272,7 @@ extension SubprocessWindowsTests {
         )
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testInputSequence() async throws {
         // Make sure we can read long text as Sequence
         let expected: Data = try Data(
@@ -296,7 +296,7 @@ extension SubprocessWindowsTests {
         )
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testInputAsyncSequence() async throws {
         let chunkSize = 4096
         // Maeks ure we can read long text as AsyncSequence
@@ -330,7 +330,7 @@ extension SubprocessWindowsTests {
         )
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testInputSequenceCustomExecutionBody() async throws {
         let expected: Data = try Data(
             contentsOf: URL(filePath: theMysteriousIsland.string)
@@ -352,7 +352,7 @@ extension SubprocessWindowsTests {
         #expect(result.value == expected)
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testInputAsyncSequenceCustomExecutionBody() async throws {
         // Maeks ure we can read long text as AsyncSequence
         let chunkSize = 4096
@@ -394,7 +394,7 @@ extension SubprocessWindowsTests {
 
 // MARK: - Output Tests
 extension SubprocessWindowsTests {
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testCollectedOutput() async throws {
         let expected = randomString(length: 32)
         let echoResult = try await Subprocess.run(
@@ -409,7 +409,7 @@ extension SubprocessWindowsTests {
         #expect(output == expected)
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testCollectedOutputWithLimit() async throws {
         let limit = 2
         let expected = randomString(length: 32)
@@ -426,7 +426,7 @@ extension SubprocessWindowsTests {
         #expect(String(expected[targetRange]) == output)
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testCollectedOutputFileDesriptor() async throws {
         let outputFilePath = FilePath(
             FileManager.default.temporaryDirectory._fileSystemPath
@@ -458,7 +458,7 @@ extension SubprocessWindowsTests {
         #expect(output == expected)
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testRedirectedOutputRedirectToSequence() async throws {
         // Maeks ure we can read long text redirected to AsyncSequence
         let expected: Data = try Data(
@@ -483,7 +483,7 @@ extension SubprocessWindowsTests {
 
 // MARK: - PlatformOption Tests
 extension SubprocessWindowsTests {
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test(.enabled(if: SubprocessWindowsTests.hasAdminPrivileges()))
     func testPlatformOptionsRunAsUser() async throws {
         try await self.withTemporaryUser { username, password in
@@ -521,7 +521,7 @@ extension SubprocessWindowsTests {
         }
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testPlatformOptionsCreateNewConsole() async throws {
         let parentConsole = GetConsoleWindow()
         let sameConsoleResult = try await Subprocess.run(
@@ -564,7 +564,7 @@ extension SubprocessWindowsTests {
         )
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testPlatformOptionsDetachedProcess() async throws {
         var platformOptions: Subprocess.PlatformOptions = .init()
         platformOptions.consoleBehavior = .detatch
@@ -585,7 +585,7 @@ extension SubprocessWindowsTests {
         #expect(detachConsoleValue.isEmpty)
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testPlatformOptionsPreSpawnConfigurator() async throws {
         // Manually set the create new console flag
         var platformOptions: Subprocess.PlatformOptions = .init()
@@ -644,7 +644,7 @@ extension SubprocessWindowsTests {
 
 // MARK: - Subprocess Controlling Tests
 extension SubprocessWindowsTests {
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testTerminateProcess() async throws {
         let stuckProcess = try await Subprocess.run(
             self.cmdExe,
@@ -664,7 +664,7 @@ extension SubprocessWindowsTests {
         #expect(exitCode == 42)
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testSuspendResumeProcess() async throws {
         let stuckProcess = try await Subprocess.run(
             self.cmdExe,
@@ -714,7 +714,7 @@ extension SubprocessWindowsTests {
         #expect(stuckProcess.terminationStatus.isSuccess)
     }
 
-    @available(macOS 9999, *)
+    @available(SubprocessSpan, *)
     @Test func testRunDetached() async throws {
         let (readFd, writeFd) = try FileDescriptor.pipe()
         SetHandleInformation(

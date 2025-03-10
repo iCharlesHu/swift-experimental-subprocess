@@ -46,7 +46,7 @@ struct SubprocessUnixTests { }
 extension SubprocessUnixTests {
 
     @Test func testExecutableNamed() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // Simple test to make sure we can find a common utility
@@ -64,7 +64,7 @@ extension SubprocessUnixTests {
 
 
     @Test func testExecutableNamedCannotResolve() async {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         do {
@@ -80,7 +80,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testExecutableAtPath() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let expected = FileManager.default.currentDirectoryPath
@@ -94,7 +94,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testExecutableAtPathCannotResolve() async {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         do {
@@ -116,7 +116,7 @@ extension SubprocessUnixTests {
 // MARK: - Arguments Tests
 extension SubprocessUnixTests {
     @Test func testArgunementsArrayLitereal() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let result = try await Subprocess.run(
@@ -135,7 +135,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testArgumentsOverride() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let result = try await Subprocess.run(
@@ -157,7 +157,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testArgumemtsFromArray() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let arguments: [UInt8] = Array("Data Content\0".utf8)
@@ -183,7 +183,7 @@ extension SubprocessUnixTests {
 // MARK: - Environment Tests
 extension SubprocessUnixTests {
     @Test func testEnvironmentInherit() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let result = try await Subprocess.run(
@@ -202,7 +202,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testEnvironmentInheritOverride() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let result = try await Subprocess.run(
@@ -224,7 +224,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testEnvironmentCustom() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let result = try await Subprocess.run(
@@ -250,7 +250,7 @@ extension SubprocessUnixTests {
 // MARK: - Working Directory Tests
 extension SubprocessUnixTests {
     @Test func testWorkingDirectoryDefaultValue() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // By default we should use the working directory of the parent process
@@ -271,7 +271,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testWorkingDirectoryCustomValue() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let workingDirectory = FilePath(
@@ -309,7 +309,7 @@ extension SubprocessUnixTests {
 // MARK: - Input Tests
 extension SubprocessUnixTests {
     @Test func testInputNoInput() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let catResult = try await Subprocess.run(
@@ -323,7 +323,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testStringInput() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let content = randomString(length: 64)
@@ -337,7 +337,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testInputFileDescriptor() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // Make sure we can read long text from standard input
@@ -357,7 +357,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testInputSequence() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // Make sure we can read long text as Sequence
@@ -375,7 +375,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testInputSpan() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let expected: Data = try Data(
@@ -394,7 +394,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testInputAsyncSequence() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // Maeks ure we can read long text as AsyncSequence
@@ -426,7 +426,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testInputSequenceCustomExecutionBody() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let expected: Data = try Data(
@@ -450,7 +450,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testInputAsyncSequenceCustomExecutionBody() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // Maeks ure we can read long text as AsyncSequence
@@ -505,7 +505,7 @@ extension SubprocessUnixTests {
 #endif
 
     @Test func testCollectedOutput() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let expected = randomString(length: 32)
@@ -522,7 +522,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testCollectedOutputWithLimit() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let limit = 4
@@ -541,7 +541,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testCollectedOutputFileDesriptor() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let outputFilePath = FilePath(FileManager.default.temporaryDirectory.path())
@@ -577,7 +577,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testCollectedOutputFileDescriptorAutoClose() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let outputFilePath = FilePath(FileManager.default.temporaryDirectory.path())
@@ -614,7 +614,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testRedirectedOutputRedirectToSequence() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // Make ure we can read long text redirected to AsyncSequence
@@ -639,7 +639,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testBufferOutput() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let expected: Data = try Data(
@@ -656,7 +656,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testCollectedError() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // Make ure we can capture long text on standard error
@@ -683,7 +683,7 @@ extension SubprocessUnixTests {
         )
     )
     func testSubprocessPlatformOptionsUserID() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let expectedUserID = uid_t(Int.random(in: 1000 ... 2000))
@@ -704,7 +704,7 @@ extension SubprocessUnixTests {
         )
     )
     func testSubprocessPlatformOptionsGroupID() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let expectedGroupID = gid_t(Int.random(in: 1000 ... 2000))
@@ -725,7 +725,7 @@ extension SubprocessUnixTests {
         )
     )
     func testSubprocssPlatformOptionsSuplimentaryGroups() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         var expectedGroups: Set<gid_t> = Set()
@@ -755,7 +755,7 @@ extension SubprocessUnixTests {
         )
     )
     func testSubprocessPlatformOptionsProcessGroupID() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         var platformOptions = PlatformOptions()
@@ -779,7 +779,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testSubprocessPlatformOptionsCreateSession() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // platformOptions.createSession implies calls to setsid
@@ -797,7 +797,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testTeardownSequence() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let result = try await Subprocess.run(
@@ -851,7 +851,7 @@ extension SubprocessUnixTests {
 // MARK: - Misc
 extension SubprocessUnixTests {
     @Test func testRunDetached() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let (readFd, writeFd) = try FileDescriptor.pipe()
@@ -873,7 +873,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testTerminateProcess() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         let stuckResult = try await Subprocess.run(
@@ -894,7 +894,7 @@ extension SubprocessUnixTests {
 }
 
 // MARK: - Utils
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension SubprocessUnixTests {
     private func assertID(
         withArgument argument: String,
@@ -916,7 +916,7 @@ extension SubprocessUnixTests {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 internal func assertNewSessionCreated<Output: OutputProtocol>(
     with result: CollectedResult<
         StringOutput<UTF8>,
@@ -980,7 +980,7 @@ extension FileDescriptor {
 // MARK: - Performance Tests
 extension SubprocessUnixTests {
     @Test func testConcurrentRun() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         // Launch as many processes as we can
@@ -1029,7 +1029,7 @@ extension SubprocessUnixTests {
     }
 
     @Test func testCaptureLongStandardOutputAndError() async throws {
-        guard #available(macOS 9999, *) else {
+        guard #available(SubprocessSpan, *) else {
             return
         }
         try await withThrowingTaskGroup(of: Void.self) { group in

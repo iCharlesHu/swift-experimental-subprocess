@@ -19,7 +19,7 @@ import Foundation
 
 internal import Dispatch
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension Data {
     init(_ s: borrowing RawSpan) {
         self = s.withUnsafeBytes { Data($0) }
@@ -35,7 +35,7 @@ extension Data {
     }
 }
 
-@available(macOS 9999, *)
+@available(SubprocessSpan, *)
 extension DataProtocol {
     var bytes: RawSpan {
         _read {
