@@ -187,7 +187,7 @@ public struct Configuration: Sendable, Hashable, ConfigurationBuilder {
         output: Output,
         error: Error,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: @escaping (
+        _ body: (
             Execution<Output, Error>,
             StandardInputWriter
         ) async throws -> Result
@@ -339,7 +339,7 @@ public struct Configuration: Sendable, Hashable, ConfigurationBuilder {
         output: Output,
         error: Error,
         isolation: isolated (any Actor)? = #isolation,
-        _ body: (@escaping (Execution<Output, Error>) async throws -> Result)
+        _ body: ((Execution<Output, Error>) async throws -> Result)
     ) async throws -> ExecutionResult<Result> {
         let execution = try self.spawn(
             withInput: input,

@@ -294,6 +294,17 @@ public final actor StandardInputWriter: Sendable {
         return try await fd.write(array)
     }
 
+    /// Write a `RawSpan` to the standard input of the subprocess.
+    /// - Parameter span: The span to write
+    /// - Returns number of bytes written
+    @available(macOS 9999, *)
+    public func write(_ span: borrowing RawSpan) async throws -> Int {
+        guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
+            fatalError("Attempting to write to a file descriptor that's already closed")
+        }
+        return try await fd.write(span)
+    }
+
     /// Write a StringProtocol to the standard input of the subprocess.
     /// - Parameters:
     ///   - string: The string to write.

@@ -95,7 +95,8 @@
     - `Executable`:
         - Renamed `.named` to `.name`.
         - Renamed `.at` to `.path`.
-    - Split `Subprocess` into two modules: `Subprocess` with no `Foundation` dependency and `SubprocessFoundation` with `Foundation` dependency
+    - Split `Subprocess` into main and `SubprocessFoundation` Traits:
+        - `SubprocessFoundation` traits adds `Foundation` dependency and interop.
     - Introduce `struct Buffer`
 
 ## Introduction
@@ -207,9 +208,11 @@ The latest API documentation can be viewed by running the following command:
 swift package --disable-sandbox preview-documentation --target Subprocess
 ```
 
-### `Subprocess` and `SubprocessFoundation` Modules
+### `SubprocessFoundation` Trait
 
-Within this package, we propose two modules: `Subprocess` and `SubprocessFoundation`. `Subprocess` serves as the “core” module, relying solely on `swift-system` and the standard library. `SubprocessFoundation` extends `Subprocess` by depending on and incorporating types from `Foundation`.
+The core `Subprocess` package is designed to only rely on the standard library and [swift-system](https://github.com/apple/swift-system) (for `FileDescriptor` and `FilePath`). Starting with Swift 6.1 or later, we suggest leveraging the new [`traits` feature](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0450-swiftpm-package-traits.md) to introduce a `SubprocessFoundation` trait, which will be enabled by default. When this trait is on, `Subprocess` includes a dependency on `Foundation` and adds extensions on Foundation types like `Data`.
+
+For Swift 6.0 and earlier versions, `SubprocessFoundation` is effectively always enabled.
 
 
 ### The `run()` Family of Methods
@@ -302,7 +305,7 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>) async throws -> Result)
+    body: ((Execution<Output, Error>) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
 
 
@@ -330,41 +333,28 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
+    body: ((Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
 
-/// Run a executable with given parameters specified by a `Configuration`
+/// Run a executable with given parameters and a custom closure
+/// to manage the running subprocess' lifetime and its IOs.
 /// - Parameters:
 ///   - configuration: The `Subprocess` configuration to run.
+///   - input: The input to send to the executable.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
-///   - body: The custom configuration body to manually control
-///       the running process and write to its standard input.
-/// - Returns a ExecutableResult type containing the return value
-///     of the closure.
-public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
+/// - Returns a CollectedResult containing the result of the run.
+@available(macOS 9999, *)
+public func run<
+    Input: InputProtocol,
+    Output: OutputProtocol,
+    Error: OutputProtocol
+>(
     _ configuration: Configuration,
-    output: Output,
-    error: Error,
-    isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
-) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
-
-/// Run a executable with given parameters specified by a `Configuration`
-/// and discard its standard error
-/// - Parameters:
-///   - configuration: The `Subprocess` configuration to run.
-///   - output: The method to use for redirecting the standard output.
-///   - body: The custom configuration body to manually control
-///       the running process and write to its standard input.
-/// - Returns a ExecutableResult type containing the return value
-///     of the closure.
-public func run<Result, Output: OutputProtocol>(
-    _ configuration: Configuration,
-    output: Output,
-    isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, DiscardedOutput>, StandardInputWriter) async throws -> Result)
-) async throws -> ExecutionResult<Result> where Output.OutputType == Void
+    input: Input = .none,
+    output: Output = .string,
+    error: Error = .discarded
+) async throws -> CollectedResult<Output, Error>
 
 /// Run a executable with given parameters specified by a `Configuration`,
 /// redirect its standard output to sequence and discard its standard error.
@@ -377,7 +367,7 @@ public func run<Result, Output: OutputProtocol>(
 public func run<Result>(
     _ configuration: Configuration,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<SequenceOutput, DiscardedOutput>, StandardInputWriter) async throws -> Result)
+    body: ((Execution<SequenceOutput, DiscardedOutput>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result>
 ```
 
@@ -634,12 +624,12 @@ extension Execution {
 /// duration allowed for the child process to exit before proceeding
 /// to the next step.
 public struct TeardownStep: Sendable, Hashable {
-    /// Sends `signal` to the process and allows `allowedDurationToExit`
+    /// Sends `signal` to the process and allows `allowedDurationToNextStep`
     /// for the process to exit before proceeding to the next step.
     /// The final step in the sequence will always send a `.kill` signal.
     public static func sendSignal(
         _ signal: Signal,
-        allowedDurationToExit: Duration
+        allowedDurationToNextStep: Duration
     ) -> Self
 }
 
@@ -647,7 +637,7 @@ extension Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal
     /// - Parameter sequence: The  steps to perform.
-    public func teardown(using sequence: [TeardownStep]) async
+    public func teardown(using sequence: some Sequence<TeardownStep> & Sendable) async
 }
 #endif // canImport(Glibc) || canImport(Darwin)
 ```
@@ -661,8 +651,8 @@ let result = try await run(
 ) { execution in
     // ... more work
     await execution.teardown(using: [
-        .sendSignal(.quit, allowedDurationToExit: .milliseconds(100)),
-        .sendSignal(.terminate, allowedDurationToExit: .milliseconds(100)),
+        .sendSignal(.quit, allowedDurationToNextStep: .milliseconds(100)),
+        .sendSignal(.terminate, allowedDurationToNextStep: .milliseconds(100)),
     ])
 }
 ```
@@ -758,6 +748,14 @@ public final actor StandardInputWriter {
         _ array: [UInt8]
     ) async throws -> Int
 
+    /// Write a `RawSpan` to the standard input of the subprocess.
+    /// - Parameter span: The span to write
+    /// - Returns number of bytes written
+    @available(macOS 9999, *)
+    public func write(
+        _ span: borrowing RawSpan
+    ) async throws -> Int
+
     /// Write a StringProtocol to the standard input of the subprocess.
     /// - Parameters:
     ///   - string: The string to write.
@@ -773,9 +771,10 @@ public final actor StandardInputWriter {
 }
 ```
 
-`SubprocessFoundation` extends `StandardInputWriter` to work with `Data`:
+`SubprocessFoundation` trait extends `StandardInputWriter` to work with `Data`:
 
 ```swift
+#if SubprocessFoundation
 import Foundation
 
 extension StandardInputWriter {
@@ -793,6 +792,7 @@ extension StandardInputWriter {
         _ asyncSequence: AsyncSendableSequence
     ) async throws -> Int where AsyncSendableSequence.Element == Data
 }
+#endif
 ```
 
 
@@ -1179,13 +1179,14 @@ extension InputProtocol {
 }
 ```
 
-`SubprocessFoundation` adds the following concrete input types that work with `Data`:
+`SubprocessFoundation` trait adds the following concrete input types that work with `Data`:
 
 - `DataInput`: reads input from a given `Data`.
 - `DataSequenceInput`: reads input from a given sequence of `Data`.
 - `DataAsyncSequenceInput`: reads input from a given async sequence of `Data`.
 
 ```swift
+#if SubprocessFoundation
 import Foundation
 
 /// A concrete `Input` type for subprocesses that reads input
@@ -1221,6 +1222,7 @@ extension InputProtocol {
         _ asyncSequence: InputSequence
     ) -> Self where Self == DataAsyncSequenceInput<InputSequence>
 }
+#endif
 ```
 
 Here are some examples:
@@ -1385,12 +1387,13 @@ extension OutputProtocol where Self == BytesOutput {
 ```
 
 
-`SubprocessFoundation` adds one additional concrete input:
+`SubprocessFoundation` trait adds one additional concrete input:
 
 - `DataOutput`: collects output from the subprocess as `Data`.
 
 
 ```swift
+#if SubprocessFoundation
 import Foundation
 
 /// A concrete `Output` type for subprocesses that collects output
@@ -1413,6 +1416,7 @@ extension OutputProtocol where Self == DataOutput {
         return .init(limit: limit)
     }
 }
+#endif
 ```
 
 Here are some examples of using different outputs:
@@ -1486,7 +1490,7 @@ let catResult = try await Subprocess.run(
         if value.contains("Done") {
             await execution.teardown(
                 using: [
-                    .sendSignal(.quit, allowedDurationToExit: .milliseconds(500)),
+                    .sendSignal(.quit, allowedDurationToNextStep: .milliseconds(500)),
                 ]
             )
             return true

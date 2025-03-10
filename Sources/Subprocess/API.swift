@@ -18,8 +18,8 @@ import System
 
 // MARK: - Collected Result
 
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a executable with given parameters asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - executable: The executable to run.
 ///   - arguments: The arguments to pass to the executable.
@@ -46,34 +46,23 @@ public func run<
     output: Output = .string,
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error> {
-    let result = try await Configuration(
+    let configuration = Configuration(
         executable: executable,
         arguments: arguments,
         environment: environment,
         workingDirectory: workingDirectory,
         platformOptions: platformOptions
     )
-    .run(input: input, output: output, error: error) { execution in
-        let (
-            standardOutput,
-            standardError,
-        ) = try await execution.captureIOs()
-        return (
-            processIdentifier: execution.processIdentifier,
-            standardOutput: standardOutput,
-            standardError: standardError,
-        )
-    }
-    return CollectedResult(
-        processIdentifier: result.value.processIdentifier,
-        terminationStatus: result.terminationStatus,
-        standardOutput: result.value.standardOutput,
-        standardError: result.value.standardError,
+    return try await run(
+        configuration,
+        input: input,
+        output: output,
+        error: error
     )
 }
 
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a executable with given parameters asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - executable: The executable to run.
 ///   - arguments: The arguments to pass to the executable.
@@ -138,7 +127,7 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>) async throws -> Result)
+    body: ((Execution<Output, Error>) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
     return try await Configuration(
         executable: executable,
@@ -175,7 +164,7 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
+    body: ((Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
     return try await Configuration(
         executable: executable,
@@ -193,16 +182,10 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 /// Run a executable with given parameters and a custom closure
 /// to manage the running subprocess' lifetime and its IOs.
 /// - Parameters:
-///   - executable: The executable to run.
-///   - arguments: The arguments to pass to the executable.
-///   - environment: The environment in which to run the executable.
-///   - workingDirectory: The working directory in which to run the executable.
-///   - platformOptions: The platform specific options to use
-///     when running the executable.
+///   - configuration: The `Subprocess` configuration to run.
 ///   - input: The input to send to the executable.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
-///   - body: The custom execution body to manually control the running process
 /// - Returns a CollectedResult containing the result of the run.
 @available(macOS 9999, *)
 public func run<

@@ -468,6 +468,24 @@ extension FileDescriptor {
         }
     }
 
+    @available(macOS 9999, *)
+    package func write(
+        _ span: borrowing RawSpan
+    ) async throws -> Int {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, any Error>) in
+            let dispatchData = span.withUnsafeBytes {
+                return DispatchData(bytesNoCopy: $0, deallocator: .custom(nil, { /* noop */ }))
+            }
+            self.write(dispatchData) { writtenLength, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: writtenLength)
+                }
+            }
+        }
+    }
+
     package func write(
         _ array: [UInt8]
     ) async throws -> Int {

@@ -9,13 +9,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if SubprocessFoundation
+
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #elseif canImport(Foundation)
 import Foundation
 #endif
 
-import Subprocess
 
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `Data`. This option must be used with
@@ -60,3 +61,6 @@ extension ManagedOutputProtocol {
         return try self.output(from: data.bytes)
     }
 }
+
+#endif // SubprocessFoundation
+
