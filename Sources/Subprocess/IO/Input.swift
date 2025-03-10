@@ -23,11 +23,8 @@ import Darwin
 
 // MARK: - Input
 
-/// `InputProtocol` specifies the set of methods that a type
+/// `InputProtocol` defines the `write(with:)` method that a type
 /// must implement to serve as the input source for a subprocess.
-/// Instead of developing custom implementations of `InputProtocol`,
-/// it is recommended to utilize the default implementations provided
-/// by the `Subprocess` library to specify the input handling requirements.
 public protocol InputProtocol: Sendable {
     /// Asynchronously write the input to the subprocess using the
     /// write file descriptor
