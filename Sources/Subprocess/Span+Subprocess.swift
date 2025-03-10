@@ -35,8 +35,11 @@ public func _overrideLifetime<
     dependent
 }
 
+#if SubprocessSpan
+
 #if canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 internal import Dispatch
+
 
 @available(SubprocessSpan, *)
 extension DispatchData {
@@ -58,4 +61,6 @@ extension DispatchData {
     }
 }
 #endif // canImport(Glibc) || canImport(Bionic) || canImport(Musl)
+
+#endif // SubprocessSpan
 

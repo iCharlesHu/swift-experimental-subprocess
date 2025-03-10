@@ -15,7 +15,9 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 internal struct AsyncBufferSequence: AsyncSequence, Sendable {
     internal typealias Failure = any Swift.Error
 

@@ -34,18 +34,6 @@ public protocol InputProtocol: Sendable {
     func write(with writer: StandardInputWriter) async throws
 }
 
-extension InputProtocol {
-    internal func createPipe() throws -> CreatedPipe {
-        if let noInput = self as? NoInput {
-            return try noInput.createPipe()
-        } else if let fdInput = self as? FileDescriptorInput {
-            return try fdInput.createPipe()
-        }
-        // Base implementation
-        return try CreatedPipe(closeWhenDone: true)
-    }
-}
-
 /// A concrete `Input` type for subprocesses that indicates
 /// the absence of input to the subprocess. On Unix-like systems,
 /// `NoInput` redirects the standard input of the subprocess
@@ -204,6 +192,18 @@ extension InputProtocol {
     }
 }
 
+extension InputProtocol {
+    internal func createPipe() throws -> CreatedPipe {
+        if let noInput = self as? NoInput {
+            return try noInput.createPipe()
+        } else if let fdInput = self as? FileDescriptorInput {
+            return try fdInput.createPipe()
+        }
+        // Base implementation
+        return try CreatedPipe(closeWhenDone: true)
+    }
+}
+
 // MARK: - StandardInputWriter
 
 /// A writer that writes to the standard input of the subprocess.
@@ -227,10 +227,12 @@ public final actor StandardInputWriter: Sendable {
     /// Write a `RawSpan` to the standard input of the subprocess.
     /// - Parameter span: The span to write
     /// - Returns number of bytes written
+#if SubprocessSpan
     @available(SubprocessSpan, *)
     public func write(_ span: borrowing RawSpan) async throws -> Int {
         return try await self.fileDescriptor.wrapped.write(span)
     }
+#endif
 
     /// Write a StringProtocol to the standard input of the subprocess.
     /// - Parameters:

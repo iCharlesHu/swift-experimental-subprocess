@@ -32,7 +32,9 @@ import Synchronization
 /// An object that repersents a subprocess that has been
 /// executed. You can use this object to send signals to the
 /// child process as well as stream its output and error.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public struct Execution<
     Output: OutputProtocol,
     Error: OutputProtocol
@@ -82,7 +84,9 @@ public struct Execution<
 #endif // os(Windows)
 }
 
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 extension Execution where Output == SequenceOutput {
     /// The standard output of the subprocess.
     /// Accessing this property will **fatalError** if
@@ -104,7 +108,9 @@ extension Execution where Output == SequenceOutput {
     }
 }
 
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 extension Execution where Error == SequenceOutput {
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
@@ -149,7 +155,9 @@ internal typealias CapturedIOs<
     Output: Sendable, Error: Sendable
 > = (standardOutput: Output, standardError: Error)
 
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 extension Execution {
     internal func captureIOs() async throws -> CapturedIOs<
         Output.OutputType, Error.OutputType

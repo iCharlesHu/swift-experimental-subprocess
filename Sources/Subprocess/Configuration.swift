@@ -58,7 +58,9 @@ public struct Configuration: Sendable, Hashable {
         self.platformOptions = platformOptions
     }
 
+    #if SubprocessSpan
     @available(SubprocessSpan, *)
+    #endif
     internal func run<
         Result,
         Output: OutputProtocol,
@@ -124,6 +126,7 @@ public struct Configuration: Sendable, Hashable {
         }
     }
 
+#if SubprocessSpan
     @available(SubprocessSpan, *)
     internal func run<
         InputElement: BitwiseCopyable,
@@ -217,8 +220,11 @@ public struct Configuration: Sendable, Hashable {
             )
         }
     }
+#endif // SubprocessSpan
 
+    #if SubprocessSpan
     @available(SubprocessSpan, *)
+    #endif
     internal func run<
         Result,
         Input: InputProtocol,
@@ -300,7 +306,6 @@ public struct Configuration: Sendable, Hashable {
     }
 }
 
-@available(SubprocessSpan, *)
 extension Configuration : CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         return """
@@ -331,7 +336,9 @@ Configuration(
 extension Configuration {
     /// Close each input individually, and throw the first error if there's multiple errors thrown
     @Sendable
+    #if SubprocessSpan
     @available(SubprocessSpan, *)
+    #endif
     private func cleanup<
         Output: OutputProtocol,
         Error: OutputProtocol

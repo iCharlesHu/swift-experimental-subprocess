@@ -21,21 +21,31 @@ import Foundation
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `Data`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public struct DataOutput: OutputProtocol {
     public typealias OutputType = Data
     public let maxSize: Int
 
+#if SubprocessSpan
     public func output(from span: RawSpan) throws -> Data {
         return Data(span)
     }
+#else
+    public func output(from buffer: some Sequence<UInt8>) throws -> Data {
+        return Data(buffer)
+    }
+#endif
 
     internal init(limit: Int) {
         self.maxSize = limit
     }
 }
 
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 extension OutputProtocol where Self == DataOutput {
     /// Create a `Subprocess` output that collects output as `Data`
     /// up to 128kb.
@@ -51,6 +61,7 @@ extension OutputProtocol where Self == DataOutput {
 }
 
 // MARK: - Workarounds
+#if SubprocessSpan
 @available(SubprocessSpan, *)
 extension OutputProtocol {
     @_disfavoredOverload
@@ -59,6 +70,7 @@ extension OutputProtocol {
         return try self.output(from: data.bytes)
     }
 }
+#endif
 
 #endif // SubprocessFoundation
 

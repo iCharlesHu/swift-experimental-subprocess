@@ -72,7 +72,6 @@ public struct PlatformOptions: Sendable {
     public init() {}
 }
 
-@available(SubprocessSpan, *)
 extension PlatformOptions: Hashable {
     public static func == (lhs: PlatformOptions, rhs: PlatformOptions) -> Bool {
         // Since we can't compare closure equality,
@@ -108,7 +107,6 @@ extension PlatformOptions: Hashable {
     }
 }
 
-@available(SubprocessSpan, *)
 extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
@@ -137,7 +135,9 @@ PlatformOptions(
 
 // MARK: - Spawn
 extension Configuration {
+    #if SubprocessSpan
     @available(SubprocessSpan, *)
+    #endif
     internal func spawn<
         Output: OutputProtocol,
         Error: OutputProtocol

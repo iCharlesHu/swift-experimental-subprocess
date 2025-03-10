@@ -31,7 +31,9 @@ import System
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
 /// - Returns a CollectedResult containing the result of the run.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public func run<
     Input: InputProtocol,
     Output: OutputProtocol,
@@ -74,6 +76,7 @@ public func run<
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
 /// - Returns a CollectedResult containing the result of the run.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
 public func run<
     InputElement: BitwiseCopyable,
@@ -97,7 +100,7 @@ public func run<
         platformOptions: platformOptions
     ).run(input: input, output: output, error: error)
 }
-
+#endif // SubprocessSpan
 
 // MARK: - Custom Execution Body
 
@@ -117,7 +120,9 @@ public func run<
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -156,7 +161,9 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -189,7 +196,9 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
 /// - Returns a CollectedResult containing the result of the run.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public func run<
     Input: InputProtocol,
     Output: OutputProtocol,
@@ -233,7 +242,9 @@ public func run<
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ configuration: Configuration,
     output: Output,
@@ -264,7 +275,9 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///   - output: A file descriptor to bind to the subprocess' standard output.
 ///   - error: A file descriptor to bind to the subprocess' standard error.
 /// - Returns: the process identifier for the subprocess.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public func runDetached(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -298,7 +311,9 @@ public func runDetached(
 ///   - output: A file descriptor to bind to the subprocess' standard output.
 ///   - error: A file descriptor to bind to the subprocess' standard error.
 /// - Returns: the process identifier for the subprocess.
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 public func runDetached(
     _ configuration: Configuration,
     input: FileDescriptor? = nil,

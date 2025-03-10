@@ -894,7 +894,9 @@ extension SubprocessUnixTests {
 }
 
 // MARK: - Utils
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 extension SubprocessUnixTests {
     private func assertID(
         withArgument argument: String,
@@ -916,7 +918,9 @@ extension SubprocessUnixTests {
     }
 }
 
+#if SubprocessSpan
 @available(SubprocessSpan, *)
+#endif
 internal func assertNewSessionCreated<Output: OutputProtocol>(
     with result: CollectedResult<
         StringOutput<UTF8>,

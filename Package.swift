@@ -4,7 +4,7 @@
 import PackageDescription
 
 let availabilityMacro: SwiftSetting = .enableExperimentalFeature(
-    "AvailabilityMacro=SubprocessSpan: macOS 9999"
+    "AvailabilityMacro=SubprocessSpan: macOS 9999",
 )
 
 let package = Package(
@@ -18,8 +18,12 @@ let package = Package(
     ],
     traits: [
         "SubprocessFoundation",
+        "SubprocessSpan",
         .default(
-            enabledTraits: ["SubprocessFoundation"]
+            enabledTraits: [
+                "SubprocessFoundation",
+                "SubprocessSpan"
+            ]
         )
     ],
     dependencies: [

@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if SubprocessFoundation
+#if SubprocessFoundation && SubprocessSpan
 
 #if canImport(FoundationEssentials)
 import FoundationEssentials

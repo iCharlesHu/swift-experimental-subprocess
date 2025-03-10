@@ -31,9 +31,10 @@ import Synchronization
 import _SubprocessCShims
 
 // Linux specific implementations
-@available(SubprocessSpan, *)
 extension Configuration {
-
+    #if SubprocessSpan
+    @available(SubprocessSpan, *)
+    #endif
     internal func spawn<
         Output: OutputProtocol,
         Error: OutputProtocol
@@ -125,7 +126,6 @@ extension Configuration {
 
 /// The collection of platform-specific settings
 /// to configure the subprocess when running
-@available(SubprocessSpan, *)
 public struct PlatformOptions: Sendable {
     // Set user ID for the subprocess
     public var userID: uid_t? = nil
@@ -166,7 +166,6 @@ public struct PlatformOptions: Sendable {
     public init() {}
 }
 
-@available(SubprocessSpan, *)
 extension PlatformOptions: Hashable {
     public static func ==(
         lhs: PlatformOptions,
@@ -203,7 +202,6 @@ extension PlatformOptions: Hashable {
     }
 }
 
-@available(SubprocessSpan, *)
 extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
@@ -234,7 +232,6 @@ extension String {
 }
 
 // MARK: - Process Monitoring
-@available(SubprocessSpan, *)
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: ProcessIdentifier
