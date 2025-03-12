@@ -50,6 +50,9 @@ public struct TeardownStep: Sendable, Hashable {
 }
 
 #if canImport(Darwin) || canImport(Glibc) || canImport(Bionic) || canImport(Musl)
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension Execution {
     /// Performs a sequence of teardown steps on the Subprocess.
     /// Teardown sequence always ends with a `.kill` signal
@@ -68,6 +71,9 @@ internal enum TeardownStepCompletion {
     case killedTheProcess
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension Execution {
     internal func runTeardownSequence(_ sequence: some Sequence<TeardownStep> & Sendable) async {
         // First insert the `.kill` step
@@ -111,6 +117,9 @@ extension Execution {
     }
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension Execution {
     private func isAlive() -> Bool {
         return kill(self.processIdentifier.value, 0) == 0

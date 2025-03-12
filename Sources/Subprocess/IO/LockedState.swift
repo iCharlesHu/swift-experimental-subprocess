@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if !canImport(Synchronization)
 
 #if canImport(os)
 internal import os
@@ -166,4 +165,3 @@ extension LockedState where State == Void {
 
 extension LockedState: @unchecked Sendable where State: Sendable {}
 
-#endif // !canImport(Synchronization)

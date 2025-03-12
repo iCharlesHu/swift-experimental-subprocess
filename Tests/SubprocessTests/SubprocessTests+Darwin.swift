@@ -26,8 +26,10 @@ import System
 // MARK: PlatformOptions Tests
 @Suite(.serialized)
 struct SubprocessDarwinTests {
-    @available(macOS 9999, *)
     @Test func testSubprocessPlatformOptionsProcessConfiguratorUpdateSpawnAttr() async throws {
+        guard #available(SubprocessSpan, *) else {
+            return
+        }
         var platformOptions = PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = { spawnAttr, _ in
             // Set POSIX_SPAWN_SETSID flag, which implies calls
@@ -47,8 +49,10 @@ struct SubprocessDarwinTests {
         try assertNewSessionCreated(with: psResult)
     }
 
-    @available(macOS 9999, *)
     @Test func testSubprocessPlatformOptionsProcessConfiguratorUpdateFileAction() async throws {
+        guard #available(SubprocessSpan, *) else {
+            return
+        }
         let intendedWorkingDir = FileManager.default.temporaryDirectory.path()
         var platformOptions = PlatformOptions()
         platformOptions.preSpawnProcessConfigurator = { _, fileAttr in
@@ -74,8 +78,10 @@ struct SubprocessDarwinTests {
         #expect(FilePath(currentDir) == expected)
     }
 
-    @available(macOS 9999, *)
     @Test func testSuspendResumeProcess() async throws {
+        guard #available(SubprocessSpan, *) else {
+            return
+        }
         _ = try await Subprocess.run(
             // This will intentionally hang
             .path("/bin/cat"),

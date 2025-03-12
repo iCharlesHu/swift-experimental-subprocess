@@ -3,6 +3,25 @@
 
 import PackageDescription
 
+let availabilityMacro: SwiftSetting = .enableExperimentalFeature(
+    "AvailabilityMacro=SubprocessSpan: macOS 9999",
+)
+
+var dep: [Package.Dependency] = [
+    .package(
+        url: "https://github.com/apple/swift-system",
+        from: "1.0.0"
+    )
+]
+#if !os(Windows)
+dep.append(
+    .package(
+        url: "https://github.com/apple/swift-docc-plugin",
+        from: "1.4.3"
+    ),
+)
+#endif
+
 let package = Package(
     name: "Subprocess",
     platforms: [.macOS("15.0"), .iOS("18.0"), .tvOS("18.0"), .watchOS("11.0")],
@@ -14,34 +33,29 @@ let package = Package(
     ],
     traits: [
         "SubprocessFoundation",
+        "SubprocessSpan",
         .default(
-            enabledTraits: ["SubprocessFoundation"]
+            enabledTraits: [
+                "SubprocessFoundation",
+                "SubprocessSpan"
+            ]
         )
     ],
-    dependencies: [
-        .package(
-            url: "https://github.com/apple/swift-system",
-            from: "1.0.0"
-        ),
-        .package(
-            url: "https://github.com/apple/swift-docc-plugin",
-            from: "1.4.3"
-        ),
-    ],
+    dependencies: dep,
     targets: [
         .target(
             name: "Subprocess",
             dependencies: [
                 "_SubprocessCShims",
                 .product(name: "SystemPackage", package: "swift-system"),
-
             ],
             path: "Sources/Subprocess",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
                 .enableExperimentalFeature("NonescapableTypes"),
                 .enableExperimentalFeature("LifetimeDependence"),
-                .enableExperimentalFeature("Span")
+                .enableExperimentalFeature("Span"),
+                availabilityMacro
             ]
         ),
         .testTarget(
@@ -53,7 +67,8 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
             swiftSettings: [
-                .enableExperimentalFeature("Span")
+                .enableExperimentalFeature("Span"),
+                availabilityMacro
             ]
         ),
 

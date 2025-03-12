@@ -20,43 +20,51 @@ import System
 #endif
 
 // Windows specific implementation
-@available(macOS 9999, *)
 extension Configuration {
+    #if SubprocessSpan
+    @available(SubprocessSpan, *)
+    #endif
     internal func spawn<
-        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
-        withInput input: Input,
+        withInput inputPipe: CreatedPipe,
         output: Output,
-        error: Error
+        outputPipe: CreatedPipe,
+        error: Error,
+        errorPipe: CreatedPipe
     ) throws -> Execution<Output, Error> {
         // Spawn differently depending on whether
         // we need to spawn as a user
         if let userCredentials = self.platformOptions.userCredentials {
             return try self.spawnAsUser(
-                withInput: input,
+                withInput: inputPipe,
                 output: output,
+                outputPipe: outputPipe,
                 error: error,
+                errorPipe: errorPipe,
                 userCredentials: userCredentials
             )
         } else {
             return try self.spawnDirect(
-                withInput: input,
+                withInput: inputPipe,
                 output: output,
-                error: error
+                outputPipe: outputPipe,
+                error: error,
+                errorPipe: errorPipe
             )
         }
     }
 
     internal func spawnDirect<
-        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
-        withInput input: Input,
+        withInput inputPipe: CreatedPipe,
         output: Output,
-        error: Error
+        outputPipe: CreatedPipe,
+        error: Error,
+        errorPipe: CreatedPipe
     ) throws -> Execution<Output, Error> {
         let (
             applicationName,
@@ -65,9 +73,9 @@ extension Configuration {
             intendedWorkingDir
         ) = try self.preSpawn()
         var startupInfo = try self.generateStartupInfo(
-            withInput: input,
-            output: output,
-            error: error
+            withInput: inputPipe,
+            output: outputPipe,
+            error: errorPipe
         )
         var processInfo: PROCESS_INFORMATION = PROCESS_INFORMATION()
         var createProcessFlags = self.generateCreateProcessFlag()
@@ -98,10 +106,10 @@ extension Configuration {
                         )
                         guard created else {
                             let windowsError = GetLastError()
-                            try self.cleanupAll(
-                                input: input,
-                                output: output,
-                                error: error
+                            try self.cleanupPreSpawn(
+                                input: inputPipe,
+                                output: outputPipe,
+                                error: errorPipe
                             )
                             throw SubprocessError(
                                 code: .init(.spawnFailed),
@@ -115,10 +123,10 @@ extension Configuration {
         // We don't need the handle objects, so close it right away
         guard CloseHandle(processInfo.hThread) else {
             let windowsError = GetLastError()
-            try self.cleanupAll(
-                input: input,
-                output: output,
-                error: error
+            try self.cleanupPreSpawn(
+                input: inputPipe,
+                output: outputPipe,
+                error: errorPipe
             )
             throw SubprocessError(
                 code: .init(.spawnFailed),
@@ -127,10 +135,10 @@ extension Configuration {
         }
         guard CloseHandle(processInfo.hProcess) else {
             let windowsError = GetLastError()
-            try self.cleanupAll(
-                input: input,
-                output: output,
-                error: error
+            try self.cleanupPreSpawn(
+                input: inputPipe,
+                output: outputPipe,
+                error: errorPipe
             )
             throw SubprocessError(
                 code: .init(.spawnFailed),
@@ -145,18 +153,21 @@ extension Configuration {
             processIdentifier: pid,
             output: output,
             error: error,
+            outputPipe: outputPipe,
+            errorPipe: errorPipe,
             consoleBehavior: self.platformOptions.consoleBehavior
         )
     }
 
     internal func spawnAsUser<
-        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
-        withInput input: Input,
+        withInput inputPipe: CreatedPipe,
         output: Output,
+        outputPipe: CreatedPipe,
         error: Error,
+        errorPipe: CreatedPipe,
         userCredentials: PlatformOptions.UserCredentials
     ) throws -> Execution<Output, Error> {
         let (
@@ -166,9 +177,9 @@ extension Configuration {
             intendedWorkingDir
         ) = try self.preSpawn()
         var startupInfo = try self.generateStartupInfo(
-            withInput: input,
-            output: output,
-            error: error
+            withInput: inputPipe,
+            output: outputPipe,
+            error: errorPipe
         )
         var processInfo: PROCESS_INFORMATION = PROCESS_INFORMATION()
         var createProcessFlags = self.generateCreateProcessFlag()
@@ -209,10 +220,10 @@ extension Configuration {
                                     )
                                     guard created else {
                                         let windowsError = GetLastError()
-                                        try self.cleanupAll(
-                                            input: input,
-                                            output: output,
-                                            error: error
+                                        try self.cleanupPreSpawn(
+                                            input: inputPipe,
+                                            output: outputPipe,
+                                            error: errorPipe
                                         )
                                         throw SubprocessError(
                                             code: .init(.spawnFailed),
@@ -229,10 +240,10 @@ extension Configuration {
         // We don't need the handle objects, so close it right away
         guard CloseHandle(processInfo.hThread) else {
             let windowsError = GetLastError()
-            try self.cleanupAll(
-                input: input,
-                output: output,
-                error: error
+            try self.cleanupPreSpawn(
+                input: inputPipe,
+                output: outputPipe,
+                error: errorPipe
             )
             throw SubprocessError(
                 code: .init(.spawnFailed),
@@ -241,10 +252,10 @@ extension Configuration {
         }
         guard CloseHandle(processInfo.hProcess) else {
             let windowsError = GetLastError()
-            try self.cleanupAll(
-                input: input,
-                output: output,
-                error: error
+            try self.cleanupPreSpawn(
+                input: inputPipe,
+                output: outputPipe,
+                error: errorPipe
             )
             throw SubprocessError(
                 code: .init(.spawnFailed),
@@ -259,6 +270,8 @@ extension Configuration {
             processIdentifier: pid,
             output: output,
             error: error,
+            outputPipe: outputPipe,
+            errorPipe: errorPipe,
             consoleBehavior: self.platformOptions.consoleBehavior
         )
     }
@@ -268,7 +281,6 @@ extension Configuration {
 
 /// The collection of platform-specific settings
 /// to configure the subprocess when running
-@available(macOS 9999, *)
 public struct PlatformOptions: Sendable {
     /// A `UserCredentials` to use spawning the subprocess
     /// as a different user
@@ -380,7 +392,6 @@ public struct PlatformOptions: Sendable {
     public init() {}
 }
 
-@available(macOS 9999, *)
 extension PlatformOptions: Hashable {
     public static func == (
         lhs: PlatformOptions,
@@ -412,7 +423,6 @@ extension PlatformOptions: Hashable {
     }
 }
 
-@available(macOS 9999, *)
 extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
@@ -437,7 +447,6 @@ PlatformOptions(
 }
 
 // MARK: - Process Monitoring
-@available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: ProcessIdentifier
@@ -498,7 +507,9 @@ internal func monitorProcessTermination(
 }
 
 // MARK: - Subprocess Control
-@available(macOS 9999, *)
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension Execution {
     /// Terminate the current subprocess with the given exit code
     /// - Parameter exitCode: The exit code to use for the subprocess.
@@ -614,7 +625,6 @@ extension Execution {
 }
 
 // MARK: - Executable Searching
-@available(macOS 9999, *)
 extension Executable {
     // Technically not needed for CreateProcess since
     // it takes process name. It's here to support
@@ -702,7 +712,6 @@ extension Environment {
 // MARK: - ProcessIdentifier
 
 /// A platform independent identifier for a subprocess.
-@available(macOS 9999, *)
 public struct ProcessIdentifier: Sendable, Hashable, Codable {
     /// Windows specifc process identifier value
     public let value: DWORD
@@ -718,7 +727,6 @@ public struct ProcessIdentifier: Sendable, Hashable, Codable {
     }
 }
 
-@available(macOS 9999, *)
 extension ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         return "(processID: \(self.value), threadID: \(self.threadID))"
@@ -730,7 +738,6 @@ extension ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertib
 }
 
 // MARK: - Private Utils
-@available(macOS 9999, *)
 extension Configuration {
     private func preSpawn() throws -> (
         applicationName: String?,
@@ -802,14 +809,10 @@ extension Configuration {
         return DWORD(flags)
     }
 
-    private func generateStartupInfo<
-        Input: InputProtocol,
-        Output: OutputProtocol,
-        Error: OutputProtocol
-    >(
-        withInput input: Input,
-        output: Output,
-        error: Error
+    private func generateStartupInfo(
+        withInput input: CreatedPipe,
+        output: CreatedPipe,
+        error: CreatedPipe
     ) throws -> STARTUPINFOW {
         var info: STARTUPINFOW = STARTUPINFOW()
         info.cb = DWORD(MemoryLayout<STARTUPINFOW>.size)
@@ -821,10 +824,10 @@ extension Configuration {
         }
         // Bind IOs
         // Input
-        if let inputRead = try input.readFileDescriptor() {
+        if let inputRead = input.readFileDescriptor {
             info.hStdInput = inputRead.platformDescriptor
         }
-        if let inputWrite = try input.writeFileDescriptor() {
+        if let inputWrite = input.writeFileDescriptor {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 inputWrite.platformDescriptor,
@@ -833,10 +836,10 @@ extension Configuration {
             )
         }
         // Output
-        if let outputWrite = try output.writeFileDescriptor() {
+        if let outputWrite = output.writeFileDescriptor {
             info.hStdOutput = outputWrite.platformDescriptor
         }
-        if let outputRead = try output.readFileDescriptor() {
+        if let outputRead = output.readFileDescriptor {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 outputRead.platformDescriptor,
@@ -845,10 +848,10 @@ extension Configuration {
             )
         }
         // Error
-        if let errorWrite = try error.writeFileDescriptor() {
+        if let errorWrite = error.writeFileDescriptor {
             info.hStdError = errorWrite.platformDescriptor
         }
-        if let errorRead = try error.readFileDescriptor() {
+        if let errorRead = error.readFileDescriptor {
             // Set parent side to be uninhertable
             SetHandleInformation(
                 errorRead.platformDescriptor,
@@ -979,11 +982,9 @@ extension Configuration {
 }
 
 // MARK: - PlatformFileDescriptor Type
-@available(macOS 9999, *)
 internal typealias PlatformFileDescriptor = HANDLE
 
 // MARK: - Read Buffer Size
-@available(macOS 9999, *)
 @inline(__always)
 internal var readBufferSize: Int {
     // FIXME: Use Platform.pageSize here
@@ -1034,7 +1035,7 @@ extension FileDescriptor {
         return HANDLE(bitPattern: _get_osfhandle(self.rawValue))!
     }
 
-    internal func readChunk(upToLength maxLength: Int) async throws -> Buffer? {
+    internal func readChunk(upToLength maxLength: Int) async throws -> SequenceOutput.Buffer? {
         return try await withCheckedThrowingContinuation { continuation in
             self.readUntilEOF(
                 upToLength: maxLength
@@ -1043,7 +1044,7 @@ extension FileDescriptor {
                 case .failure(let error):
                     continuation.resume(throwing: error)
                 case .success(let bytes):
-                    continuation.resume(returning: Buffer(data: bytes))
+                    continuation.resume(returning: SequenceOutput.Buffer(data: bytes))
                 }
             }
         }
@@ -1051,7 +1052,7 @@ extension FileDescriptor {
 
     internal func readUntilEOF(
         upToLength maxLength: Int,
-        resultHandler: sending @escaping (Swift.Result<Array<UInt8>, any Error>) -> Void
+        resultHandler: @Sendable @escaping (Swift.Result<Array<UInt8>, any (Error & Sendable)>) -> Void
     ) {
         DispatchQueue.global(qos: .userInitiated).async {
             var totalBytesRead: Int = 0
@@ -1107,6 +1108,26 @@ extension FileDescriptor {
             }
         }
     }
+
+#if SubprocessSpan
+    @available(SubprocessSpan, *)
+    internal func write(
+        _ span: borrowing RawSpan
+    ) async throws -> Int {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, any Error>) in
+            span.withUnsafeBytes { ptr in
+                // TODO: Use WriteFileEx for asyc here
+                self.write(ptr) { writtenLength, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: writtenLength)
+                    }
+                }
+            }
+        }
+    }
+#endif
 
     internal func write(
         _ array: [UInt8]
@@ -1229,7 +1250,7 @@ internal extension UInt8 {
     }
 }
 
-extension ManagedOutputProtocol {
+extension OutputProtocol {
     internal func output(from data: [UInt8]) throws -> OutputType {
         return try data.withUnsafeBytes {
             let span = RawSpan(_unsafeBytes: $0)

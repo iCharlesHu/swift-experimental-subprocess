@@ -27,9 +27,14 @@ import Musl
 import WinSDK
 #endif
 
+import Synchronization
+
 /// An object that repersents a subprocess that has been
 /// executed. You can use this object to send signals to the
 /// child process as well as stream its output and error.
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public struct Execution<
     Output: OutputProtocol,
     Error: OutputProtocol
@@ -39,6 +44,9 @@ public struct Execution<
 
     internal let output: Output
     internal let error: Error
+    internal var outputPipe: CreatedPipe
+    internal var errorPipe: CreatedPipe
+    internal let outputConsumptionState: LockedState<OutputConsumptionState>
 #if os(Windows)
     internal let consoleBehavior: PlatformOptions.ConsoleBehavior
 
@@ -46,22 +54,39 @@ public struct Execution<
         processIdentifier: ProcessIdentifier,
         output: Output,
         error: Error,
+        outputPipe: CreatedPipe,
+        errorPipe: CreatedPipe,
         consoleBehavior: PlatformOptions.ConsoleBehavior
     ) {
         self.processIdentifier = processIdentifier
         self.output = output
         self.error = error
+        self.outputPipe = outputPipe
+        self.errorPipe = errorPipe
+        self.outputConsumptionState = .init(.init(rawValue: 0))
         self.consoleBehavior = consoleBehavior
     }
 #else
-    init(processIdentifier: ProcessIdentifier, output: Output, error: Error) {
+    init(
+        processIdentifier: ProcessIdentifier,
+        output: Output,
+        error: Error,
+        outputPipe: CreatedPipe,
+        errorPipe: CreatedPipe,
+    ) {
         self.processIdentifier = processIdentifier
         self.output = output
         self.error = error
+        self.outputPipe = outputPipe
+        self.errorPipe = errorPipe
+        self.outputConsumptionState = .init(.init(rawValue: 0))
     }
 #endif // os(Windows)
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension Execution where Output == SequenceOutput {
     /// The standard output of the subprocess.
     /// Accessing this property will **fatalError** if
@@ -69,14 +94,23 @@ extension Execution where Output == SequenceOutput {
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
     public var standardOutput: some AsyncSequence<SequenceOutput.Buffer, any Swift.Error> {
-        guard let fd = self.output
-            .consumeReadFileDescriptor() else {
+        let consumptionState = self.outputConsumptionState.withLock { stateStore in
+            let newState = stateStore.rawValue ^ OutputConsumptionState.standardOutputConsumed.rawValue
+            stateStore = .init(rawValue: newState)
+            return stateStore
+        }
+
+        guard consumptionState.contains(.standardOutputConsumed),
+              let fd = self.outputPipe.readFileDescriptor else {
             fatalError("The standard output has already been consumed")
         }
         return AsyncBufferSequence(fileDescriptor: fd)
     }
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension Execution where Error == SequenceOutput {
     /// The standard error of the subprocess.
     /// Accessing this property will **fatalError** if
@@ -84,9 +118,15 @@ extension Execution where Error == SequenceOutput {
     /// - This property was accessed multiple times. Subprocess communicates with
     ///   parent process via pipe under the hood and each pipe can only be consumed ones.
     public var standardError: some AsyncSequence<SequenceOutput.Buffer, any Swift.Error> {
-        guard let fd = self.error
-            .consumeReadFileDescriptor() else {
-            fatalError("The standard error has already been consumed")
+        let consumptionState = self.outputConsumptionState.withLock { stateStore in
+            let newState = stateStore.rawValue ^ OutputConsumptionState.standardErrorConsumed.rawValue
+            stateStore = .init(rawValue: newState)
+            return stateStore
+        }
+
+        guard consumptionState.contains(.standardErrorConsumed),
+              let fd = self.errorPipe.readFileDescriptor else {
+            fatalError("The standard output has already been consumed")
         }
         return AsyncBufferSequence(fileDescriptor: fd)
     }
@@ -98,10 +138,26 @@ internal enum OutputCapturingState<Output: Sendable, Error: Sendable>: Sendable 
     case standardErrorCaptured(Error)
 }
 
+internal struct OutputConsumptionState: OptionSet {
+    typealias RawValue = UInt8
+
+    internal let rawValue: UInt8
+
+    internal init(rawValue: UInt8) {
+        self.rawValue = rawValue
+    }
+
+    static let standardOutputConsumed: Self = .init(rawValue: 0b0001)
+    static let standardErrorConsumed: Self  = .init(rawValue: 0b0010)
+}
+
 internal typealias CapturedIOs<
     Output: Sendable, Error: Sendable
 > = (standardOutput: Output, standardError: Error)
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension Execution {
     internal func captureIOs() async throws -> CapturedIOs<
         Output.OutputType, Error.OutputType
@@ -110,11 +166,15 @@ extension Execution {
             of: OutputCapturingState<Output.OutputType, Error.OutputType>.self
         ) { group in
             group.addTask {
-                let stdout = try await self.output.captureOutput()
+                let stdout = try await self.output.captureOutput(
+                    from: self.outputPipe.readFileDescriptor
+                )
                 return .standardOutputCaptured(stdout)
             }
             group.addTask {
-                let stderr = try await self.error.captureOutput()
+                let stderr = try await self.error.captureOutput(
+                    from: self.errorPipe.readFileDescriptor
+                )
                 return .standardErrorCaptured(stderr)
             }
 

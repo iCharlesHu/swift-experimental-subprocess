@@ -27,63 +27,57 @@ internal import Dispatch
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given `Data`.
-public final class DataInput: ManagedInputProtocol {
+public struct DataInput: InputProtocol {
     private let data: Data
-    public let pipe: Subprocess.Pipe
 
-    public func write(into writeFileDescriptor: FileDescriptor) async throws {
-        _ = try await writeFileDescriptor.write(self.data)
+    public func write(with writer: StandardInputWriter) async throws {
+        _ = try await writer.write(self.data)
     }
 
     internal init(data: Data) {
         self.data = data
-        self.pipe = Subprocess.Pipe()
     }
 }
 
 /// A concrete `Input` type for subprocesses that accepts input
 /// from a specified sequence of `Data`.
-public final class DataSequenceInput<
+public struct DataSequenceInput<
     InputSequence: Sequence & Sendable
->: ManagedInputProtocol where InputSequence.Element == Data {
+>: InputProtocol where InputSequence.Element == Data {
     private let sequence: InputSequence
-    public let pipe: Subprocess.Pipe
 
-    public func write(into writeFileDescriptor: FileDescriptor) async throws {
+    public func write(with writer: StandardInputWriter) async throws {
         var buffer = Data()
         for chunk in self.sequence {
             buffer.append(chunk)
         }
-        _ = try await writeFileDescriptor.write(buffer)
+        _ = try await writer.write(buffer)
     }
 
     internal init(underlying: InputSequence) {
         self.sequence = underlying
-        self.pipe = Subprocess.Pipe()
     }
 }
 
 /// A concrete `Input` type for subprocesses that reads input
 /// from a given async sequence of `Data`.
-public final class DataAsyncSequenceInput<
+public struct DataAsyncSequenceInput<
     InputSequence: AsyncSequence & Sendable
->: ManagedInputProtocol where InputSequence.Element == Data {
+>: InputProtocol where InputSequence.Element == Data {
     private let sequence: InputSequence
-    public let pipe: Subprocess.Pipe
 
-    private func writeChunk(_ chunk: Data, into writeFileDescriptor: FileDescriptor) async throws {
-        _ = try await writeFileDescriptor.write(chunk)
+    private func writeChunk(_ chunk: Data, with writer: StandardInputWriter) async throws {
+        _ = try await writer.write(chunk)
     }
 
-    public func write(into writeFileDescriptor: FileDescriptor) async throws {
+    public func write(with writer: StandardInputWriter) async throws {
         for try await chunk in self.sequence {
-            try await self.writeChunk(chunk, into: writeFileDescriptor)
+            try await self.writeChunk(chunk, with: writer)
         }
     }
 
     internal init(underlying: InputSequence) {
         self.sequence = underlying
-        self.pipe = Subprocess.Pipe()
     }
 }
 
@@ -115,10 +109,7 @@ extension StandardInputWriter {
     public func write(
         _ data: Data
     ) async throws -> Int {
-        guard let fd: FileDescriptor = try self.input.writeFileDescriptor() else {
-            fatalError("Attempting to write to a file descriptor that's already closed")
-        }
-        return try await fd.write(data)
+        return try await self.fileDescriptor.wrapped.write(data)
     }
 
     /// Write a AsyncSequence of Data to the standard input of the subprocess.
