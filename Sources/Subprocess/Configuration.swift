@@ -819,6 +819,10 @@ internal struct TrackedFileDescriptor: Hashable {
             }
         }
     }
+
+    internal var platformDescriptor: PlatformFileDescriptor {
+        return self.wrapped.platformDescriptor
+    }
 }
 
 internal struct CreatedPipe {

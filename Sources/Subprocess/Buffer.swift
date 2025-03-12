@@ -80,6 +80,11 @@ extension SequenceOutput.Buffer {
     // Access the storge backing this Buffer
     public var bytes: RawSpan {
         var backing: SpanBacking?
+#if os(Windows)
+        self.data.withUnsafeBufferPointer {
+            backing = .pointer($0)
+        }
+#else
         self.data.enumerateBytes { buffer, byteIndex, stop in
             if _fastPath(backing == nil) {
                 // In practice, almost all `DispatchData` is contiguous
@@ -98,6 +103,7 @@ extension SequenceOutput.Buffer {
                 }
             }
         }
+#endif
         guard let backing = backing else {
             let empty = UnsafeRawBufferPointer(start: nil, count: 0)
             let span = RawSpan(_unsafeBytes: empty)

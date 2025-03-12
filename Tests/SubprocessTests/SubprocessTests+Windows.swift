@@ -374,7 +374,8 @@ extension SubprocessWindowsTests {
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
-                buffer += chunk
+                let currentChunk = chunk.withUnsafeBytes { Data($0) }
+                buffer += currentChunk
             }
             return buffer
         }
@@ -414,7 +415,8 @@ extension SubprocessWindowsTests {
         ) { execution in
             var buffer = Data()
             for try await chunk in execution.standardOutput {
-                buffer += chunk
+                let currentChunk = chunk.withUnsafeBytes { Data($0) }
+                buffer += currentChunk
             }
             return buffer
         }
@@ -512,7 +514,8 @@ extension SubprocessWindowsTests {
         ) { subprocess in
             var buffer = Data()
             for try await chunk in subprocess.standardOutput {
-                buffer += chunk
+                let currentChunk = chunk.withUnsafeBytes { Data($0) }
+                buffer += currentChunk
             }
             return buffer
         }

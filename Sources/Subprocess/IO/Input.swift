@@ -15,12 +15,6 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
-#if canImport(Glibc)
-import Glibc
-#else
-import Darwin
-#endif
-
 // MARK: - Input
 
 /// `InputProtocol` defines the `write(with:)` method that a type

@@ -66,7 +66,10 @@ public struct DiscardedOutput: OutputProtocol {
         // On Windows, instead of binding to dev null,
         // we don't set the input handle in the `STARTUPINFOW`
         // to signal no output
-        return (readFileDescriptor: nil, writeFileDescriptor: nil)
+        return CreatedPipe(
+            readFileDescriptor: nil,
+            writeFileDescriptor: nil
+        )
 #else
         let devnull: FileDescriptor = try .openDevNull(withAcessMode: .readOnly)
         return CreatedPipe(
@@ -167,7 +170,11 @@ public struct BytesOutput: OutputProtocol {
                 switch result {
                 case .success(let data):
                     //FIXME: remove workaround for rdar://143992296
+                #if os(Windows)
+                    continuation.resume(returning: data)
+                #else
                     continuation.resume(returning: data.array())
+                #endif
                 case .failure(let error):
                     continuation.resume(throwing: error)
                 }
