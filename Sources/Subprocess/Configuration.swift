@@ -368,13 +368,9 @@ extension Configuration {
         var exitError: Swift.Error? = nil
         // Attempt to teardown the subprocess
         if attemptToTerminateSubProcess {
-#if os(Windows)
-            exitError = execution.tryTerminate()
-#else
             await execution.teardown(
                 using: self.platformOptions.teardownSequence
             )
-#endif
         }
 
         var inputError: Swift.Error?

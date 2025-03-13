@@ -73,4 +73,11 @@ int _shims_snprintf(
 
 #endif // !TARGET_OS_WINDOWS
 
+#if TARGET_OS_WINDOWS
+#include <windows.h>
+
+BOOL _subprocess_windows_send_vm_close(DWORD pid);
+
+#endif
+
 #endif /* process_shims_h */
