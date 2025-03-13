@@ -26,7 +26,7 @@ import _SubprocessCShims
 
 
 /// A step in the graceful shutdown teardown sequence.
-/// It consists of a signal to send to the child process and the
+/// It consists of an action to perform on the child process and the
 /// duration allowed for the child process to exit before proceeding
 /// to the next step.
 public struct TeardownStep: Sendable, Hashable {
@@ -56,6 +56,14 @@ public struct TeardownStep: Sendable, Hashable {
     }
 #endif // !os(Windows)
 
+    /// Attempt to perform a graceful shutdown and allows
+    /// `alloweDurationToNextStep` for the process to exit
+    /// before proceeding to the next step:
+    /// - On Unix: send `SIGTERM`
+    /// - On Windows:
+    ///   1. Attempt to send `VM_CLOSE` if the child process is a GUI process;
+    ///   2. Attempt to send `CTRL_C_EVENT` to console;
+    ///   3. Attempt to send `CTRL_BREAK_EVENT` to process group.
     public static func gracefulShutDown(
         alloweDurationToNextStep: Duration
     ) -> Self {

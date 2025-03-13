@@ -102,6 +102,7 @@
     - Revise `InputProtocol` and `OutputProtocol` to not expose `FileDescriptor` directly
     - Added `SubprocessSpan` trait
     - Removed the opaque `Pipe`
+    - Introduce a cross platform TeardownStep.gracefulShutDown(alloweDurationToNextStep:) and add Windows support
 
 ## Introduction
 
@@ -634,23 +635,36 @@ extension Execution {
 #endif // canImport(Glibc) || canImport(Darwin)
 ```
 
-#### Teardown Sequence (macOS and Linux)
+#### Teardown Sequence
 
-`Subprocess` provides a graceful shutdown mechanism for child processes using the `.teardown(using:)` method. This method allows for a sequence of teardown steps to be executed, with the final step always sending a `.kill` signal.
+`Subprocess` provides a graceful shutdown mechanism for child processes using the `.teardown(using:)` method. This method allows for a sequence of teardown steps to be executed, with the final step always sending a `.kill` signal on Unix or forcefully terminating the process on Windows.
 
 ```swift
-#if canImport(Glibc) || canImport(Darwin)
 /// A step in the graceful shutdown teardown sequence.
-/// It consists of a signal to send to the child process and the
+/// It consists of an action to perform on the child process and the
 /// duration allowed for the child process to exit before proceeding
 /// to the next step.
 public struct TeardownStep: Sendable, Hashable {
+#if !os(Windows)
     /// Sends `signal` to the process and allows `allowedDurationToNextStep`
     /// for the process to exit before proceeding to the next step.
     /// The final step in the sequence will always send a `.kill` signal.
     public static func sendSignal(
         _ signal: Signal,
         allowedDurationToNextStep: Duration
+    ) -> Self
+#endif
+
+    /// Attempt to perform a graceful shutdown and allows
+    /// `alloweDurationToNextStep` for the process to exit
+    /// before proceeding to the next step:
+    /// - On Unix: send `SIGTERM`
+    /// - On Windows:
+    ///   1. Attempt to send `VM_CLOSE` if the child process is a GUI process;
+    ///   2. Attempt to send `CTRL_C_EVENT` to console;
+    ///   3. Attempt to send `CTRL_BREAK_EVENT` to process group.
+    public static func gracefulShutDown(
+        alloweDurationToNextStep: Duration
     ) -> Self
 }
 
@@ -660,10 +674,9 @@ extension Execution {
     /// - Parameter sequence: The  steps to perform.
     public func teardown(using sequence: some Sequence<TeardownStep> & Sendable) async
 }
-#endif // canImport(Glibc) || canImport(Darwin)
 ```
 
-A teardown sequence is a series of signals sent to the child process, accompanied by a specified time limit for the child process to terminate before proceeding to the next step. For instance, it may be appropriate to initially send `.quit` and `.terminate` signals to the child process to facilitate a graceful shutdown before sending `.kill`.
+A teardown sequence involves a set of actions taken on the child process, with a set time limit for it to wrap up before moving on. On platforms like Darwin and Linux, developers can also send signals directly to the child process. For example, it might be wise to start with `.quit` and `.terminate` signals to ensure a smooth shutdown before resorting to `.kill`.
 
 ```swift
 let result = try await run(
@@ -1023,6 +1036,11 @@ public struct PlatformOptions: Sendable, Hashable {
     /// The process identifier of the new process group
     /// is the same as the process identifier.
     public var createProcessGroup: Bool = false
+    /// An ordered list of steps in order to tear down the child
+    /// process in case the parent task is cancelled before
+    /// the child proces terminates.
+    /// Always ends in forcefully terminate at the end.
+    public var teardownSequence: [TeardownStep] = []
     /// A closure to configure platform-specific
     /// spawning constructs. This closure enables direct
     /// configuration or override of underlying platform-specific
