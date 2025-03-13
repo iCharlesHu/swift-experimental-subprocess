@@ -188,8 +188,8 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 
 // MARK: - Configuration Based
 
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a `Configuration` asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - configuration: The `Subprocess` configuration to run.
 ///   - input: The input to send to the executable.

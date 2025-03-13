@@ -146,8 +146,7 @@ extension Configuration {
             )
         }
         let pid = ProcessIdentifier(
-            value: processInfo.dwProcessId,
-            threadID: processInfo.dwThreadId
+            value: processInfo.dwProcessId
         )
         return Execution(
             processIdentifier: pid,
@@ -263,8 +262,7 @@ extension Configuration {
             )
         }
         let pid = ProcessIdentifier(
-            value: processInfo.dwProcessId,
-            threadID: processInfo.dwThreadId
+            value: processInfo.dwProcessId
         )
         return Execution(
             processIdentifier: pid,
@@ -720,21 +718,15 @@ extension Environment {
 public struct ProcessIdentifier: Sendable, Hashable, Codable {
     /// Windows specifc process identifier value
     public let value: DWORD
-    /// Windows specific thread identifier associated with process
-    public let threadID: DWORD
 
-    internal init(
-        value: DWORD,
-        threadID: DWORD
-    ) {
+    internal init(value: DWORD) {
         self.value = value
-        self.threadID = threadID
     }
 }
 
 extension ProcessIdentifier: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
-        return "(processID: \(self.value), threadID: \(self.threadID))"
+        return "(processID: \(self.value))"
     }
 
     public var debugDescription: String {

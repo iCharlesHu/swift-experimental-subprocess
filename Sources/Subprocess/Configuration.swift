@@ -365,7 +365,6 @@ extension Configuration {
             return
         }
 
-        var exitError: Swift.Error? = nil
         // Attempt to teardown the subprocess
         if attemptToTerminateSubProcess {
             await execution.teardown(
@@ -411,10 +410,6 @@ extension Configuration {
 
         if let errorError = errorError {
             throw errorError
-        }
-
-        if let exitError = exitError {
-            throw exitError
         }
     }
 
