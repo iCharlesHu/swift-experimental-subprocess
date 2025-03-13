@@ -3,8 +3,9 @@
 * Proposal: [SF-0007](0007-swift-subprocess.md)
 * Authors: [Charles Hu](https://github.com/iCharlesHu)
 * Review Manager: [Tina Liu](https://github.com/itingliu)
-* Status: **2nd Review, Active: Dec 12, 2024...Dec 19, 2024**
+* Status: **3nd Review, Active: Feb 24, 2025...March 03, 2025**
 * Bugs: [rdar://118127512](rdar://118127512), [apple/swift-foundation#309](https://github.com/apple/swift-foundation/issues/309)
+* Review: [Pitch](https://forums.swift.org/t/pitch-swift-subprocess/69805/65), [1st review](https://forums.swift.org/t/review-sf-0007-introducing-swift-subprocess/70337), [2nd review](https://forums.swift.org/t/review-2nd-sf-0007-subprocess/76547)
 
 
 ## Revision History
@@ -102,6 +103,7 @@
     - Revise `InputProtocol` and `OutputProtocol` to not expose `FileDescriptor` directly
     - Added `SubprocessSpan` trait
     - Removed the opaque `Pipe`
+    - Introduce a cross platform TeardownStep.gracefulShutDown(alloweDurationToNextStep:) and add Windows support
 
 ## Introduction
 
@@ -226,8 +228,8 @@ For Swift 6.0 and earlier versions, `SubprocessFoundation` is essentially always
 We propose several `run()` functions that allow developers to asynchronously execute a subprocess.
 
 ```swift
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a executable with given parameters asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - executable: The executable to run.
 ///   - arguments: The arguments to pass to the executable.
@@ -238,7 +240,6 @@ We propose several `run()` functions that allow developers to asynchronously exe
 ///   - input: The input to send to the executable.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
-///   - body: The custom execution body to manually control the running process
 /// - Returns a CollectedResult containing the result of the run.
 #if SubprocessSpan
 @available(SubprocessSpan, *)
@@ -258,8 +259,8 @@ public func run<
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error>
 
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a executable with given parameters asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - executable: The executable to run.
 ///   - arguments: The arguments to pass to the executable.
@@ -267,10 +268,9 @@ public func run<
 ///   - workingDirectory: The working directory in which to run the executable.
 ///   - platformOptions: The platform specific options to use
 ///     when running the executable.
-///   - input: span to write to subprocess' standard input.
+///   - input: The input to send to the executable.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
-///   - body: The custom execution body to manually control the running process
 /// - Returns a CollectedResult containing the result of the run.
 #if SubprocessSpan
 @available(SubprocessSpan, *)
@@ -352,8 +352,8 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     body: ((Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void
 
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a `Configuration` asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - configuration: The `Subprocess` configuration to run.
 ///   - input: The input to send to the executable.
@@ -543,8 +543,6 @@ extension Execution where Error == SequenceOutput {
 public struct ProcessIdentifier: Sendable, Hashable, Codable {
     /// Windows specifc process identifier value
     public let value: DWORD
-    /// Windows specific thread identifier associated with process
-    public let threadID: DWORD
 }
 #else
 /// A platform independent identifier for a Subprocess.
@@ -634,23 +632,36 @@ extension Execution {
 #endif // canImport(Glibc) || canImport(Darwin)
 ```
 
-#### Teardown Sequence (macOS and Linux)
+#### Teardown Sequence
 
-`Subprocess` provides a graceful shutdown mechanism for child processes using the `.teardown(using:)` method. This method allows for a sequence of teardown steps to be executed, with the final step always sending a `.kill` signal.
+`Subprocess` provides a graceful shutdown mechanism for child processes using the `.teardown(using:)` method. This method allows for a sequence of teardown steps to be executed, with the final step always sending a `.kill` signal on Unix or forcefully terminating the process on Windows.
 
 ```swift
-#if canImport(Glibc) || canImport(Darwin)
 /// A step in the graceful shutdown teardown sequence.
-/// It consists of a signal to send to the child process and the
+/// It consists of an action to perform on the child process and the
 /// duration allowed for the child process to exit before proceeding
 /// to the next step.
 public struct TeardownStep: Sendable, Hashable {
+#if !os(Windows)
     /// Sends `signal` to the process and allows `allowedDurationToNextStep`
     /// for the process to exit before proceeding to the next step.
     /// The final step in the sequence will always send a `.kill` signal.
     public static func sendSignal(
         _ signal: Signal,
         allowedDurationToNextStep: Duration
+    ) -> Self
+#endif
+
+    /// Attempt to perform a graceful shutdown and allows
+    /// `alloweDurationToNextStep` for the process to exit
+    /// before proceeding to the next step:
+    /// - On Unix: send `SIGTERM`
+    /// - On Windows:
+    ///   1. Attempt to send `VM_CLOSE` if the child process is a GUI process;
+    ///   2. Attempt to send `CTRL_C_EVENT` to console;
+    ///   3. Attempt to send `CTRL_BREAK_EVENT` to process group.
+    public static func gracefulShutDown(
+        alloweDurationToNextStep: Duration
     ) -> Self
 }
 
@@ -660,10 +671,9 @@ extension Execution {
     /// - Parameter sequence: The  steps to perform.
     public func teardown(using sequence: some Sequence<TeardownStep> & Sendable) async
 }
-#endif // canImport(Glibc) || canImport(Darwin)
 ```
 
-A teardown sequence is a series of signals sent to the child process, accompanied by a specified time limit for the child process to terminate before proceeding to the next step. For instance, it may be appropriate to initially send `.quit` and `.terminate` signals to the child process to facilitate a graceful shutdown before sending `.kill`.
+A teardown sequence involves a set of actions taken on the child process, with a set time limit for it to wrap up before moving on. On platforms like Darwin and Linux, developers can also send signals directly to the child process. For example, it might be wise to start with `.quit` and `.terminate` signals to ensure a smooth shutdown before resorting to `.kill`.
 
 ```swift
 let result = try await run(
@@ -1023,6 +1033,11 @@ public struct PlatformOptions: Sendable, Hashable {
     /// The process identifier of the new process group
     /// is the same as the process identifier.
     public var createProcessGroup: Bool = false
+    /// An ordered list of steps in order to tear down the child
+    /// process in case the parent task is cancelled before
+    /// the child proces terminates.
+    /// Always ends in forcefully terminate at the end.
+    public var teardownSequence: [TeardownStep] = []
     /// A closure to configure platform-specific
     /// spawning constructs. This closure enables direct
     /// configuration or override of underlying platform-specific

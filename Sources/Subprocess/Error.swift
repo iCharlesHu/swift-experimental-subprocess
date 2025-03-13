@@ -102,7 +102,7 @@ extension SubprocessError: CustomStringConvertible, CustomDebugStringConvertible
         case .failedToWriteToSubprocess:
             return "Failed to write bytes to the child process."
         case .failedToMonitorProcess:
-            return "Failed to monitor the state of child process."
+            return "Failed to monitor the state of child process with underlying error: \(self.underlyingError!)"
         case .failedToSendSignal(let signal):
             return "Failed to send signal \(signal) to the child process."
         case .failedToTerminate:
