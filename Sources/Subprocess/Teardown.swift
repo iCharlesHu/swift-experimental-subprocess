@@ -85,23 +85,7 @@ extension Execution {
     /// - Parameter sequence: The  steps to perform.
     public func teardown(using sequence: some Sequence<TeardownStep> & Sendable) async {
         await withUncancelledTask {
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    await self.runTeardownSequence(sequence)
-                }
-                group.addTask {
-                    do {
-                        _ = try await monitorProcessTermination(
-                            forProcessWithIdentifier: self.processIdentifier
-                        )
-                    } catch {
-                        // noop
-                    }
-                }
-                // As soon as the child process exits, cancel the teardown task
-                await group.next()
-                group.cancelAll()
-            }
+            await self.runTeardownSequence(sequence)
         }
     }
 }

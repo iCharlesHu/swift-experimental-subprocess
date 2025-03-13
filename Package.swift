@@ -22,6 +22,13 @@ dep.append(
 )
 #endif
 
+// Enable SubprocessFoundation by default
+var defaultTraits: Set<String> = ["SubprocessFoundation"]
+#if compiler(>=6.2)
+// Enable SubprocessSpan when Span is available
+defaultTraits.insert("SubprocessSpan")
+#endif
+
 let package = Package(
     name: "Subprocess",
     platforms: [.macOS("15.0"), .iOS("18.0"), .tvOS("18.0"), .watchOS("11.0")],
@@ -35,10 +42,7 @@ let package = Package(
         "SubprocessFoundation",
         "SubprocessSpan",
         .default(
-            enabledTraits: [
-                "SubprocessFoundation",
-                "SubprocessSpan"
-            ]
+            enabledTraits: defaultTraits
         )
     ],
     dependencies: dep,
