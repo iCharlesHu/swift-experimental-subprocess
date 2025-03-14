@@ -29,9 +29,13 @@ import WinSDK
 
 internal import Dispatch
 
+public protocol ConfigurationBuilder {
+    func config() -> Configuration
+}
+
 /// A collection of configurations parameters to use when
 /// spawning a subprocess.
-public struct Configuration: Sendable, Hashable {
+public struct Configuration: Sendable, Hashable, ConfigurationBuilder {
     /// The executable to run.
     public var executable: Executable
     /// The arguments to pass to the executable.
@@ -303,6 +307,10 @@ public struct Configuration: Sendable, Hashable {
                 attemptToTerminateSubProcess: true
             )
         }
+    }
+
+    public func config() -> Configuration {
+        return self
     }
 }
 

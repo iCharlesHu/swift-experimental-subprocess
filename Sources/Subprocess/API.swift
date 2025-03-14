@@ -204,16 +204,12 @@ public func run<
     Output: OutputProtocol,
     Error: OutputProtocol
 >(
-    _ configuration: Configuration,
+    _ configuration: ConfigurationBuilder,
     input: Input = .none,
     output: Output = .string,
     error: Error = .discarded
 ) async throws -> CollectedResult<Output, Error> {
-    let result = try await configuration.run(
-        input: input,
-        output: output,
-        error: error
-    )  { execution in
+    let result = try await configuration.config().run(input: input, output: output, error: error){ execution in
         let (
             standardOutput,
             standardError,
@@ -246,13 +242,13 @@ public func run<
 @available(SubprocessSpan, *)
 #endif
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
-    _ configuration: Configuration,
+    _ configuration: ConfigurationBuilder,
     output: Output,
     error: Error,
     isolation: isolated (any Actor)? = #isolation,
-    body: ((Execution<Output, Error>, StandardInputWriter) async throws -> Result)
+    body: (@escaping (Execution<Output, Error>, StandardInputWriter) async throws -> Result)
 ) async throws -> ExecutionResult<Result> where Output.OutputType == Void, Error.OutputType == Void {
-    return try await configuration.run(output: output, error: error, body)
+    return try await configuration.config().run(output: output, error: error, body)
 }
 
 
@@ -324,7 +320,7 @@ public func runDetached(
     case (.none, .none, .none):
         let processOutput = DiscardedOutput()
         let processError = DiscardedOutput()
-        return try configuration.spawn(
+        return try configuration.config().spawn(
             withInput: NoInput().createPipe(),
             output: processOutput,
             outputPipe: try processOutput.createPipe(),
@@ -334,7 +330,7 @@ public func runDetached(
     case (.none, .none, .some(let errorFd)):
         let processOutput = DiscardedOutput()
         let processError = FileDescriptorOutput(fileDescriptor: errorFd, closeAfterSpawningProcess: false)
-        return try configuration.spawn(
+        return try configuration.config().spawn(
             withInput: NoInput().createPipe(),
             output: processOutput,
             outputPipe: try processOutput.createPipe(),
@@ -344,7 +340,7 @@ public func runDetached(
     case (.none, .some(let outputFd), .none):
         let processOutput = FileDescriptorOutput(fileDescriptor: outputFd, closeAfterSpawningProcess: false)
         let processError = DiscardedOutput()
-        return try configuration.spawn(
+        return try configuration.config().spawn(
             withInput: NoInput().createPipe(),
             output: processOutput,
             outputPipe: try processOutput.createPipe(),
@@ -360,7 +356,7 @@ public func runDetached(
             fileDescriptor: errorFd,
             closeAfterSpawningProcess: false
         )
-        return try configuration.spawn(
+        return try configuration.config().spawn(
             withInput: NoInput().createPipe(),
             output: processOutput,
             outputPipe: try processOutput.createPipe(),
@@ -370,7 +366,7 @@ public func runDetached(
     case (.some(let inputFd), .none, .none):
         let processOutput = DiscardedOutput()
         let processError = DiscardedOutput()
-        return try configuration.spawn(
+        return try configuration.config().spawn(
             withInput: FileDescriptorInput(
                 fileDescriptor: inputFd,
                 closeAfterSpawningProcess: false
@@ -386,7 +382,7 @@ public func runDetached(
             fileDescriptor: errorFd,
             closeAfterSpawningProcess: false
         )
-        return try configuration.spawn(
+        return try configuration.config().spawn(
             withInput: FileDescriptorInput(fileDescriptor: inputFd, closeAfterSpawningProcess: false).createPipe(),
             output: processOutput,
             outputPipe: try processOutput.createPipe(),
@@ -399,7 +395,7 @@ public func runDetached(
             closeAfterSpawningProcess: false
         )
         let processError = DiscardedOutput()
-        return try configuration.spawn(
+        return try configuration.config().spawn(
             withInput: FileDescriptorInput(fileDescriptor: inputFd, closeAfterSpawningProcess: false).createPipe(),
             output: processOutput,
             outputPipe: try processOutput.createPipe(),
@@ -415,7 +411,7 @@ public func runDetached(
             fileDescriptor: errorFd,
             closeAfterSpawningProcess: false
         )
-        return try configuration.spawn(
+        return try configuration.config().spawn(
             withInput: FileDescriptorInput(fileDescriptor: inputFd, closeAfterSpawningProcess: false).createPipe(),
             output: processOutput,
             outputPipe: try processOutput.createPipe(),
