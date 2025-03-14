@@ -15,6 +15,9 @@ import System
 @preconcurrency import SystemPackage
 #endif
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 internal struct AsyncBufferSequence: AsyncSequence, Sendable {
     internal typealias Failure = any Swift.Error
 
@@ -24,12 +27,12 @@ internal struct AsyncBufferSequence: AsyncSequence, Sendable {
     internal struct Iterator: AsyncIteratorProtocol {
         internal typealias Element = SequenceOutput.Buffer
 
-        private let fileDescriptor: FileDescriptor
+        private let fileDescriptor: TrackedFileDescriptor
         private var buffer: [UInt8]
         private var currentPosition: Int
         private var finished: Bool
 
-        internal init(fileDescriptor: FileDescriptor) {
+        internal init(fileDescriptor: TrackedFileDescriptor) {
             self.fileDescriptor = fileDescriptor
             self.buffer = []
             self.currentPosition = 0
@@ -37,21 +40,21 @@ internal struct AsyncBufferSequence: AsyncSequence, Sendable {
         }
 
         internal mutating func next() async throws -> SequenceOutput.Buffer? {
-            let data = try await self.fileDescriptor.readChunk(
+            let data = try await self.fileDescriptor.wrapped.readChunk(
                 upToLength: readBufferSize
             )
             if data == nil {
                 // We finished reading. Close the file descriptor now
-                try self.fileDescriptor.close()
+                try self.fileDescriptor.safelyClose()
                 return nil
             }
             return data
         }
     }
 
-    private let fileDescriptor: FileDescriptor
+    private let fileDescriptor: TrackedFileDescriptor
 
-    init(fileDescriptor: FileDescriptor) {
+    init(fileDescriptor: TrackedFileDescriptor) {
         self.fileDescriptor = fileDescriptor
     }
 

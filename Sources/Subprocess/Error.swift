@@ -98,11 +98,11 @@ extension SubprocessError: CustomStringConvertible, CustomDebugStringConvertible
         case .failedToChangeWorkingDirectory(let workingDirectory):
             return "Failed to set working directory to \"\(workingDirectory)\"."
         case .failedToReadFromSubprocess:
-            return "Failed to read bytes from the child process."
+            return "Failed to read bytes from the child process with underlying error: \(self.underlyingError!)"
         case .failedToWriteToSubprocess:
             return "Failed to write bytes to the child process."
         case .failedToMonitorProcess:
-            return "Failed to monitor the state of child process."
+            return "Failed to monitor the state of child process with underlying error: \(self.underlyingError!)"
         case .failedToSendSignal(let signal):
             return "Failed to send signal \(signal) to the child process."
         case .failedToTerminate:
@@ -126,7 +126,7 @@ extension SubprocessError {
     /// - On Unix-like systems, `UnderlyingError` wraps `errno` from libc;
     /// - On Windows, `UnderlyingError` wraps Windows Error code
     public struct UnderlyingError: Swift.Error, RawRepresentable, Hashable, Sendable {
-#if os(Window)
+#if os(Windows)
         public typealias RawValue = DWORD
 #else
         public typealias RawValue = Int32

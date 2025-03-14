@@ -31,17 +31,19 @@ import Synchronization
 import _SubprocessCShims
 
 // Linux specific implementations
-@available(macOS 9999, *)
 extension Configuration {
-
+    #if SubprocessSpan
+    @available(SubprocessSpan, *)
+    #endif
     internal func spawn<
-        Input: InputProtocol,
         Output: OutputProtocol,
         Error: OutputProtocol
     >(
-        withInput input: Input,
+        withInput inputPipe: CreatedPipe,
         output: Output,
-        error: Error
+        outputPipe: CreatedPipe,
+        error: Error,
+        errorPipe: CreatedPipe
     ) throws -> Execution<Output, Error> {
         _setupMonitorSignalHandler()
 
@@ -65,12 +67,12 @@ extension Configuration {
         }
 
         let fileDescriptors: [CInt] = [
-            try input.readFileDescriptor()?.rawValue ?? -1,
-            try input.writeFileDescriptor()?.rawValue ?? -1,
-            try output.writeFileDescriptor()?.rawValue ?? -1,
-            try output.readFileDescriptor()?.rawValue ?? -1,
-            try error.writeFileDescriptor()?.rawValue ?? -1,
-            try error.readFileDescriptor()?.rawValue ?? -1
+            inputPipe.readFileDescriptor?.wrapped.rawValue ?? -1,
+            inputPipe.writeFileDescriptor?.wrapped.rawValue ?? -1,
+            outputPipe.writeFileDescriptor?.wrapped.rawValue ?? -1,
+            outputPipe.readFileDescriptor?.wrapped.rawValue ?? -1,
+            errorPipe.writeFileDescriptor?.wrapped.rawValue ?? -1,
+            errorPipe.readFileDescriptor?.wrapped.rawValue ?? -1
         ]
 
         var workingDirectory: String?
@@ -100,7 +102,11 @@ extension Configuration {
         }
         // Spawn error
         if spawnError != 0 {
-            try self.cleanupAll(input: input, output: output, error: error)
+            try self.cleanupPreSpawn(
+                input: inputPipe,
+                output: outputPipe,
+                error: errorPipe
+            )
             throw SubprocessError(
                 code: .init(.spawnFailed),
                 underlyingError: .init(rawValue: spawnError)
@@ -109,7 +115,9 @@ extension Configuration {
         return Execution(
             processIdentifier: .init(value: pid),
             output: output,
-            error: error
+            error: error,
+            outputPipe: outputPipe,
+            errorPipe: errorPipe
         )
     }
 }
@@ -118,7 +126,6 @@ extension Configuration {
 
 /// The collection of platform-specific settings
 /// to configure the subprocess when running
-@available(macOS 9999, *)
 public struct PlatformOptions: Sendable {
     // Set user ID for the subprocess
     public var userID: uid_t? = nil
@@ -159,7 +166,6 @@ public struct PlatformOptions: Sendable {
     public init() {}
 }
 
-@available(macOS 9999, *)
 extension PlatformOptions: Hashable {
     public static func ==(
         lhs: PlatformOptions,
@@ -196,7 +202,6 @@ extension PlatformOptions: Hashable {
     }
 }
 
-@available(macOS 9999, *)
 extension PlatformOptions : CustomStringConvertible, CustomDebugStringConvertible {
     internal func description(withIndent indent: Int) -> String {
         let indent = String(repeating: " ", count: indent * 4)
@@ -227,7 +232,6 @@ extension String {
 }
 
 // MARK: - Process Monitoring
-@available(macOS 9999, *)
 @Sendable
 internal func monitorProcessTermination(
     forProcessWithIdentifier pid: ProcessIdentifier

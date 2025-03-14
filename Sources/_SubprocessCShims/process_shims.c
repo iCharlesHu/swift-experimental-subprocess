@@ -372,3 +372,48 @@ char ** _subprocess_get_environ(void) {
     return environ;
 #endif
 }
+
+
+#if TARGET_OS_WINDOWS
+
+#include <windows.h>
+
+typedef struct {
+    DWORD pid;
+    HWND mainWindow;
+} CallbackContext;
+
+static BOOL CALLBACK enumWindowsCallback(
+    HWND hwnd,
+    LPARAM lParam
+) {
+    CallbackContext *context = (CallbackContext *)lParam;
+    DWORD pid;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == context->pid) {
+        context->mainWindow = hwnd;
+        return FALSE; // Stop enumeration
+    }
+    return TRUE; // Continue enumeration
+}
+
+BOOL _subprocess_windows_send_vm_close(
+    DWORD pid
+) {
+    // First attempt to find the Window associate
+    // with this process
+    CallbackContext context = {0};
+    context.pid = pid;
+    EnumWindows(enumWindowsCallback, (LPARAM)&context);
+
+    if (context.mainWindow != NULL) {
+        if (SendMessage(context.mainWindow, WM_CLOSE, 0, 0)) {
+            return TRUE;
+        }
+    }
+
+    return FALSE;
+}
+
+#endif
+

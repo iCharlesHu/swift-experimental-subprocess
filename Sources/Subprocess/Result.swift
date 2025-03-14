@@ -34,6 +34,9 @@ public struct ExecutionResult<Result> {
 
 /// The result of a subprocess execution with its collected
 /// standard output and standard error.
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public struct CollectedResult<
     Output: OutputProtocol,
     Error: OutputProtocol
@@ -59,12 +62,24 @@ public struct CollectedResult<
 }
 
 // MARK: - CollectedResult Conformances
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension CollectedResult: Equatable where Output.OutputType: Equatable, Error.OutputType: Equatable {}
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension CollectedResult: Hashable where Output.OutputType: Hashable, Error.OutputType: Hashable {}
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension CollectedResult: Codable where Output.OutputType: Codable, Error.OutputType: Codable {}
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension CollectedResult: CustomStringConvertible where Output.OutputType: CustomStringConvertible, Error.OutputType: CustomStringConvertible {
     public var description: String {
         return """
@@ -78,6 +93,9 @@ CollectedResult(
     }
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension CollectedResult: CustomDebugStringConvertible where Output.OutputType: CustomDebugStringConvertible, Error.OutputType: CustomDebugStringConvertible {
     public var debugDescription: String {
         return """

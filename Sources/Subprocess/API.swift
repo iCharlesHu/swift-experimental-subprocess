@@ -31,7 +31,9 @@ import System
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
 /// - Returns a CollectedResult containing the result of the run.
-@available(macOS 9999, *)
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public func run<
     Input: InputProtocol,
     Output: OutputProtocol,
@@ -74,7 +76,8 @@ public func run<
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
 /// - Returns a CollectedResult containing the result of the run.
-@available(macOS 9999, *)
+#if SubprocessSpan
+@available(SubprocessSpan, *)
 public func run<
     InputElement: BitwiseCopyable,
     Output: OutputProtocol,
@@ -97,7 +100,7 @@ public func run<
         platformOptions: platformOptions
     ).run(input: input, output: output, error: error)
 }
-
+#endif // SubprocessSpan
 
 // MARK: - Custom Execution Body
 
@@ -117,6 +120,9 @@ public func run<
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -155,6 +161,9 @@ public func run<Result, Input: InputProtocol, Output: OutputProtocol, Error: Out
 ///   - body: The custom execution body to manually control the running process
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -179,15 +188,17 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 
 // MARK: - Configuration Based
 
-/// Run a executable with given parameters and a custom closure
-/// to manage the running subprocess' lifetime and its IOs.
+/// Run a `Configuration` asynchrously and returns
+/// a `CollectedResult` containing the output of the child process.
 /// - Parameters:
 ///   - configuration: The `Subprocess` configuration to run.
 ///   - input: The input to send to the executable.
 ///   - output: The method to use for redirecting the standard output.
 ///   - error: The method to use for redirecting the standard error.
 /// - Returns a CollectedResult containing the result of the run.
-@available(macOS 9999, *)
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public func run<
     Input: InputProtocol,
     Output: OutputProtocol,
@@ -227,6 +238,9 @@ public func run<
 ///       the running process and write to its standard input.
 /// - Returns a ExecutableResult type containing the return value
 ///     of the closure.
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
     _ configuration: ConfigurationBuilder,
     output: Output,
@@ -257,6 +271,9 @@ public func run<Result, Output: OutputProtocol, Error: OutputProtocol>(
 ///   - output: A file descriptor to bind to the subprocess' standard output.
 ///   - error: A file descriptor to bind to the subprocess' standard error.
 /// - Returns: the process identifier for the subprocess.
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public func runDetached(
     _ executable: Executable,
     arguments: Arguments = [],
@@ -290,61 +307,116 @@ public func runDetached(
 ///   - output: A file descriptor to bind to the subprocess' standard output.
 ///   - error: A file descriptor to bind to the subprocess' standard error.
 /// - Returns: the process identifier for the subprocess.
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public func runDetached(
     _ configuration: Configuration,
     input: FileDescriptor? = nil,
     output: FileDescriptor? = nil,
     error: FileDescriptor? = nil
 ) throws -> ProcessIdentifier {
-    // Create input
     switch (input, output, error) {
     case (.none, .none, .none):
+        let processOutput = DiscardedOutput()
+        let processError = DiscardedOutput()
         return try configuration.config().spawn(
-            withInput: .none,
-            output: .discarded,
-            error: .discarded
+            withInput: NoInput().createPipe(),
+            output: processOutput,
+            outputPipe: try processOutput.createPipe(),
+            error: processError,
+            errorPipe: try processError.createPipe()
         ).processIdentifier
     case (.none, .none, .some(let errorFd)):
+        let processOutput = DiscardedOutput()
+        let processError = FileDescriptorOutput(fileDescriptor: errorFd, closeAfterSpawningProcess: false)
         return try configuration.config().spawn(
-            withInput: .none,
-            output: .discarded,
-            error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
+            withInput: NoInput().createPipe(),
+            output: processOutput,
+            outputPipe: try processOutput.createPipe(),
+            error: processError,
+            errorPipe: try processError.createPipe()
         ).processIdentifier
     case (.none, .some(let outputFd), .none):
+        let processOutput = FileDescriptorOutput(fileDescriptor: outputFd, closeAfterSpawningProcess: false)
+        let processError = DiscardedOutput()
         return try configuration.config().spawn(
-            withInput: .none,
-            output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
-            error: .discarded
+            withInput: NoInput().createPipe(),
+            output: processOutput,
+            outputPipe: try processOutput.createPipe(),
+            error: processError,
+            errorPipe: try processError.createPipe()
         ).processIdentifier
     case (.none, .some(let outputFd), .some(let errorFd)):
+        let processOutput = FileDescriptorOutput(
+            fileDescriptor: outputFd,
+            closeAfterSpawningProcess: false
+        )
+        let processError = FileDescriptorOutput(
+            fileDescriptor: errorFd,
+            closeAfterSpawningProcess: false
+        )
         return try configuration.config().spawn(
-            withInput: .none,
-            output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
-            error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
+            withInput: NoInput().createPipe(),
+            output: processOutput,
+            outputPipe: try processOutput.createPipe(),
+            error: processError,
+            errorPipe: try processError.createPipe()
         ).processIdentifier
     case (.some(let inputFd), .none, .none):
+        let processOutput = DiscardedOutput()
+        let processError = DiscardedOutput()
         return try configuration.config().spawn(
-            withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
-            output: .discarded,
-            error: .discarded
+            withInput: FileDescriptorInput(
+                fileDescriptor: inputFd,
+                closeAfterSpawningProcess: false
+            ).createPipe(),
+            output: processOutput,
+            outputPipe: try processOutput.createPipe(),
+            error: processError,
+            errorPipe: try processError.createPipe()
         ).processIdentifier
     case (.some(let inputFd), .none, .some(let errorFd)):
+        let processOutput = DiscardedOutput()
+        let processError = FileDescriptorOutput(
+            fileDescriptor: errorFd,
+            closeAfterSpawningProcess: false
+        )
         return try configuration.config().spawn(
-            withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
-            output: .discarded,
-            error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
+            withInput: FileDescriptorInput(fileDescriptor: inputFd, closeAfterSpawningProcess: false).createPipe(),
+            output: processOutput,
+            outputPipe: try processOutput.createPipe(),
+            error: processError,
+            errorPipe: try processError.createPipe()
         ).processIdentifier
     case (.some(let inputFd), .some(let outputFd), .none):
+        let processOutput = FileDescriptorOutput(
+            fileDescriptor: outputFd,
+            closeAfterSpawningProcess: false
+        )
+        let processError = DiscardedOutput()
         return try configuration.config().spawn(
-            withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
-            output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
-            error: .discarded
+            withInput: FileDescriptorInput(fileDescriptor: inputFd, closeAfterSpawningProcess: false).createPipe(),
+            output: processOutput,
+            outputPipe: try processOutput.createPipe(),
+            error: processError,
+            errorPipe: try processError.createPipe()
         ).processIdentifier
     case (.some(let inputFd), .some(let outputFd), .some(let errorFd)):
+        let processOutput = FileDescriptorOutput(
+            fileDescriptor: outputFd,
+            closeAfterSpawningProcess: false
+        )
+        let processError = FileDescriptorOutput(
+            fileDescriptor: errorFd,
+            closeAfterSpawningProcess: false
+        )
         return try configuration.config().spawn(
-            withInput: .fileDescriptor(inputFd, closeAfterSpawningProcess: false),
-            output: .fileDescriptor(outputFd, closeAfterSpawningProcess: false),
-            error: .fileDescriptor(errorFd, closeAfterSpawningProcess: false)
+            withInput: FileDescriptorInput(fileDescriptor: inputFd, closeAfterSpawningProcess: false).createPipe(),
+            output: processOutput,
+            outputPipe: try processOutput.createPipe(),
+            error: processError,
+            errorPipe: try processError.createPipe()
         ).processIdentifier
     }
 }

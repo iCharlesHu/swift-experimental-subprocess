@@ -34,7 +34,7 @@ struct Ls: ConfigurationBuilder {
 @available(macOS 9999, *)
 final class SubprocessConfigurationTests: XCTestCase {
     public func testCommandBuilder() async throws {
-        let result = try await run(
+        let result = try await Subprocess.run(
             Ls(.long, paths: ".")
         )
         print(result.standardOutput)

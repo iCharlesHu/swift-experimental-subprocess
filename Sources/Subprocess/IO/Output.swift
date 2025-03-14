@@ -15,13 +15,6 @@ import System
 @preconcurrency import SystemPackage
 #endif
 internal import Dispatch
-#if canImport(Synchronization)
-import Synchronization
-
-private typealias Lock = Mutex
-#else
-private typealias Lock = LockedState
-#endif
 
 // MARK: - Output
 
@@ -30,41 +23,30 @@ private typealias Lock = LockedState
 /// Instead of developing custom implementations of `OutputProtocol`,
 /// it is recommended to utilize the default implementations provided
 /// by the `Subprocess` library to specify the output handling requirements.
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 public protocol OutputProtocol: Sendable {
     associatedtype OutputType: Sendable
-    /// Lazily create and return the FileDescriptor for reading
-    func readFileDescriptor() throws -> FileDescriptor?
-    /// Lazily create the FileDescriptor for writing
-    func writeFileDescriptor() throws -> FileDescriptor?
-    /// Return the read `FileDescriptor` and remove it from the output
-    /// such that the next call to `consumeReadFileDescriptor` will
-    /// return `nil`.
-    func consumeReadFileDescriptor() -> FileDescriptor?
 
-    /// Close the FileDescriptor for reading
-    func closeReadFileDescriptor() throws
-    /// Close the FileDescriptor for writing
-    func closeWriteFileDescriptor() throws
-
-    /// Capture the output from the subprocess up to maxSize
-    func captureOutput() async throws -> OutputType
-}
-
-/// `ManagedOutputProtocol` is managed by `Subprocess` and
-/// utilizes its `Pipe` type to facilitate output reading.
-/// Developers have the option to implement custom input types
-/// by conforming to `ManagedOutputProtocol`
-/// and implementing the `output(from:)` method.
-@available(macOS 9999, *)
-public protocol ManagedOutputProtocol: OutputProtocol {
-    /// The underlying pipe used by this output in order to
-    /// read from the child process
-    var pipe: Pipe { get }
-
-    /// Convert the output from Data to expected output type
+#if SubprocessSpan
+    /// Convert the output from span to expected output type
     func output(from span: RawSpan) throws -> OutputType
+#endif
+
+    /// Convert the output from buffer to expected output type
+    func output(from buffer: some Sequence<UInt8>) throws -> OutputType
+
     /// The max amount of data to collect for this output.
     var maxSize: Int { get }
+}
+
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
+extension OutputProtocol {
+    /// The max amount of data to collect for this output.
+    public var maxSize: Int { 128 * 1024 }
 }
 
 /// A concrete `Output` type for subprocesses that indicates that
@@ -73,57 +55,31 @@ public protocol ManagedOutputProtocol: OutputProtocol {
 /// redirects the standard output of the subprocess to `/dev/null`,
 /// while on Windows, it does not bind any file handle to the
 /// subprocess standard output handle.
-public final class DiscardedOutput: OutputProtocol {
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
+public struct DiscardedOutput: OutputProtocol {
     public typealias OutputType = Void
 
-    private let devnull: Lock<FileDescriptor?>
-
-    public func readFileDescriptor() throws -> FileDescriptor? {
-#if !os(Windows)
-        return try self.devnull.withLock { fd in
-            if let devnull = fd {
-                return devnull
-            }
-            let devnull: FileDescriptor = try .openDevNull(withAcessMode: .readOnly)
-            fd = devnull
-            return devnull
-        }
-#else
+    internal func createPipe() throws -> CreatedPipe {
+#if os(Windows)
         // On Windows, instead of binding to dev null,
         // we don't set the input handle in the `STARTUPINFOW`
         // to signal no output
-        return nil
+        return CreatedPipe(
+            readFileDescriptor: nil,
+            writeFileDescriptor: nil
+        )
+#else
+        let devnull: FileDescriptor = try .openDevNull(withAcessMode: .readOnly)
+        return CreatedPipe(
+            readFileDescriptor: .init(devnull, closeWhenDone: true),
+            writeFileDescriptor: nil
+        )
 #endif
     }
 
-    public func consumeReadFileDescriptor() -> FileDescriptor? {
-        return self.devnull.withLock { fd in
-            if let devnull = fd {
-                fd = nil
-                return devnull
-            }
-            return nil
-        }
-    }
-
-    public func writeFileDescriptor() throws -> FileDescriptor? {
-        return nil
-    }
-
-    public func closeReadFileDescriptor() throws {
-        try self.devnull.withLock { fd in
-            try fd?.close()
-            fd = nil
-        }
-    }
-
-    public func closeWriteFileDescriptor() throws {
-        // NOOP
-    }
-
-    internal init() {
-        self.devnull = Lock(nil)
-    }
+    internal init() { }
 }
 
 /// A concrete `Output` type for subprocesses that
@@ -131,42 +87,30 @@ public final class DiscardedOutput: OutputProtocol {
 /// Developers have the option to instruct the `Subprocess` to
 /// automatically close the provided `FileDescriptor`
 /// after the subprocess is spawned.
-public final class FileDescriptorOutput: OutputProtocol {
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
+public struct FileDescriptorOutput: OutputProtocol {
     public typealias OutputType = Void
 
     private let closeAfterSpawningProcess: Bool
-    private let fileDescriptor: Lock<FileDescriptor?>
+    private let fileDescriptor: FileDescriptor
 
-    public func readFileDescriptor() throws -> FileDescriptor? {
-        return nil
-    }
-
-    public func writeFileDescriptor() throws -> FileDescriptor? {
-        return self.fileDescriptor.withLock { $0 }
-    }
-
-    public func closeReadFileDescriptor() throws {
-        // NOOP
-    }
-
-    public func consumeReadFileDescriptor() -> FileDescriptor? {
-        return nil
-    }
-
-    public func closeWriteFileDescriptor() throws {
-        if self.closeAfterSpawningProcess {
-            try self.fileDescriptor.withLock { fd in
-                try fd?.close()
-                fd = nil
-            }
-        }
+    internal func createPipe() throws -> CreatedPipe {
+        return CreatedPipe(
+            readFileDescriptor: nil,
+            writeFileDescriptor: .init(
+                self.fileDescriptor,
+                closeWhenDone: self.closeAfterSpawningProcess
+            )
+        )
     }
 
     internal init(
         fileDescriptor: FileDescriptor,
         closeAfterSpawningProcess: Bool
     ) {
-        self.fileDescriptor = Lock(fileDescriptor)
+        self.fileDescriptor = fileDescriptor
         self.closeAfterSpawningProcess = closeAfterSpawningProcess
     }
 }
@@ -175,13 +119,15 @@ public final class FileDescriptorOutput: OutputProtocol {
 /// from the subprocess as `String` with the given encoding.
 /// This option must be used with he `run()` method that
 /// returns a `CollectedResult`.
-@available(macOS 9999, *)
-public final class StringOutput<Encoding: Unicode.Encoding>: ManagedOutputProtocol {
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
+public struct StringOutput<Encoding: Unicode.Encoding>: OutputProtocol {
     public typealias OutputType = String?
     public let maxSize: Int
-    public let pipe: Pipe
     private let encoding: Encoding.Type
 
+#if SubprocessSpan
     public func output(from span: RawSpan) throws -> String? {
         // FIXME: Span to String
         var array: [UInt8] = []
@@ -190,10 +136,16 @@ public final class StringOutput<Encoding: Unicode.Encoding>: ManagedOutputProtoc
         }
         return String(decodingBytes: array, as: self.encoding)
     }
+#else
+    public func output(from buffer: some Sequence<UInt8>) throws -> String? {
+        // FIXME: Span to String
+        let array = Array(buffer)
+        return String(decodingBytes: array, as: Encoding.self)
+    }
+#endif
 
     internal init(limit: Int, encoding: Encoding.Type) {
         self.maxSize = limit
-        self.pipe = Pipe()
         self.encoding = encoding
     }
 }
@@ -201,43 +153,47 @@ public final class StringOutput<Encoding: Unicode.Encoding>: ManagedOutputProtoc
 /// A concrete `Output` type for subprocesses that collects output
 /// from the subprocess as `[UInt8]`. This option must be used with
 /// the `run()` method that returns a `CollectedResult`
-@available(macOS 9999, *)
-public final class BytesOutput: ManagedOutputProtocol {
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
+public struct BytesOutput: OutputProtocol {
     public typealias OutputType = [UInt8]
     public let maxSize: Int
-    public let pipe: Pipe
 
-    public func captureOutput() async throws -> [UInt8] {
+    internal func captureOutput(from fileDescriptor: TrackedFileDescriptor?) async throws -> [UInt8] {
         return try await withCheckedThrowingContinuation { continuation in
-            guard let readFd = self.consumeReadFileDescriptor() else {
-                fatalError("Trying to capture Subprocess output that has already been closed.")
+            guard let fileDescriptor = fileDescriptor else {
+                // Show not happen due to type system constraints
+                fatalError("Trying to capture output without file descriptor")
             }
-            readFd.readUntilEOF(upToLength: self.maxSize) { result in
-                do {
-                    switch result {
-                    case .success(let data):
-                        //FIXME: remove workaround for rdar://143992296
-                        try readFd.close()
-                        continuation.resume(returning: data.array())
-                    case .failure(let error):
-                        try readFd.close()
-                        continuation.resume(throwing: error)
-                    }
-                } catch {
-                    try? readFd.close()
+            fileDescriptor.wrapped.readUntilEOF(upToLength: self.maxSize) { result in
+                switch result {
+                case .success(let data):
+                    //FIXME: remove workaround for rdar://143992296
+                #if os(Windows)
+                    continuation.resume(returning: data)
+                #else
+                    continuation.resume(returning: data.array())
+                #endif
+                case .failure(let error):
                     continuation.resume(throwing: error)
                 }
             }
         }
     }
 
+#if SubprocessSpan
     public func output(from span: RawSpan) throws -> [UInt8] {
         fatalError("Not implemented")
     }
+#else
+    public func output(from buffer: some Sequence<UInt8>) throws -> [UInt8] {
+        fatalError("Not implemented")
+    }
+#endif
 
     internal init(limit: Int) {
         self.maxSize = limit
-        self.pipe = Pipe()
     }
 }
 
@@ -245,41 +201,26 @@ public final class BytesOutput: ManagedOutputProtocol {
 /// the child output to the `.standardOutput` (a sequence) or `.standardError`
 /// property of `Execution`. This output type is
 /// only applicable to the `run()` family that takes a custom closure.
-public final class SequenceOutput: OutputProtocol {
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
+public struct SequenceOutput: OutputProtocol {
     public typealias OutputType = Void
 
-    private let pipe: Pipe
-
-    public func readFileDescriptor() throws -> FileDescriptor? {
-        return try self.pipe.readFileDescriptor(creatingIfNeeded: true)
-    }
-
-    public func writeFileDescriptor() throws -> FileDescriptor? {
-        return try self.pipe.writeFileDescriptor(creatingIfNeeded: true)
-    }
-
-    public func consumeReadFileDescriptor() -> FileDescriptor? {
-        return self.pipe.consumeReadFileDescriptor()
-    }
-
-    public func closeReadFileDescriptor() throws {
-        return try self.pipe.closeReadFileDescriptor()
-    }
-
-    public func closeWriteFileDescriptor() throws {
-        return try self.pipe.closeWriteFileDescriptor()
-    }
-
-    internal init() {
-        self.pipe = Pipe()
-    }
+    internal init() { }
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension OutputProtocol where Self == DiscardedOutput {
     /// Create a Subprocess output that discards the output
     public static var discarded: Self { .init() }
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension OutputProtocol where Self == FileDescriptorOutput {
     /// Create a Subprocess output that writes output to a `FileDescriptor`
     /// and optionally close the `FileDescriptor` once process spawned.
@@ -291,7 +232,9 @@ extension OutputProtocol where Self == FileDescriptorOutput {
     }
 }
 
-@available(macOS 9999, *)
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension OutputProtocol where Self == StringOutput<UTF8> {
     /// Create a `Subprocess` output that collects output as
     /// UTF8 String with 128kb limit.
@@ -300,7 +243,9 @@ extension OutputProtocol where Self == StringOutput<UTF8> {
     }
 }
 
-@available(macOS 9999, *)
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension OutputProtocol {
     /// Create a `Subprocess` output that collects output as
     /// `String` using the given encoding up to limit it bytes.
@@ -312,7 +257,9 @@ extension OutputProtocol {
     }
 }
 
-@available(macOS 9999, *)
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension OutputProtocol where Self == BytesOutput {
     /// Create a `Subprocess` output that collects output as
     /// `Buffer` with 128kb limit.
@@ -325,6 +272,9 @@ extension OutputProtocol where Self == BytesOutput {
     }
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension OutputProtocol where Self == SequenceOutput {
     /// Create a `Subprocess` output that redirects the output
     /// to the `.standardOutput` (or `.standardError`) property
@@ -332,48 +282,65 @@ extension OutputProtocol where Self == SequenceOutput {
     public static var sequence: Self { .init() }
 }
 
-// MARK: Default Implementations
-@available(macOS 9999, *)
-extension ManagedOutputProtocol {
-    public func readFileDescriptor() throws -> FileDescriptor? {
-        return try self.pipe.readFileDescriptor(creatingIfNeeded: true)
+// MARK: - Span Default Implementations
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+extension OutputProtocol {
+    public func output(from buffer: some Sequence<UInt8>) throws -> OutputType {
+        guard let rawBytes: UnsafeRawBufferPointer = buffer as? UnsafeRawBufferPointer else {
+            fatalError("Unexpected input type passed: \(type(of: buffer))")
+        }
+        let span = RawSpan(_unsafeBytes: rawBytes)
+        return try self.output(from: span)
+    }
+}
+#endif
+
+// MARK: - Default Implementations
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
+extension OutputProtocol {
+    @_disfavoredOverload
+    internal func createPipe() throws -> CreatedPipe {
+        if let discard = self as? DiscardedOutput {
+            return try discard.createPipe()
+        } else if let fdOutput = self as? FileDescriptorOutput {
+            return try fdOutput.createPipe()
+        }
+        // Base pipe based implementation for everything else
+        return try CreatedPipe(closeWhenDone: true)
     }
 
-    public func writeFileDescriptor() throws -> FileDescriptor? {
-        return try self.pipe.writeFileDescriptor(creatingIfNeeded: true)
-    }
-
-    public func closeReadFileDescriptor() throws {
-        try self.pipe.closeReadFileDescriptor()
-    }
-
-    public func closeWriteFileDescriptor() throws {
-        try self.pipe.closeWriteFileDescriptor()
-    }
-
-    public func consumeReadFileDescriptor() -> FileDescriptor? {
-        return self.pipe.consumeReadFileDescriptor()
-    }
-
-    public func captureOutput() async throws -> OutputType {
+    /// Capture the output from the subprocess up to maxSize
+    @_disfavoredOverload
+    internal func captureOutput(
+        from fileDescriptor: TrackedFileDescriptor?
+    ) async throws -> OutputType {
+        if let bytesOutput = self as? BytesOutput {
+            return try await bytesOutput.captureOutput(from: fileDescriptor) as! Self.OutputType
+        }
         return try await withCheckedThrowingContinuation { continuation in
-            guard let readFd = self.consumeReadFileDescriptor() else {
-                fatalError("Trying to capture Subprocess output that has already been closed.")
+            if OutputType.self == Void.self {
+                continuation.resume(returning: () as! OutputType)
+                return
             }
-            readFd.readUntilEOF(upToLength: self.maxSize) { result in
+            guard let fileDescriptor = fileDescriptor else {
+                // Show not happen due to type system constraints
+                fatalError("Trying to capture output without file descriptor")
+            }
+
+            fileDescriptor.wrapped.readUntilEOF(upToLength: self.maxSize) { result in
                 do {
                     switch result {
                     case .success(let data):
                         //FIXME: remove workaround for rdar://143992296
                         let output = try self.output(from: data)
-                        try readFd.close()
                         continuation.resume(returning: output)
                     case .failure(let error):
-                        try readFd.close()
                         continuation.resume(throwing: error)
                     }
                 } catch {
-                    try? readFd.close()
                     continuation.resume(throwing: error)
                 }
             }
@@ -381,12 +348,23 @@ extension ManagedOutputProtocol {
     }
 }
 
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+#endif
 extension OutputProtocol where OutputType == Void {
-    public func captureOutput() async throws -> Void { /* noop */ }
+    internal func captureOutput(from fileDescriptor: TrackedFileDescriptor?) async throws -> Void { }
+
+#if SubprocessSpan
+    /// Convert the output from Data to expected output type
+    public func output(from span: RawSpan) throws -> Void { /* noop */ }
+#else
+    public func output(from buffer: some Sequence<UInt8>) throws -> Void { /* noop */ }
+#endif // SubprocessSpan
 }
 
-@available(macOS 9999, *)
-extension ManagedOutputProtocol {
+#if SubprocessSpan
+@available(SubprocessSpan, *)
+extension OutputProtocol {
     internal func output(from data: DispatchData) throws -> OutputType {
         guard !data.isEmpty else {
             let empty = UnsafeRawBufferPointer(start: nil, count: 0)
@@ -401,6 +379,7 @@ extension ManagedOutputProtocol {
         }
     }
 }
+#endif
 
 extension DispatchData {
     internal func array() -> [UInt8] {
