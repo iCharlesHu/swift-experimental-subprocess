@@ -374,6 +374,7 @@ extension SubprocessUnixTests {
         #expect(Array(catResult.standardOutput) == Array(expected))
     }
 
+#if SubprocessSpan
     @Test func testInputSpan() async throws {
         guard #available(SubprocessSpan, *) else {
             return
@@ -392,6 +393,7 @@ extension SubprocessUnixTests {
         #expect(catResult.standardOutput.count == expected.count)
         #expect(Array(catResult.standardOutput) == Array(expected))
     }
+#endif
 
     @Test func testInputAsyncSequence() async throws {
         guard #available(SubprocessSpan, *) else {
@@ -649,7 +651,7 @@ extension SubprocessUnixTests {
         let catResult = try await Subprocess.run(
             .path("/bin/cat"),
             input: .fileDescriptor(inputFd, closeAfterSpawningProcess: true),
-            output: .bytes(limit: 2048 * 1024),
+            output: .bytes(limit: 2048 * 1024)
         )
         #expect(catResult.terminationStatus.isSuccess)
         #expect(expected.elementsEqual(catResult.standardOutput))

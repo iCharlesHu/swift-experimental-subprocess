@@ -431,7 +431,7 @@ extension FileDescriptor {
         let dispatchIO = DispatchIO(
             type: .stream,
             fileDescriptor: self.rawValue,
-            queue: .global(),
+            queue: .global()
         ) { error in }
         var buffer: DispatchData?
         dispatchIO.read(

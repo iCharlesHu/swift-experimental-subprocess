@@ -72,7 +72,7 @@ public struct Execution<
         output: Output,
         error: Error,
         outputPipe: CreatedPipe,
-        errorPipe: CreatedPipe,
+        errorPipe: CreatedPipe
     ) {
         self.processIdentifier = processIdentifier
         self.output = output
@@ -190,7 +190,7 @@ extension Execution {
             }
             return (
                 standardOutput: stdout,
-                standardError: stderror,
+                standardError: stderror
             )
         }
     }

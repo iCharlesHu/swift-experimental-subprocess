@@ -216,19 +216,19 @@ public func run<
     )  { execution in
         let (
             standardOutput,
-            standardError,
+            standardError
         ) = try await execution.captureIOs()
         return (
             processIdentifier: execution.processIdentifier,
             standardOutput: standardOutput,
-            standardError: standardError,
+            standardError: standardError
         )
     }
     return CollectedResult(
         processIdentifier: result.value.processIdentifier,
         terminationStatus: result.terminationStatus,
         standardOutput: result.value.standardOutput,
-        standardError: result.value.standardError,
+        standardError: result.value.standardError
     )
 }
 

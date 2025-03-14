@@ -9,6 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if SubprocessSpan
+
 @_unsafeNonescapableResult
 @inlinable @inline(__always)
 @lifetime(borrow source)
@@ -34,8 +36,6 @@ public func _overrideLifetime<
 ) -> T {
     dependent
 }
-
-#if SubprocessSpan
 
 #if canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 internal import Dispatch
@@ -63,4 +63,3 @@ extension DispatchData {
 #endif // canImport(Glibc) || canImport(Bionic) || canImport(Musl)
 
 #endif // SubprocessSpan
-

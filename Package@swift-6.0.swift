@@ -34,11 +34,13 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
             path: "Sources/Subprocess",
+            exclude: [
+                "Span+Subprocess.swift",
+                "SubprocessFoundation/Span+SubprocessFoundation.swift"
+            ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
                 .enableExperimentalFeature("NonescapableTypes"),
-                .enableExperimentalFeature("LifetimeDependence"),
-                .enableExperimentalFeature("Span"),
                 .define("SubprocessFoundation"),
                 availabilityMacro
             ]
@@ -52,7 +54,6 @@ let package = Package(
                 .product(name: "SystemPackage", package: "swift-system"),
             ],
             swiftSettings: [
-                .enableExperimentalFeature("Span"),
                 availabilityMacro
             ]
         ),
