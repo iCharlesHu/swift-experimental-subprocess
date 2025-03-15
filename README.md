@@ -174,7 +174,7 @@ let result = try await run(.name("cat"), output: .data, error: .data)
 
 This option means no input is sent to the subprocess.
 
-Use it by setting `.discarded` for `input`.
+Use it by setting `.none` for `input`.
 
 #### `FileDescriptorInput`
 
@@ -285,6 +285,8 @@ Subprocess is part of the Foundation project. We have a dedicated [Foundation Fo
 If you find something that looks like a bug, please open a [Bug Report][bugreport]! Fill out as many details as you can.
 
 [bugreport]: https://github.com/iCharlesHu/Subprocess/issues/new?assignees=&labels=bug&template=bug_report.md
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 ## Code of Conduct
